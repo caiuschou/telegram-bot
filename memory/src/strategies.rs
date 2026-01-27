@@ -11,7 +11,6 @@ use async_trait::async_trait;
 use crate::context::StrategyResult;
 use crate::store::MemoryStore;
 use crate::types::{MemoryEntry, MemoryRole};
-use std::sync::Arc;
 
 /// Trait for context building strategies.
 #[async_trait]
@@ -106,7 +105,7 @@ impl ContextStrategy for SemanticSearchStrategy {
         _store: &dyn MemoryStore,
         _user_id: &Option<String>,
         _conversation_id: &Option<String>,
-        _query: &Option<String>,
+        query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
         let query = match query {
             Some(q) => q,

@@ -86,20 +86,6 @@ impl ContextBuilder {
         }
     }
 
-impl<T: MemoryStore + 'static> ContextBuilder<T> {
-    /// Creates a new ContextBuilder with the given memory store.
-    pub fn new(store: Arc<T>) -> Self {
-        Self {
-            store,
-            strategies: Vec::new(),
-            token_limit: 4096, // Default token limit
-            user_id: None,
-            conversation_id: None,
-            query: None,
-            system_message: None,
-        }
-    }
-
     /// Adds a context strategy to the builder.
     pub fn with_strategy(mut self, strategy: Box<dyn ContextStrategy>) -> Self {
         self.strategies.push(strategy);
@@ -286,8 +272,8 @@ mod tests {
             _user_id: &Option<String>,
             _conversation_id: &Option<String>,
             _query: &Option<String>,
-        ) -> Result<crate::strategies::StrategyResult, anyhow::Error> {
-            Ok(crate::strategies::StrategyResult::Messages(vec![
+        ) -> Result<super::StrategyResult, anyhow::Error> {
+            Ok(super::StrategyResult::Messages(vec![
                 "User: Hello".to_string(),
                 "Assistant: Hi there!".to_string(),
             ]))
