@@ -79,12 +79,16 @@ impl AIQueryHandler {
             Ok(msg) => {
                 let message_id = msg.id;
                 let bot = self.bot.clone();
-                
-                match self.ai_bot.get_ai_response_stream(&query.question, move |chunk| {
+                let full_content = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+
+                match self.ai_bot.get_ai_response_stream(&query.question, |chunk| {
                     let bot = bot.clone();
+                    let full_content = full_content.clone();
                     async move {
                         if !chunk.content.is_empty() {
-                            if let Err(e) = bot.edit_message_text(chat_id, message_id, &chunk.content).await {
+                            let mut content = full_content.lock().await;
+                            content.push_str(&chunk.content);
+                            if let Err(e) = bot.edit_message_text(chat_id, message_id, &*content).await {
                                 error!(error = %e, "Failed to edit message");
                                 return Err(anyhow::anyhow!("Failed to edit message: {}", e));
                             }
