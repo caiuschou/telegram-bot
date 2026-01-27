@@ -44,3 +44,9 @@ Thumbs.db
 # Coverage
 html/
 lcov.info
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+sqlite::memory:
