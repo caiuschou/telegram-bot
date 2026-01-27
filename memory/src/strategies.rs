@@ -16,10 +16,10 @@ use std::sync::Arc;
 /// Trait for context building strategies.
 #[async_trait]
 pub trait ContextStrategy: Send + Sync {
-    /// Builds context using the strategy.
+    /// Builds context using strategy.
     async fn build_context(
         &self,
-        store: &Arc<dyn MemoryStore>,
+        store: &dyn MemoryStore,
         user_id: &Option<String>,
         conversation_id: &Option<String>,
         query: &Option<String>,
@@ -47,7 +47,7 @@ impl RecentMessagesStrategy {
 impl ContextStrategy for RecentMessagesStrategy {
     async fn build_context(
         &self,
-        store: &Arc<dyn MemoryStore>,
+        store: &dyn MemoryStore,
         user_id: &Option<String>,
         conversation_id: &Option<String>,
         _query: &Option<String>,
@@ -103,10 +103,10 @@ impl SemanticSearchStrategy {
 impl ContextStrategy for SemanticSearchStrategy {
     async fn build_context(
         &self,
-        store: &Arc<dyn MemoryStore>,
-        user_id: &Option<String>,
-        conversation_id: &Option<String>,
-        query: &Option<String>,
+        _store: &dyn MemoryStore,
+        _user_id: &Option<String>,
+        _conversation_id: &Option<String>,
+        _query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
         let query = match query {
             Some(q) => q,
@@ -135,7 +135,7 @@ impl UserPreferencesStrategy {
 impl ContextStrategy for UserPreferencesStrategy {
     async fn build_context(
         &self,
-        store: &Arc<dyn MemoryStore>,
+        store: &dyn MemoryStore,
         user_id: &Option<String>,
         _conversation_id: &Option<String>,
         _query: &Option<String>,
@@ -230,14 +230,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_recent_messages_by_conversation() {
-        let store: Arc<dyn MemoryStore> = create_test_store_with_entries().await;
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
         let strategy = RecentMessagesStrategy::new(10);
 
         let user_id = Some("user123".to_string());
         let conversation_id = Some("conv1".to_string());
 
+        let metadata = MemoryMetadata {
+            user_id: Some("user123".to_string()),
+            conversation_id: Some("conv1".to_string()),
+            role: MemoryRole::User,
+            timestamp: Utc::now(),
+            tokens: None,
+            importance: None,
+        };
+
+        let entry1 = MemoryEntry::new("Hello".to_string(), metadata.clone());
+        let entry2 = MemoryEntry::new("How are you?".to_string(), metadata);
+
+        store.add(entry1).await.unwrap();
+        store.add(entry2).await.unwrap();
+
         let result = strategy
-            .build_context(&store, &user_id, &conversation_id, &None)
+            .build_context(&*store, &user_id, &conversation_id, &None)
             .await
             .unwrap();
 
@@ -264,7 +279,7 @@ mod tests {
         let strategy = SemanticSearchStrategy::new(5);
 
         let result = strategy
-            .build_context(&store, &None, &None, &None)
+            .build_context(&*store, &None, &None, &None)
             .await
             .unwrap();
 
@@ -296,7 +311,7 @@ mod tests {
         let user_id = Some("user123".to_string());
 
         let result = strategy
-            .build_context(&store, &user_id, &None, &None)
+            .build_context(&*store, &user_id, &None, &None)
             .await
             .unwrap();
 

@@ -7,6 +7,7 @@ edition = "2021"
 dbot-core = { path = "../dbot-core" }
 storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
+memory = { path = "../memory" }
 teloxide = { version = "0.17", features = ["macros"] }
 async-trait = "0.1"
 anyhow = "1.0"

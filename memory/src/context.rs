@@ -32,7 +32,6 @@ use crate::store::MemoryStore;
 use crate::strategies::ContextStrategy;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 
 /// Represents a constructed context for AI conversation.
 #[derive(Debug, Clone)]
@@ -63,8 +62,8 @@ pub struct ContextMetadata {
 }
 
 /// Builder for constructing AI conversation context.
-pub struct ContextBuilder<T: MemoryStore + ?Sized> {
-    store: Arc<T>,
+pub struct ContextBuilder {
+    store: Arc<dyn MemoryStore>,
     strategies: Vec<Box<dyn ContextStrategy>>,
     token_limit: usize,
     user_id: Option<String>,
@@ -72,6 +71,20 @@ pub struct ContextBuilder<T: MemoryStore + ?Sized> {
     query: Option<String>,
     system_message: Option<String>,
 }
+
+impl ContextBuilder {
+    /// Creates a new ContextBuilder with given memory store.
+    pub fn new(store: Arc<dyn MemoryStore>) -> Self {
+        Self {
+            store,
+            strategies: Vec::new(),
+            token_limit: 4096,
+            user_id: None,
+            conversation_id: None,
+            query: None,
+            system_message: None,
+        }
+    }
 
 impl<T: MemoryStore + 'static> ContextBuilder<T> {
     /// Creates a new ContextBuilder with the given memory store.
@@ -129,11 +142,10 @@ impl<T: MemoryStore + 'static> ContextBuilder<T> {
         let mut preferences: Option<String> = None;
 
         // Execute strategies in order
-        let store_ref: Arc<dyn MemoryStore> = self.store.clone();
         for strategy in &self.strategies {
             let strategy_result = strategy
                 .build_context(
-                    &store_ref,
+                    &*self.store,
                     &self.user_id,
                     &self.conversation_id,
                     &self.query,
@@ -270,12 +282,12 @@ mod tests {
     impl ContextStrategy for MockStrategy {
         async fn build_context(
             &self,
-            _store: &Arc<dyn MemoryStore>,
+            _store: &dyn MemoryStore,
             _user_id: &Option<String>,
             _conversation_id: &Option<String>,
             _query: &Option<String>,
-        ) -> Result<StrategyResult, anyhow::Error> {
-            Ok(StrategyResult::Messages(vec![
+        ) -> Result<crate::strategies::StrategyResult, anyhow::Error> {
+            Ok(crate::strategies::StrategyResult::Messages(vec![
                 "User: Hello".to_string(),
                 "Assistant: Hi there!".to_string(),
             ]))
@@ -292,7 +304,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_builder_creation() {
-        let store = Arc::new(InMemoryVectorStore::new());
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
         let builder = ContextBuilder::new(store)
             .with_token_limit(2048);
 
@@ -301,7 +313,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_builder_with_user() {
-        let store = Arc::new(InMemoryVectorStore::new());
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
         let builder = ContextBuilder::new(store)
             .for_user("user123");
 
@@ -310,7 +322,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_builder_with_strategies() {
-        let store = Arc::new(InMemoryVectorStore::new());
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
         let strategy = Box::new(MockStrategy);
 
         let builder = ContextBuilder::new(store)
@@ -321,7 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_context_builder_with_system_message() {
-        let store = Arc::new(InMemoryVectorStore::new());
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
         let builder = ContextBuilder::new(store)
             .with_system_message("You are a helpful assistant.");
 
