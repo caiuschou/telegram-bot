@@ -101,7 +101,22 @@ impl EmbeddingService for OpenAIEmbedding {
     /// Generates an embedding vector for a single text string using OpenAI's API.
     ///
     /// This method sends a request to OpenAI's embeddings API and returns the vector representation
-    /// of the input text.
+    /// of the input text. The embedding captures the semantic meaning of the text in a high-dimensional
+    /// vector space, enabling semantic similarity comparisons.
+    ///
+    /// # API Interaction
+    ///
+    /// 1. Constructs CreateEmbeddingRequest with configured model and input text
+    /// 2. Sends HTTP POST request to OpenAI's embeddings endpoint
+    /// 3. Parses JSON response to extract embedding vector
+    /// 4. Returns the first (and only) embedding from the response
+    ///
+    /// # External Interactions
+    ///
+    /// - **OpenAI API**: Makes HTTPS request to https://api.openai.com/v1/embeddings
+    /// - **Network**: Requires internet connectivity to reach OpenAI servers
+    /// - **Rate Limits**: Subject to OpenAI's API rate limits (e.g., 3000 RPM for tier 5)
+    /// - **Billing**: Each request consumes quota (e.g., $0.02/1M tokens for text-embedding-3-small)
     ///
     /// # Arguments
     ///
@@ -110,13 +125,15 @@ impl EmbeddingService for OpenAIEmbedding {
     /// # Returns
     ///
     /// A vector of floats representing the embedding, or an error if the API request fails.
+    /// Vector dimensions depend on the configured model (e.g., 1536 for text-embedding-3-small).
     ///
     /// # Errors
     ///
     /// Returns an error if:
     /// - The API key is not set or invalid
-    /// - The API request fails (network error, rate limit, etc.)
-    /// - The response is malformed
+    /// - The API request fails (network error, timeout, rate limit, etc.)
+    /// - The response is malformed or missing embeddings
+    /// - Insufficient API quota
     async fn embed(&self, text: &str) -> Result<Vec<f32>, anyhow::Error> {
         let request = CreateEmbeddingRequestArgs::default()
             .model(self.model.clone())
@@ -138,7 +155,29 @@ impl EmbeddingService for OpenAIEmbedding {
     /// Generates embedding vectors for multiple texts in a single API call.
     ///
     /// This method is more efficient than calling `embed` multiple times, as it processes
-    /// all texts in a single API request.
+    /// all texts in a single API request. Batch processing reduces overhead and can be
+    /// significantly faster and cheaper for multiple texts.
+    ///
+    /// # API Interaction
+    ///
+    /// 1. Constructs CreateEmbeddingRequest with configured model and all input texts
+    /// 2. Sends single HTTP POST request to OpenAI's embeddings endpoint
+    /// 3. Parses JSON response to extract all embedding vectors
+    /// 4. Validates that number of embeddings matches number of inputs
+    ///
+    /// # Performance Considerations
+    ///
+    /// - Batch size limit: Up to 2048 texts per request (OpenAI API limit)
+    /// - Recommended batch size: 10-100 texts for optimal performance
+    /// - Network efficiency: Single request reduces latency overhead
+    /// - Cost efficiency: May be cheaper than individual requests due to batching
+    ///
+    /// # External Interactions
+    ///
+    /// - **OpenAI API**: Makes HTTPS request to https://api.openai.com/v1/embeddings
+    /// - **Network**: Requires internet connectivity to reach OpenAI servers
+    /// - **Rate Limits**: Single batch request consumes one rate limit token
+    /// - **Billing**: Tokens are counted across all texts in the batch
     ///
     /// # Arguments
     ///
@@ -146,14 +185,16 @@ impl EmbeddingService for OpenAIEmbedding {
     ///
     /// # Returns
     ///
-    /// A vector of embedding vectors, one for each input text.
+    /// A vector of embedding vectors, one for each input text, in the same order.
     ///
     /// # Errors
     ///
     /// Returns an error if:
+    /// - The input slice is empty (no-op, returns empty result)
     /// - The API key is not set or invalid
-    /// - The API request fails (network error, rate limit, etc.)
+    /// - The API request fails (network error, timeout, rate limit, etc.)
     /// - The response is malformed or has fewer embeddings than inputs
+    /// - Batch size exceeds OpenAI's limits
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error> {
         if texts.is_empty() {
             return Ok(vec![]);

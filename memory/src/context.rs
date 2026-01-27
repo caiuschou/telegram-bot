@@ -34,6 +34,22 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 
 /// Represents a constructed context for AI conversation.
+///
+/// Contains all the information needed to provide context to an AI model,
+/// including system instructions, conversation history, and user preferences.
+///
+/// # External Interactions
+///
+/// - **AI Models**: Formatted context is sent to LLM APIs (OpenAI, Anthropic, etc.)
+/// - **Memory Management**: Context size must fit within model's token limit
+/// - **Conversation State**: Maintains continuity across multi-turn conversations
+///
+/// # Components
+///
+/// - system_message: Optional AI personality/behavior instructions
+/// - conversation_history: Chronological sequence of messages
+/// - user_preferences: Extracted user preferences for personalization
+/// - metadata: Context metadata including token counts and timestamps
 #[derive(Debug, Clone)]
 pub struct Context {
     /// System message if provided
@@ -47,6 +63,15 @@ pub struct Context {
 }
 
 /// Metadata about the constructed context.
+///
+/// Provides diagnostic information about the context, useful for monitoring,
+/// debugging, and ensuring context stays within token limits.
+///
+/// # External Interactions
+///
+/// - **Monitoring**: Metadata can be logged for observability
+/// - **Token Management**: total_tokens helps prevent exceeding API limits
+/// - **Analytics**: message_count and timestamps enable usage analysis
 #[derive(Debug, Clone)]
 pub struct ContextMetadata {
     /// User ID for this context
@@ -62,6 +87,24 @@ pub struct ContextMetadata {
 }
 
 /// Builder for constructing AI conversation context.
+///
+/// Orchestrates the assembly of conversation context by applying multiple
+/// context strategies in sequence. Each strategy can contribute different
+/// types of information to the final context (messages, preferences, etc.).
+///
+/// # External Interactions
+///
+/// - **MemoryStore**: Delegates data retrieval to configured strategies
+/// - **Embedding Services**: Strategies may use embedding services for semantic search
+/// - **AI Models**: Constructed context is formatted for LLM API consumption
+///
+/// # Strategy Execution Order
+///
+/// Strategies are executed in the order they were added. Each strategy's
+/// result is aggregated into the final context:
+/// - Messages are appended to conversation_history
+/// - Preferences replace previous preferences (last strategy wins)
+/// - Empty results are ignored
 pub struct ContextBuilder {
     store: Arc<dyn MemoryStore>,
     strategies: Vec<Box<dyn ContextStrategy>>,
@@ -123,6 +166,31 @@ impl ContextBuilder {
     }
 
     /// Builds the context using all configured strategies.
+    ///
+    /// This method executes each registered strategy in sequence, collecting their results
+    /// and combining them into a final Context. It interacts with the MemoryStore to retrieve
+    /// conversation data and orchestrates the context construction process.
+    ///
+    /// # Process
+    ///
+    /// 1. Iterates through all registered strategies in order
+    /// 2. For each strategy, calls `build_context()` which may:
+    ///    - Query the MemoryStore for conversation history
+    ///    - Perform semantic searches (if embedding data available)
+    ///    - Extract user preferences from historical messages
+    /// 3. Aggregates results from all strategies
+    /// 4. Calculates total token count for the assembled context
+    /// 5. Constructs and returns the final Context object
+    ///
+    /// # External Interactions
+    ///
+    /// - **MemoryStore**: Queries for conversation data based on user_id and conversation_id
+    /// - **Embedding Service**: Indirectly used through semantic search strategies
+    ///
+    /// # Returns
+    ///
+    /// A constructed `Context` containing system message, conversation history,
+    /// user preferences, and metadata.
     pub async fn build(&self) -> Result<Context, anyhow::Error> {
         let mut history = Vec::new();
         let mut preferences: Option<String> = None;
@@ -170,6 +238,25 @@ impl ContextBuilder {
     }
 
     /// Calculates the total token count for context.
+    ///
+    /// Estimates token usage for all context components to ensure it stays within
+    /// the configured token limit. This prevents exceeding API token limits when
+    /// sending context to AI models.
+    ///
+    /// # Calculation Components
+    ///
+    /// - System message tokens (if provided)
+    /// - Conversation history tokens (all messages)
+    /// - User preferences tokens (if available)
+    ///
+    /// # External Interactions
+    ///
+    /// - **AI Models**: Token estimation ensures compatibility with model context windows
+    ///
+    /// # Note
+    ///
+    /// Uses a simple approximation (1 token ≈ 4 characters). For production use with
+    /// precise token limits, consider using tiktoken library for accurate estimation.
     fn calculate_total_tokens(
         &self,
         history: &[String],
@@ -200,12 +287,50 @@ impl ContextBuilder {
 ///
 /// This is a rough approximation: 1 token ≈ 4 characters for English text.
 /// For production use, consider using tiktoken for more accurate estimation.
+///
+/// # Algorithm
+///
+/// Divides text length by 4 and rounds up, ensuring minimum of 1 token.
+///
+/// # External Interactions
+///
+/// - **AI Models**: Token count determines if context fits within model's context window
+/// - **Cost Calculation**: Token usage directly impacts API costs for LLM providers
 pub fn estimate_tokens(text: &str) -> usize {
     ((text.len() as f64) / 4.0).ceil().max(1.0) as usize
 }
 
 impl Context {
     /// Formats the context for AI model input.
+    ///
+    /// Constructs a formatted string representation of the context suitable for
+    /// passing to AI language models. The format is designed to be easily parsed
+    /// by models and follows common conversation formatting patterns.
+    ///
+    /// # Format Structure
+    ///
+    /// ```text
+    /// System: {system_message}
+    ///
+    /// User Preferences: {preferences}
+    ///
+    /// {message_1}
+    /// {message_2}
+    /// ...
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `include_system` - If true, includes the system message in the output
+    ///
+    /// # Returns
+    ///
+    /// A newline-separated string ready for submission to AI models.
+    ///
+    /// # External Interactions
+    ///
+    /// - **AI Models**: Formatted string is directly consumed by LLM APIs
+    /// - **Conversation Parsers**: Format follows standard conversation patterns
     pub fn format_for_model(&self, include_system: bool) -> String {
         let mut output = String::new();
 

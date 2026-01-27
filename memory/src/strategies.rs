@@ -44,6 +44,23 @@ impl RecentMessagesStrategy {
 
 #[async_trait]
 impl ContextStrategy for RecentMessagesStrategy {
+    /// Builds context by retrieving the most recent conversation messages.
+    ///
+    /// Prioritizes conversation-based retrieval if conversation_id is provided,
+    /// otherwise falls back to user-based retrieval. Returns messages in
+    /// chronological order as stored (typically already sorted by timestamp).
+    ///
+    /// # Priority Order
+    ///
+    /// 1. If conversation_id provided: search_by_conversation()
+    /// 2. Else if user_id provided: search_by_user()
+    /// 3. Else: return Empty result
+    ///
+    /// # External Interactions
+    ///
+    /// - **MemoryStore**: Queries database for conversation or user history
+    /// - **Storage**: Retrieves persistent conversation data
+    /// - **AI Context**: Results are formatted and included in AI conversation context
     async fn build_context(
         &self,
         store: &dyn MemoryStore,
@@ -100,18 +117,34 @@ impl SemanticSearchStrategy {
 
 #[async_trait]
 impl ContextStrategy for SemanticSearchStrategy {
+    /// Builds context by performing semantic search for relevant messages.
+    ///
+    /// Currently returns Empty result as semantic search requires integration
+    /// with embedding service to generate embeddings for query text.
+    ///
+    /// # Planned Implementation
+    ///
+    /// 1. Generate embedding for query text using EmbeddingService
+    /// 2. Call store.semantic_search() with query embedding
+    /// 3. Format returned entries as messages
+    ///
+    /// # External Interactions
+    ///
+    /// - **Embedding Service**: Will call OpenAI API to generate query embedding
+    /// - **MemoryStore**: Will perform vector similarity search
+    /// - **AI Context**: Results provide semantically relevant context for current query
+    ///
+    /// # Current State
+    ///
+    /// Placeholder implementation - returns Empty result.
+    /// TODO: Integrate with embedding service and complete implementation.
     async fn build_context(
         &self,
         _store: &dyn MemoryStore,
         _user_id: &Option<String>,
         _conversation_id: &Option<String>,
-        query: &Option<String>,
+        _query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
-        let query = match query {
-            Some(q) => q,
-            None => return Ok(StrategyResult::Empty),
-        };
-
         // Note: This requires embedding service to be integrated
         // For now, we'll return empty result as semantic search
         // needs embedding generation for the query
@@ -132,6 +165,31 @@ impl UserPreferencesStrategy {
 
 #[async_trait]
 impl ContextStrategy for UserPreferencesStrategy {
+    /// Builds context by extracting user preferences from conversation history.
+    ///
+    /// Analyzes all historical messages for a user to identify expressed
+    /// preferences, which can be used to personalize AI responses.
+    ///
+    /// # Process
+    ///
+    /// 1. Retrieve all entries for the user from MemoryStore
+    /// 2. Analyze messages for preference indicators ("I like", "I prefer")
+    /// 3. Extract preference statements from matched messages
+    /// 4. Return formatted preferences string or Empty if none found
+    ///
+    /// # External Interactions
+    ///
+    /// - **MemoryStore**: Queries all historical messages for the user
+    /// - **Storage**: Reads persistent conversation history
+    /// - **AI Personalization**: Extracted preferences enable personalized responses
+    /// - **User Experience**: AI can recall and respect user preferences across sessions
+    ///
+    /// # Limitations
+    ///
+    /// - Uses simple pattern matching (not semantic analysis)
+    /// - May miss preferences expressed in complex language
+    /// - May include false positives in edge cases
+    /// - Future: Use LLM to extract preferences more accurately
     async fn build_context(
         &self,
         store: &dyn MemoryStore,
@@ -159,8 +217,31 @@ impl ContextStrategy for UserPreferencesStrategy {
     }
 }
 
-/// Formats a memory entry as a message.
-fn format_message(entry: &MemoryEntry) -> String {
+/// Formats a memory entry as a message string.
+///
+/// Converts a MemoryEntry into a human-readable message format suitable for
+/// inclusion in AI conversation context. The format follows standard conversation
+/// conventions with role prefixes.
+///
+/// # Format Pattern
+///
+/// "{Role}: {content}"
+///
+/// Where Role is one of: "User", "Assistant", "System"
+///
+/// # Example
+///
+/// ```text
+/// User: Hello, how are you?
+/// Assistant: I'm doing well, thank you!
+/// System: You are a helpful assistant.
+/// ```
+///
+/// # External Interactions
+    ///
+    /// - **AI Models**: Formatted messages are directly consumed by LLM APIs
+    /// - **Conversation Parsers**: Follows standard role-based message format
+    fn format_message(entry: &MemoryEntry) -> String {
     let role = match entry.metadata.role {
         MemoryRole::User => "User",
         MemoryRole::Assistant => "Assistant",
@@ -170,8 +251,38 @@ fn format_message(entry: &MemoryEntry) -> String {
     format!("{}: {}", role, entry.content)
 }
 
-/// Extracts preferences from conversation history.
-fn extract_preferences(entries: &[MemoryEntry]) -> Vec<String> {
+/// Extracts user preferences from conversation history.
+///
+/// Analyzes historical messages to identify and extract user preferences expressed
+/// during conversations. Uses simple pattern matching to detect preference statements.
+///
+    /// # Detection Patterns
+    ///
+    /// Scans for phrases indicating preferences:
+    /// - "I like" followed by content
+    /// - "I prefer" followed by content
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Iterates through all provided memory entries
+    /// 2. Converts content to lowercase for case-insensitive matching
+    /// 3. Searches for preference indicator phrases
+    /// 4. Extracts text from the first occurrence to end of message
+    /// 5. Collects all unique preference statements found
+    ///
+    /// # Limitations
+    ///
+    /// - Simple keyword-based detection (may miss complex preference expressions)
+    /// - Does not perform semantic analysis
+    /// - May include false positives in edge cases
+    /// - Future enhancement: Use NLP/LLM for more sophisticated extraction
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Store**: Reads historical conversation data
+    /// - **AI Context**: Extracted preferences are included in AI conversation context
+    /// - **User Personalization**: Enables personalized AI responses based on preferences
+    fn extract_preferences(entries: &[MemoryEntry]) -> Vec<String> {
     let mut preferences = Vec::new();
 
     for entry in entries {

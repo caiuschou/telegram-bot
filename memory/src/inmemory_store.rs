@@ -69,23 +69,79 @@ impl InMemoryVectorStore {
     }
 
     /// Returns the number of entries in the store.
+    ///
+    /// Provides count of all memory entries currently stored in memory.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Management**: Useful for monitoring in-memory usage
+    /// - **Testing**: Helps verify test setup and cleanup
+    /// - **Monitoring**: Can be logged for system observability
     pub async fn len(&self) -> usize {
         let entries = self.entries.read().await;
         entries.len()
     }
 
     /// Returns true if the store is empty.
+    ///
+    /// Checks whether any memory entries are currently stored.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Testing**: Useful for assertions in test cases
+    /// - **Monitoring**: Can indicate if any conversation data exists
+    /// - **Initialization**: Helps verify clean state
     pub async fn is_empty(&self) -> bool {
         self.len().await == 0
     }
 
     /// Clears all entries from the store.
+    ///
+    /// Removes all memory entries from the in-memory store. This operation
+    /// is instantaneous and frees memory for garbage collection.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Management**: Frees memory allocated for all entries
+    /// - **Testing**: Enables clean test isolation
+    /// - **State Reset**: Allows resetting to empty state
+    ///
+    /// # Warning
+    ///
+    /// This operation is irreversible and all data is permanently lost.
     pub async fn clear(&self) {
         let mut entries = self.entries.write().await;
         entries.clear();
     }
 
     /// Calculates cosine similarity between two vectors.
+    ///
+    /// Computes the cosine similarity metric, which measures the cosine of the angle
+    /// between two vectors. This is a standard similarity metric for vector embeddings,
+    /// ranging from -1 (opposite) to 1 (identical), with 0 indicating orthogonality.
+    ///
+    /// # Algorithm
+    ///
+    /// Similarity = (a · b) / (||a|| * ||b||)
+    ///
+    /// Where:
+    /// - a · b = dot product (sum of element-wise products)
+    /// - ||a|| = Euclidean norm (square root of sum of squares)
+    ///
+    /// # Special Cases
+    ///
+    /// - Empty vectors return 0.0 similarity
+    /// - Zero vectors return 0.0 similarity (to avoid division by zero)
+    ///
+    /// # External Interactions
+    ///
+    /// - **Semantic Search**: Used to rank memory entries by relevance to query
+    /// - **Vector Databases**: Standard similarity metric for embedding comparisons
+    ///
+    /// # Performance
+    ///
+    /// Time complexity: O(n) where n is vector dimensionality.
+    /// Memory complexity: O(1) - only accumulators used.
     fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         if a.is_empty() || b.is_empty() {
             return 0.0;
@@ -112,6 +168,20 @@ impl Default for InMemoryVectorStore {
 #[async_trait::async_trait]
 impl MemoryStore for InMemoryVectorStore {
     /// Adds a new memory entry to the store.
+    ///
+    /// Stores a memory entry in the in-memory HashMap, making it available
+    /// for future queries. The entry is indexed by its UUID for O(1) lookup.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Management**: Allocates memory in RAM (no disk I/O)
+    /// - **Concurrent Access**: Uses RwLock for thread-safe access
+    /// - **No Persistence**: Data is lost on application restart
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(1) average case for HashMap insertion
+    /// - Memory overhead: Size of entry plus HashMap bucket overhead
     async fn add(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
         let mut entries = self.entries.write().await;
         entries.insert(entry.id, entry);
@@ -119,12 +189,37 @@ impl MemoryStore for InMemoryVectorStore {
     }
 
     /// Retrieves a memory entry by its UUID. Returns `None` if not found.
+    ///
+    /// Performs a direct lookup by UUID using the HashMap index.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Access**: Direct RAM lookup (no disk I/O)
+    /// - **Concurrent Access**: Uses RwLock read lock for thread safety
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(1) average case for HashMap lookup
+    /// - Returns cloned entry to maintain store ownership
     async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>, anyhow::Error> {
         let entries = self.entries.read().await;
         Ok(entries.get(&id).cloned())
     }
 
     /// Updates an existing memory entry.
+    ///
+    /// Replaces the existing entry with the same UUID. If no entry with
+    /// the UUID exists, this operation adds it as a new entry.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Management**: Updates in RAM (no disk I/O)
+    /// - **Concurrent Access**: Uses RwLock write lock for thread safety
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(1) average case for HashMap insertion
+    /// - Replaces existing entry completely (no partial updates)
     async fn update(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
         let mut entries = self.entries.write().await;
         entries.insert(entry.id, entry);
@@ -132,6 +227,19 @@ impl MemoryStore for InMemoryVectorStore {
     }
 
     /// Deletes a memory entry by its UUID.
+    ///
+    /// Removes a memory entry from the HashMap. If no entry with the UUID
+    /// exists, this operation succeeds silently.
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Management**: Frees memory for deleted entry (after GC)
+    /// - **Concurrent Access**: Uses RwLock write lock for thread safety
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(1) average case for HashMap deletion
+    /// - Memory is reclaimed by Rust's garbage collector
     async fn delete(&self, id: Uuid) -> Result<(), anyhow::Error> {
         let mut entries = self.entries.write().await;
         entries.remove(&id);
@@ -139,6 +247,20 @@ impl MemoryStore for InMemoryVectorStore {
     }
 
     /// Retrieves all memory entries for a specific user.
+    ///
+    /// Iterates through all entries and filters by user_id. This is a
+    /// linear scan operation (no indexing for user_id).
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Access**: Scans all entries in RAM
+    /// - **Concurrent Access**: Uses RwLock read lock for thread safety
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(n) where n is total number of entries
+    /// - Space complexity: O(k) where k is number of matching entries
+    /// - Consider adding user_id index for improved performance
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         let entries = self.entries.read().await;
         let results: Vec<MemoryEntry> = entries
@@ -150,6 +272,20 @@ impl MemoryStore for InMemoryVectorStore {
     }
 
     /// Retrieves all memory entries for a specific conversation.
+    ///
+    /// Iterates through all entries and filters by conversation_id. This is
+    /// a linear scan operation (no indexing for conversation_id).
+    ///
+    /// # External Interactions
+    ///
+    /// - **Memory Access**: Scans all entries in RAM
+    /// - **Concurrent Access**: Uses RwLock read lock for thread safety
+    ///
+    /// # Performance
+    ///
+    /// - Time complexity: O(n) where n is total number of entries
+    /// - Space complexity: O(k) where k is number of matching entries
+    /// - Consider adding conversation_id index for improved performance
     async fn search_by_conversation(
         &self,
         conversation_id: &str,
@@ -166,7 +302,37 @@ impl MemoryStore for InMemoryVectorStore {
     /// Performs semantic search using vector embeddings.
     ///
     /// Returns the top `limit` most similar entries based on cosine similarity.
-    /// Entries without embeddings are ignored.
+    /// This method finds memory entries that are semantically similar to the query
+    /// by comparing their vector embeddings.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Iterates through all entries in memory
+    /// 2. Filters entries that have embeddings (skips those without)
+    /// 3. Calculates cosine similarity between query and each entry's embedding
+    /// 4. Sorts entries by similarity score in descending order
+    /// 5. Returns top `limit` entries with highest similarity
+    ///
+    /// # External Interactions
+    ///
+    /// - **Embedding Services**: Query embedding typically comes from OpenAI embedding API
+    /// - **Memory Operations**: All data is already in memory (in-memory store)
+    ///
+    /// # Performance Characteristics
+    ///
+    /// - Time complexity: O(n * d) where n is number of entries, d is vector dimension
+    /// - Memory complexity: O(1) additional (data already loaded)
+    /// - Fastest semantic search among all store implementations
+    ///
+    /// # Arguments
+    ///
+    /// * `query_embedding` - Vector embedding of the search query
+    /// * `limit` - Maximum number of results to return
+    ///
+    /// # Returns
+    ///
+    /// Vector of memory entries sorted by similarity (highest first).
+    /// Entries without embeddings are excluded from results.
     async fn semantic_search(
         &self,
         query_embedding: &[f32],

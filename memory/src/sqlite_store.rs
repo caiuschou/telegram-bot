@@ -103,6 +103,33 @@ impl SQLiteVectorStore {
     }
 
     /// Initializes the database schema.
+    ///
+    /// Creates the necessary tables and indexes for storing memory entries and
+    /// their vector embeddings. This method is called automatically during store
+    /// initialization.
+    ///
+    /// # Database Structure
+    ///
+    /// Creates a `memory_entries` table with the following columns:
+    /// - id (TEXT PRIMARY KEY): UUID of the memory entry
+    /// - content (TEXT NOT NULL): Message content
+    /// - user_id (TEXT): Optional user identifier
+    /// - conversation_id (TEXT): Optional conversation identifier
+    /// - role (TEXT NOT NULL): Message role (User/Assistant/System)
+    /// - timestamp (TEXT NOT NULL): ISO 8601 timestamp
+    /// - tokens (INTEGER): Optional token count
+    /// - importance (REAL): Optional importance score
+    /// - embedding (BLOB): Vector embedding as binary data
+    ///
+    /// # Indexes Created
+    ///
+    /// - idx_user_id: For fast user-based queries
+    /// - idx_conversation_id: For fast conversation-based queries
+    /// - idx_timestamp: For time-based sorting
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite**: Executes DDL commands to create schema
     async fn init_schema(&self) -> Result<(), anyhow::Error> {
         sqlx::query(
             r#"
@@ -129,7 +156,33 @@ impl SQLiteVectorStore {
         Ok(())
     }
 
-    /// Converts a row to a MemoryEntry.
+    /// Converts a database row to a MemoryEntry.
+    ///
+    /// Deserializes data from SQLite row format into the in-memory MemoryEntry structure.
+    /// Handles type conversions for complex fields like UUIDs, timestamps, and binary
+    /// vector embeddings.
+    ///
+    /// # Conversion Process
+    ///
+    /// 1. Extracts and parses UUID string to Uuid type
+    /// 2. Converts role string ("User"/"Assistant"/"System") to MemoryRole enum
+    /// 3. Parses ISO 8601 timestamp string to DateTime<Utc>
+    /// 4. Deserializes BLOB field to Vec<f32> for embeddings:
+    ///    - Reads binary data in little-endian format (4 bytes per float)
+    ///    - Converts each 4-byte chunk to f32 using from_le_bytes
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite**: Reads BLOB data for embeddings stored in binary format
+    /// - **chrono**: Parses timestamp strings from database
+    ///
+    /// # Error Handling
+    ///
+    /// Returns error for:
+    /// - Invalid UUID format
+    /// - Unknown role values
+    /// - Invalid timestamp format
+    /// - BLOB data length not divisible by 4 (invalid embedding data)
     fn row_to_entry(row: &sqlx::sqlite::SqliteRow) -> Result<MemoryEntry, sqlx::Error> {
         let id: String = row.try_get("id")?;
         let content: String = row.try_get("content")?;
@@ -180,6 +233,33 @@ impl SQLiteVectorStore {
     }
 
     /// Calculates cosine similarity between two vectors.
+    ///
+    /// Computes the cosine similarity metric, which measures the cosine of the angle
+    /// between two vectors. This is a standard similarity metric for vector embeddings,
+    /// ranging from -1 (opposite) to 1 (identical), with 0 indicating orthogonality.
+    ///
+    /// # Algorithm
+    ///
+    /// Similarity = (a · b) / (||a|| * ||b||)
+    ///
+    /// Where:
+    /// - a · b = dot product (sum of element-wise products)
+    /// - ||a|| = Euclidean norm (square root of sum of squares)
+    ///
+    /// # Special Cases
+    ///
+    /// - Empty vectors return 0.0 similarity
+    /// - Zero vectors return 0.0 similarity (to avoid division by zero)
+    ///
+    /// # External Interactions
+    ///
+    /// - **Semantic Search**: Used to rank memory entries by relevance to query
+    /// - **Vector Databases**: Standard similarity metric for embedding comparisons
+    ///
+    /// # Performance
+    ///
+    /// Time complexity: O(n) where n is vector dimensionality.
+    /// Memory complexity: O(1) - only accumulators used.
     fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         if a.is_empty() || b.is_empty() {
             return 0.0;
@@ -200,6 +280,24 @@ impl SQLiteVectorStore {
 #[async_trait::async_trait]
 impl MemoryStore for SQLiteVectorStore {
     /// Adds a new memory entry to the store.
+    ///
+    /// Persists a new memory entry to the SQLite database, including all metadata
+    /// and optionally the vector embedding for semantic search capabilities.
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes INSERT statement to store entry in memory_entries table
+    /// - **File System**: Data is written to the SQLite database file on disk
+    /// - **Storage Persistence**: Entry survives application restarts
+    ///
+    /// # Data Transformation
+    ///
+    /// - UUID: Converted to string for TEXT storage
+    /// - Timestamp: Converted to ISO 8601 string (RFC3339)
+    /// - Role: Converted to string ("User"/"Assistant"/"System")
+    /// - Tokens: Converted from u32 to i64
+    /// - Importance: Converted from f32 to f64
+    /// - Embedding: Serialized to binary BLOB (little-endian, 4 bytes per float)
     async fn add(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
         let role_str = match entry.metadata.role {
             MemoryRole::User => "User",
@@ -240,6 +338,18 @@ impl MemoryStore for SQLiteVectorStore {
     }
 
     /// Retrieves a memory entry by its UUID. Returns `None` if not found.
+    ///
+    /// Queries the database for a specific memory entry using its unique identifier.
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes SELECT query with WHERE id = ? condition
+    /// - **Storage**: Reads from persistent SQLite database file
+    ///
+    /// # Performance
+    ///
+    /// - Uses indexed primary key lookup (O(log n) in B-tree)
+    /// - Fast retrieval due to PRIMARY KEY index on id column
     async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>, anyhow::Error> {
         let row = sqlx::query("SELECT * FROM memory_entries WHERE id = ?1")
             .bind(id.to_string())
@@ -253,6 +363,20 @@ impl MemoryStore for SQLiteVectorStore {
     }
 
     /// Updates an existing memory entry.
+    ///
+    /// Modifies all fields of an existing memory entry in the database. This is
+    /// a full replacement operation where all field values are overwritten.
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes UPDATE statement with WHERE id = ? condition
+    /// - **File System**: Writes updated data to database file on disk
+    /// - **Storage Persistence**: Changes are immediately persisted
+    ///
+    /// # Data Transformation
+    ///
+    /// Same transformation rules as add() method:
+    /// - UUID, timestamp, role, tokens, importance, embedding all converted to storage format
     async fn update(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
         let role_str = match entry.metadata.role {
             MemoryRole::User => "User",
@@ -299,6 +423,15 @@ impl MemoryStore for SQLiteVectorStore {
     }
 
     /// Deletes a memory entry by its UUID.
+    ///
+    /// Removes a memory entry permanently from the database. This operation is
+    /// irreversible and will also delete any associated vector embedding.
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes DELETE statement with WHERE id = ? condition
+    /// - **File System**: Writes deletion to database file (may trigger page cleanup)
+    /// - **Storage Persistence**: Entry is permanently removed, cannot be recovered
     async fn delete(&self, id: Uuid) -> Result<(), anyhow::Error> {
         sqlx::query("DELETE FROM memory_entries WHERE id = ?1")
             .bind(id.to_string())
@@ -309,6 +442,21 @@ impl MemoryStore for SQLiteVectorStore {
     }
 
     /// Retrieves all memory entries for a specific user.
+    ///
+    /// Queries the database for all entries belonging to a given user, ordered
+    /// by timestamp in descending order (most recent first).
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes SELECT query with WHERE user_id = ? condition
+    /// - **Index Usage**: Utilizes idx_user_id index for efficient filtering
+    /// - **Storage**: Reads multiple rows from database file
+    ///
+    /// # Performance
+    ///
+    /// - O(k) where k is number of entries for the user
+    /// - Uses indexed lookup for user_id column
+    /// - Results sorted by timestamp during query execution
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         let rows = sqlx::query("SELECT * FROM memory_entries WHERE user_id = ?1 ORDER BY timestamp DESC")
             .bind(user_id)
@@ -324,6 +472,21 @@ impl MemoryStore for SQLiteVectorStore {
     }
 
     /// Retrieves all memory entries for a specific conversation.
+    ///
+    /// Queries the database for all entries belonging to a given conversation,
+    /// ordered by timestamp in descending order (most recent first).
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Executes SELECT query with WHERE conversation_id = ? condition
+    /// - **Index Usage**: Utilizes idx_conversation_id index for efficient filtering
+    /// - **Storage**: Reads multiple rows from database file
+    ///
+    /// # Performance
+    ///
+    /// - O(k) where k is number of entries in the conversation
+    /// - Uses indexed lookup for conversation_id column
+    /// - Results sorted by timestamp during query execution
     async fn search_by_conversation(
         &self,
         conversation_id: &str,
@@ -344,8 +507,41 @@ impl MemoryStore for SQLiteVectorStore {
     /// Performs semantic search using vector embeddings.
     ///
     /// Returns the top `limit` most similar entries based on cosine similarity.
+    /// This method finds memory entries that are semantically similar to the query
+    /// by comparing their vector embeddings.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Queries SQLite for all entries that have embeddings (WHERE embedding IS NOT NULL)
+    /// 2. For each entry, calculates cosine similarity with query_embedding
+    /// 3. Sorts entries by similarity score in descending order
+    /// 4. Returns top `limit` entries with highest similarity
+    ///
+    /// # External Interactions
+    ///
+    /// - **SQLite Database**: Reads all embedding vectors from storage
+    /// - **Embedding Services**: Query embedding typically comes from OpenAI embedding API
+    /// - **Memory Operations**: Loads all vectors into memory for similarity calculation
+    ///
+    /// # Performance Characteristics
+    ///
+    /// - Time complexity: O(n * d) where n is number of entries, d is vector dimension
+    /// - Memory complexity: O(n * d) - loads all embeddings into RAM
+    /// - Not scalable for large datasets (>100K entries)
+    ///
+    /// # Limitations
+    ///
     /// Note: This retrieves all entries with embeddings and calculates similarity in-memory.
     /// For large datasets, consider using a specialized vector database like Lance.
+    ///
+    /// # Arguments
+    ///
+    /// * `query_embedding` - Vector embedding of the search query
+    /// * `limit` - Maximum number of results to return
+    ///
+    /// # Returns
+    ///
+    /// Vector of memory entries sorted by similarity (highest first).
     async fn semantic_search(
         &self,
         query_embedding: &[f32],
