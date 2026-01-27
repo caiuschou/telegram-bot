@@ -10,4 +10,5 @@ members = [
     "openai-client",
     "telegram-bot-examples",
     "telegram-bot-ai",
+    "memory",
 ]
