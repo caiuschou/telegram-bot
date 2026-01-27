@@ -6,7 +6,6 @@
 //!
 //! - **Type-safe memory storage** with flexible metadata
 //! - **Async trait-based design** for multiple storage backends
-//! - **Embedding service** for semantic search
 //! - **UUID-based identification** for distributed systems
 //! - **Serde serialization** for easy data exchange
 //!
@@ -32,29 +31,41 @@
 //!
 //! - [`types`] - Core type definitions
 //! - [`store`] - Memory storage interface
-//! - [`embedding`] - Text embedding service
+//! - [`inmemory_store`] - In-memory vector store
+//! - [`sqlite_store`] - SQLite-based persistent storage
+//! - [`context`] - Context building for conversations
+//! - [`strategies`] - Context building strategies
 //!
 //! ## External Interactions
 //!
 //! The memory crate interacts with external services:
-//! - **OpenAI API**: For generating text embeddings via `EmbeddingService`
 //! - **Storage backends**: SQLite, Lance, or in-memory storage via `MemoryStore`
 //! - **Bot runtime**: Integrates with bot middleware for conversation memory management
+//! - **Embedding services**: Uses the `embedding` crate trait for semantic search
+//!
+//! ## Embedding Integration
+//!
+//! For text embedding functionality, use the separate crates:
+//! - `embedding` - Core `EmbeddingService` trait
+//! - `openai-embedding` - OpenAI implementation
+//! - `bigmodel-embedding` - BigModel (Zhipu AI) implementation
 
 pub mod types;
 pub mod store;
-pub mod embedding;
-pub mod openai_embedding;
 pub mod inmemory_store;
-pub mod sqlite_store;
 pub mod context;
 pub mod strategies;
 
+#[cfg(feature = "lance")]
+pub mod lance_store;
+
+pub mod migration;
+
 pub use types::*;
 pub use store::*;
-pub use embedding::*;
-pub use openai_embedding::OpenAIEmbedding;
 pub use inmemory_store::InMemoryVectorStore;
-pub use sqlite_store::SQLiteVectorStore;
 pub use context::{Context, ContextBuilder, estimate_tokens};
 pub use strategies::{RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy};
+
+#[cfg(feature = "lance")]
+pub use lance_store::{LanceVectorStore, LanceConfig, LanceIndexType, DistanceType};

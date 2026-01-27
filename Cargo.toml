@@ -11,4 +11,9 @@ members = [
     "telegram-bot-examples",
     "telegram-bot-ai",
     "memory",
+    "crates/embedding",
+    "crates/openai-embedding",
+    "crates/bigmodel-embedding",
+    "crates/memory-inmemory",
+    "crates/memory-sqlite",
 ]

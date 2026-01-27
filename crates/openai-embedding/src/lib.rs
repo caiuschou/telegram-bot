@@ -1,6 +1,6 @@
 //! # OpenAI Embedding Service
 //!
-//! This module provides an implementation of the `EmbeddingService` trait using OpenAI's embedding API.
+//! This crate provides an implementation of the `EmbeddingService` trait using OpenAI's embedding API.
 //!
 //! ## OpenAIEmbedding
 //!
@@ -18,9 +18,9 @@
 //!
 //! ## Example
 //!
-//! ```rust
-//! use memory::openai_embedding::OpenAIEmbedding;
-//! use memory::EmbeddingService;
+//! ```rust,no_run
+//! use openai_embedding::OpenAIEmbedding;
+//! use embedding::EmbeddingService;
 //!
 //! fn create_service() -> OpenAIEmbedding {
 //!     // The API key can be provided directly or set via OPENAI_API_KEY environment variable
@@ -52,7 +52,7 @@
 
 use async_trait::async_trait;
 use async_openai::{types::CreateEmbeddingRequestArgs, Client};
-use crate::embedding::EmbeddingService;
+use embedding::EmbeddingService;
 
 /// OpenAI embedding service implementation.
 #[derive(Debug, Clone)]
@@ -232,7 +232,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires API key, run with: cargo test -p memory -- --ignored
+    #[ignore] // Requires API key, run with: cargo test -p openai-embedding -- --ignored
     async fn test_openai_embedding() {
         let api_key = std::env::var("OPENAI_API_KEY")
             .expect("OPENAI_API_KEY environment variable must be set for this test");

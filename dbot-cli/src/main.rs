@@ -2,7 +2,8 @@ use anyhow::Result;
 use bot_runtime::{AIDetectionHandler, HandlerChain, MessageHandler};
 use clap::Parser;
 use dbot_core::{init_tracing, Chat, Message, MessageDirection, ToCoreMessage, ToCoreUser, User};
-use memory::InMemoryVectorStore;
+use memory::{InMemoryVectorStore, MemoryStore};
+use memory_sqlite::SQLiteVectorStore;
 use openai_client::OpenAIClient;
 use std::sync::Arc;
 use storage::MessageRepository;
@@ -78,7 +79,31 @@ async fn run_bot(token: Option<String>) -> Result<()> {
     let openai_client = OpenAIClient::with_base_url(openai_api_key, openai_base_url);
     let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client).with_model(ai_model);
 
-    let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    // Initialize memory store based on configuration
+    let memory_store_type = std::env::var("MEMORY_STORE_TYPE")
+        .unwrap_or_else(|_| "memory".to_string());
+    let memory_store: Arc<dyn MemoryStore> = match memory_store_type.as_str() {
+        "lance" => {
+            // Note: Lance vector store is available when lance feature is enabled
+            // For now, fall back to in-memory store
+            info!("Lance feature not enabled, falling back to in-memory store");
+            Arc::new(InMemoryVectorStore::new())
+        }
+        "sqlite" => {
+            let db_path = std::env::var("MEMORY_SQLITE_PATH")
+                .unwrap_or_else(|_| "./data/memory.db".to_string());
+            info!(db_path = %db_path, "Using SQLite vector store");
+            Arc::new(SQLiteVectorStore::new(&db_path).await
+                .map_err(|e| {
+                    error!(error = %e, "Failed to initialize SQLite store");
+                    e
+                })?)
+        }
+        _ => {
+            info!("Using in-memory vector store");
+            Arc::new(InMemoryVectorStore::new())
+        }
+    };
 
     let mut ai_query_handler = bot_runtime::AIQueryHandler::new(
         ai_bot,

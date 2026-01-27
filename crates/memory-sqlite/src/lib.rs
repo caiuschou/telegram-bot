@@ -20,7 +20,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use memory::sqlite_store::SQLiteVectorStore;
+//! use memory_sqlite::SQLiteVectorStore;
 //! use memory::{MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole};
 //! use chrono::Utc;
 //!
@@ -63,8 +63,7 @@
 //! ```
 
 use sqlx::{sqlite::SqliteConnectOptions, Row, SqlitePool};
-use crate::types::{MemoryEntry, MemoryMetadata, MemoryRole};
-use crate::store::MemoryStore;
+use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
 use uuid::Uuid;

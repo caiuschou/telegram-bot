@@ -1,0 +1,10 @@
+[package]
+name = "openai-embedding"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+anyhow = "1.0"
+async-openai = "0.25"
+embedding = { path = "../embedding" }

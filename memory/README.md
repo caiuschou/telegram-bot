@@ -10,14 +10,50 @@ The `memory` crate provides a flexible and extensible framework for managing con
 - **UUID-based identification** for distributed systems
 - **Serde serialization** for easy data exchange
 
+## Storage Backends
+
+| Backend | Feature Flag | Description |
+|---------|--------------|-------------|
+| `InMemoryVectorStore` | default | In-memory storage for testing |
+| `SQLiteVectorStore` | default | Persistent SQLite storage |
+| `LanceVectorStore` | `lance` | High-performance LanceDB vector store |
+
 ## Installation
 
-Add to your `Cargo.toml`:
+### Basic (SQLite + In-Memory)
 
 ```toml
 [dependencies]
 memory = { path = "../memory" }
 ```
+
+### With LanceDB Support
+
+```toml
+[dependencies]
+memory = { path = "../memory", features = ["lance"] }
+```
+
+#### Prerequisites for LanceDB
+
+LanceDB requires the Protocol Buffers compiler (`protoc`) to build:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install protobuf-compiler
+```
+
+**macOS:**
+```bash
+brew install protobuf
+```
+
+**Verify:**
+```bash
+protoc --version
+```
+
+See [LANCE_INTEGRATION.md](./LANCE_INTEGRATION.md) for more details.
 
 ## Quick Start
 

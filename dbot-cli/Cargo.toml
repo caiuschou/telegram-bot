@@ -22,4 +22,5 @@ storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 openai-client = { path = "../openai-client" }
 memory = { path = "../memory" }
+memory-sqlite = { path = "../crates/memory-sqlite" }
 async-trait = "0.1"
