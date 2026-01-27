@@ -1,0 +1,333 @@
+//! # Context Builder
+//!
+//! This module provides the `ContextBuilder` for constructing AI conversation context
+//! from memory store using various strategies.
+//!
+//! ## ContextBuilder
+//!
+//! Main builder class that orchestrates context construction using different strategies.
+//!
+//! ## Example
+//!
+//! ```rust
+//! use memory::context::ContextBuilder;
+//! use memory::strategies::RecentMessagesStrategy;
+//! use std::sync::Arc;
+//!
+//! # use memory::inmemory_store::InMemoryVectorStore;
+//! # async fn example() -> Result<(), anyhow::Error> {
+//! let store = Arc::new(InMemoryVectorStore::new());
+//! let builder = ContextBuilder::new(store)
+//!     .with_token_limit(4096);
+//!
+//! let context = builder
+//!     .for_user("user123")
+//!     .build()
+//!     .await?;
+//! # Ok(())
+//! # }
+//! ```
+
+use crate::store::MemoryStore;
+use crate::strategies::ContextStrategy;
+use std::sync::Arc;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+/// Represents a constructed context for AI conversation.
+#[derive(Debug, Clone)]
+pub struct Context {
+    /// System message if provided
+    pub system_message: Option<String>,
+    /// Conversation history formatted for AI input
+    pub conversation_history: Vec<String>,
+    /// User preferences extracted from history
+    pub user_preferences: Option<String>,
+    /// Metadata about the context
+    pub metadata: ContextMetadata,
+}
+
+/// Metadata about the constructed context.
+#[derive(Debug, Clone)]
+pub struct ContextMetadata {
+    /// User ID for this context
+    pub user_id: Option<String>,
+    /// Conversation ID for this context
+    pub conversation_id: Option<String>,
+    /// Total estimated token count
+    pub total_tokens: usize,
+    /// Number of messages in context
+    pub message_count: usize,
+    /// When the context was built
+    pub created_at: DateTime<Utc>,
+}
+
+/// Builder for constructing AI conversation context.
+pub struct ContextBuilder<T: MemoryStore + ?Sized> {
+    store: Arc<T>,
+    strategies: Vec<Box<dyn ContextStrategy>>,
+    token_limit: usize,
+    user_id: Option<String>,
+    conversation_id: Option<String>,
+    query: Option<String>,
+    system_message: Option<String>,
+}
+
+impl<T: MemoryStore + 'static> ContextBuilder<T> {
+    /// Creates a new ContextBuilder with the given memory store.
+    pub fn new(store: Arc<T>) -> Self {
+        Self {
+            store,
+            strategies: Vec::new(),
+            token_limit: 4096, // Default token limit
+            user_id: None,
+            conversation_id: None,
+            query: None,
+            system_message: None,
+        }
+    }
+
+    /// Adds a context strategy to the builder.
+    pub fn with_strategy(mut self, strategy: Box<dyn ContextStrategy>) -> Self {
+        self.strategies.push(strategy);
+        self
+    }
+
+    /// Sets the maximum token limit for the context.
+    pub fn with_token_limit(mut self, limit: usize) -> Self {
+        self.token_limit = limit;
+        self
+    }
+
+    /// Sets the user ID for this context.
+    pub fn for_user(mut self, user_id: &str) -> Self {
+        self.user_id = Some(user_id.to_string());
+        self
+    }
+
+    /// Sets the conversation ID for this context.
+    pub fn for_conversation(mut self, conversation_id: &str) -> Self {
+        self.conversation_id = Some(conversation_id.to_string());
+        self
+    }
+
+    /// Sets the query for semantic search strategies.
+    pub fn with_query(mut self, query: &str) -> Self {
+        self.query = Some(query.to_string());
+        self
+    }
+
+    /// Sets a custom system message.
+    pub fn with_system_message(mut self, message: &str) -> Self {
+        self.system_message = Some(message.to_string());
+        self
+    }
+
+    /// Builds the context using all configured strategies.
+    pub async fn build(&self) -> Result<Context, anyhow::Error> {
+        let mut history = Vec::new();
+        let mut preferences: Option<String> = None;
+
+        // Execute strategies in order
+        let store_ref: Arc<dyn MemoryStore> = self.store.clone();
+        for strategy in &self.strategies {
+            let strategy_result = strategy
+                .build_context(
+                    &store_ref,
+                    &self.user_id,
+                    &self.conversation_id,
+                    &self.query,
+                )
+                .await?;
+
+            match strategy_result {
+                StrategyResult::Messages(messages) => {
+                    history.extend(messages);
+                }
+                StrategyResult::Preferences(prefs) => {
+                    preferences = Some(prefs);
+                }
+                StrategyResult::Empty => {}
+            }
+        }
+
+        // Calculate tokens
+        let total_tokens = self.calculate_total_tokens(&history, &preferences);
+
+        // Create metadata
+        let metadata = ContextMetadata {
+            user_id: self.user_id.clone(),
+            conversation_id: self.conversation_id.clone(),
+            total_tokens,
+            message_count: history.len(),
+            created_at: Utc::now(),
+        };
+
+        Ok(Context {
+            system_message: self.system_message.clone(),
+            conversation_history: history,
+            user_preferences: preferences,
+            metadata,
+        })
+    }
+
+    /// Calculates the total token count for context.
+    fn calculate_total_tokens(
+        &self,
+        history: &[String],
+        preferences: &Option<String>,
+    ) -> usize {
+        let mut total = 0;
+
+        // System message tokens
+        if let Some(ref msg) = self.system_message {
+            total += estimate_tokens(msg);
+        }
+
+        // History tokens
+        for msg in history {
+            total += estimate_tokens(msg);
+        }
+
+        // Preferences tokens
+        if let Some(ref prefs) = preferences {
+            total += estimate_tokens(prefs);
+        }
+
+        total
+    }
+}
+
+/// Estimates the token count for a text string.
+///
+/// This is a rough approximation: 1 token ≈ 4 characters for English text.
+/// For production use, consider using tiktoken for more accurate estimation.
+pub fn estimate_tokens(text: &str) -> usize {
+    ((text.len() as f64) / 4.0).ceil().max(1.0) as usize
+}
+
+impl Context {
+    /// Formats the context for AI model input.
+    pub fn format_for_model(&self, include_system: bool) -> String {
+        let mut output = String::new();
+
+        // Add system message if requested
+        if include_system {
+            if let Some(ref system_msg) = self.system_message {
+                output.push_str(&format!("System: {}\n\n", system_msg));
+            }
+        }
+
+        // Add user preferences if available
+        if let Some(ref prefs) = self.user_preferences {
+            output.push_str(&format!("User Preferences: {}\n\n", prefs));
+        }
+
+        // Add conversation history
+        for msg in &self.conversation_history {
+            output.push_str(msg);
+            output.push('\n');
+        }
+
+        output
+    }
+
+    /// Checks if the context exceeds the token limit.
+    pub fn exceeds_limit(&self, limit: usize) -> bool {
+        self.metadata.total_tokens > limit
+    }
+}
+
+/// Result type for context strategies.
+pub enum StrategyResult {
+    Messages(Vec<String>),
+    Preferences(String),
+    Empty,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::inmemory_store::InMemoryVectorStore;
+    use crate::{MemoryEntry, MemoryMetadata, MemoryRole};
+    use std::sync::Arc;
+
+    fn create_test_entry(content: &str, user_id: &str) -> MemoryEntry {
+        let metadata = MemoryMetadata {
+            user_id: Some(user_id.to_string()),
+            conversation_id: Some("conv1".to_string()),
+            role: MemoryRole::User,
+            timestamp: Utc::now(),
+            tokens: None,
+            importance: None,
+        };
+        MemoryEntry::new(content.to_string(), metadata)
+    }
+
+    struct MockStrategy;
+
+    #[async_trait::async_trait]
+    impl ContextStrategy for MockStrategy {
+        async fn build_context(
+            &self,
+            _store: &Arc<dyn MemoryStore>,
+            _user_id: &Option<String>,
+            _conversation_id: &Option<String>,
+            _query: &Option<String>,
+        ) -> Result<StrategyResult, anyhow::Error> {
+            Ok(StrategyResult::Messages(vec![
+                "User: Hello".to_string(),
+                "Assistant: Hi there!".to_string(),
+            ]))
+        }
+    }
+
+    #[test]
+    fn test_estimate_tokens() {
+        assert_eq!(estimate_tokens("Hello"), 2);
+        assert_eq!(estimate_tokens("Hello world"), 3);
+        assert_eq!(estimate_tokens("a"), 1);
+        assert_eq!(estimate_tokens(""), 1);
+    }
+
+    #[tokio::test]
+    async fn test_context_builder_creation() {
+        let store = Arc::new(InMemoryVectorStore::new());
+        let builder = ContextBuilder::new(store)
+            .with_token_limit(2048);
+
+        assert_eq!(builder.token_limit, 2048);
+    }
+
+    #[tokio::test]
+    async fn test_context_builder_with_user() {
+        let store = Arc::new(InMemoryVectorStore::new());
+        let builder = ContextBuilder::new(store)
+            .for_user("user123");
+
+        assert_eq!(builder.user_id.as_deref(), Some("user123"));
+    }
+
+    #[tokio::test]
+    async fn test_context_builder_with_strategies() {
+        let store = Arc::new(InMemoryVectorStore::new());
+        let strategy = Box::new(MockStrategy);
+
+        let builder = ContextBuilder::new(store)
+            .with_strategy(strategy);
+
+        assert_eq!(builder.strategies.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_context_builder_with_system_message() {
+        let store = Arc::new(InMemoryVectorStore::new());
+        let builder = ContextBuilder::new(store)
+            .with_system_message("You are a helpful assistant.");
+
+        assert_eq!(
+            builder.system_message.as_deref(),
+            Some("You are a helpful assistant.")
+        );
+    }
+}

@@ -47,6 +47,8 @@ pub mod embedding;
 pub mod openai_embedding;
 pub mod inmemory_store;
 pub mod sqlite_store;
+pub mod context;
+pub mod strategies;
 
 pub use types::*;
 pub use store::*;
@@ -54,3 +56,5 @@ pub use embedding::*;
 pub use openai_embedding::OpenAIEmbedding;
 pub use inmemory_store::InMemoryVectorStore;
 pub use sqlite_store::SQLiteVectorStore;
+pub use context::{Context, ContextBuilder, estimate_tokens};
+pub use strategies::{RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy};
