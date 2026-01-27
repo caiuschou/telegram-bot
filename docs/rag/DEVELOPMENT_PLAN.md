@@ -21,12 +21,12 @@
 |----|------|------|------|------|----------|
 | 1.1 | 创建 memory crate 项目结构 | 1h | 无 | 已完成 | Cargo.toml 配置完成，基础目录结构创建 |
 | 1.2 | 定义核心类型（MemoryEntry, MemoryMetadata, MemoryRole） | 2h | 1.1 | 已完成 | types.rs 完成，包含所有核心类型定义 |
-| 1.3 | 实现 MemoryStore trait | 2h | 1.2 | 待开始 | trait 定义包含所有必需方法 |
-| 1.4 | 实现 OpenAI 嵌入服务 | 3h | 1.3 | 待开始 | EmbeddingService trait 和 OpenAIEmbedding 实现 |
-| 1.5 | 实现 InMemoryVectorStore | 4h | 1.4 | 待开始 | 完整的内存向量存储实现 |
-| 1.6 | 集成现有 storage 模块（SQLite） | 2h | 1.5 | 待开始 | 持久化功能正常工作 |
-| 1.7 | 编写单元测试 | 4h | 1.6 | 待开始 | 测试覆盖率 > 80% |
-| 1.8 | 阶段测试和修复 | 2h | 1.7 | 待开始 | 所有测试通过，功能验证 |
+| 1.3 | 实现 MemoryStore trait | 2h | 1.2 | 已完成 | trait 定义包含所有必需方法 |
+| 1.4 | 实现 OpenAI 嵌入服务 | 3h | 1.3 | 已完成 | EmbeddingService trait 和 OpenAIEmbedding 实现 |
+| 1.5 | 实现 InMemoryVectorStore | 4h | 1.4 | 已完成 | 完整的内存向量存储实现 |
+| 1.6 | 集成现有 storage 模块（SQLite） | 2h | 1.5 | 已完成 | 持久化功能正常工作 |
+| 1.7 | 编写单元测试 | 4h | 1.6 | 已完成 | 测试覆盖率 > 80% |
+| 1.8 | 阶段测试和修复 | 2h | 1.7 | 已完成 | 所有测试通过，功能验证 |
 
 **总计**: 20 工时（约 2-3 天）
 

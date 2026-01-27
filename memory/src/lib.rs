@@ -44,7 +44,13 @@
 pub mod types;
 pub mod store;
 pub mod embedding;
+pub mod openai_embedding;
+pub mod inmemory_store;
+pub mod sqlite_store;
 
 pub use types::*;
 pub use store::*;
 pub use embedding::*;
+pub use openai_embedding::OpenAIEmbedding;
+pub use inmemory_store::InMemoryVectorStore;
+pub use sqlite_store::SQLiteVectorStore;
