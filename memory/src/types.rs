@@ -119,7 +119,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Represents the role of a message in a conversation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum MemoryRole {
     User,
     Assistant,

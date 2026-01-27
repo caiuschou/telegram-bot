@@ -21,4 +21,5 @@ bot-runtime = { path = "../bot-runtime" }
 storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 openai-client = { path = "../openai-client" }
+memory = { path = "../memory" }
 async-trait = "0.1"

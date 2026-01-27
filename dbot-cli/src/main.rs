@@ -2,6 +2,7 @@ use anyhow::Result;
 use bot_runtime::{AIDetectionHandler, HandlerChain, MessageHandler};
 use clap::Parser;
 use dbot_core::{init_tracing, Chat, Message, MessageDirection, ToCoreMessage, ToCoreUser, User};
+use memory::InMemoryVectorStore;
 use openai_client::OpenAIClient;
 use std::sync::Arc;
 use storage::MessageRepository;
@@ -77,10 +78,13 @@ async fn run_bot(token: Option<String>) -> Result<()> {
     let openai_client = OpenAIClient::with_base_url(openai_api_key, openai_base_url);
     let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client).with_model(ai_model);
 
+    let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+
     let mut ai_query_handler = bot_runtime::AIQueryHandler::new(
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),
+        memory_store,
         query_receiver,
         ai_use_streaming,
         ai_thinking_message,
