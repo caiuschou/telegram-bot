@@ -16,4 +16,5 @@ members = [
     "crates/bigmodel-embedding",
     "crates/memory-inmemory",
     "crates/memory-sqlite",
+    "crates/memory-lance",
 ]

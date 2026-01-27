@@ -11,8 +11,9 @@
 //!
 //! ## Usage
 //!
-//! ```rust,ignore
-//! use memory::{LanceVectorStore, MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole};
+//! ```rust
+//! use memory_lance::LanceVectorStore;
+//! use memory::{MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole};
 //! use chrono::Utc;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,20 +39,18 @@
 //! # }
 //! ```
 
-#[cfg(feature = "lance")]
-use {
-    async_trait::async_trait,
-    arrow_array::{Float32Array, RecordBatch, StringArray, UInt64Array},
-    arrow_schema::{DataType, Field, Schema},
-    std::path::Path,
-    std::sync::Arc,
-    tokio::sync::RwLock,
-};
+use async_trait::async_trait;
+use arrow_array::{Float32Array, RecordBatch, StringArray, UInt64Array};
+use arrow_array::types::Float32Type;
+use arrow_schema::{DataType, Field, Schema};
+use std::path::Path;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use crate::types::{MemoryEntry, MemoryMetadata, MemoryRole};
-use crate::store::MemoryStore;
+use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use anyhow::{anyhow, Result};
 use uuid::Uuid;
+use futures::StreamExt;
 
 /// Configuration for LanceVectorStore.
 ///
@@ -97,7 +96,6 @@ pub enum DistanceType {
     Dot,
 }
 
-#[cfg(feature = "lance")]
 impl DistanceType {
     fn as_lance_metric(&self) -> lancedb::DistanceType {
         match self {
@@ -112,13 +110,11 @@ impl DistanceType {
 ///
 /// This store provides persistent, high-performance vector storage using LanceDB.
 /// It supports automatic vector indexing with IVF-PQ or HNSW for fast semantic search.
-#[cfg(feature = "lance")]
 pub struct LanceVectorStore {
     config: LanceConfig,
     db: Arc<RwLock<lancedb::Connection>>,
 }
 
-#[cfg(feature = "lance")]
 impl LanceVectorStore {
     /// Creates a new LanceVectorStore with the given database path.
     ///
@@ -261,14 +257,14 @@ impl LanceVectorStore {
         // Handle vector column
         let vector_array = if let Some(embedding) = &entry.embedding {
             let vec_data: Vec<Option<f32>> = embedding.iter().map(|&x| Some(x)).collect();
-            arrow_array::FixedSizeListArray::from_iter_primitive::<arrow_array::types::Float32Type, _, _>(
+            arrow_array::FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
                 std::iter::once(Some(vec_data)),
                 self.config.embedding_dim as i32,
             )
         } else {
             // Create empty/null vector
             let vec_data: Vec<Option<f32>> = vec![None; self.config.embedding_dim];
-            arrow_array::FixedSizeListArray::from_iter_primitive::<arrow_array::types::Float32Type, _, _>(
+            arrow_array::FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
                 std::iter::once(Some(vec_data)),
                 self.config.embedding_dim as i32,
             )
@@ -440,7 +436,6 @@ impl LanceVectorStore {
     }
 }
 
-#[cfg(feature = "lance")]
 #[async_trait]
 impl MemoryStore for LanceVectorStore {
     async fn add(&self, entry: MemoryEntry) -> Result<()> {

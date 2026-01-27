@@ -56,9 +56,6 @@ pub mod inmemory_store;
 pub mod context;
 pub mod strategies;
 
-#[cfg(feature = "lance")]
-pub mod lance_store;
-
 pub mod migration;
 
 pub use types::*;
@@ -66,6 +63,3 @@ pub use store::*;
 pub use inmemory_store::InMemoryVectorStore;
 pub use context::{Context, ContextBuilder, estimate_tokens};
 pub use strategies::{RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy};
-
-#[cfg(feature = "lance")]
-pub use lance_store::{LanceVectorStore, LanceConfig, LanceIndexType, DistanceType};

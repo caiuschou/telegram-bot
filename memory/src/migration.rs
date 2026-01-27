@@ -7,7 +7,7 @@
 //! ```rust,ignore
 //! use memory::{MemoryStore, migration::migrate};
 //! use memory_sqlite::SQLiteVectorStore;
-//! use memory::LanceVectorStore;
+//! use memory_lance::LanceVectorStore;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Migrate from SQLite to Lance
