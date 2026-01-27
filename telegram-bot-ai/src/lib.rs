@@ -106,7 +106,7 @@ impl TelegramBotAI {
 
         let system_message: ChatCompletionRequestMessage =
             ChatCompletionRequestSystemMessageArgs::default()
-                .content("你是一个有用的助手，用中文回答问题。")
+                .content("你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。")
                 .build()?
                 .into();
 
@@ -137,7 +137,7 @@ impl TelegramBotAI {
 
         let system_message: ChatCompletionRequestMessage =
             ChatCompletionRequestSystemMessageArgs::default()
-                .content("你是一个有用的助手，用中文回答问题。")
+                .content("你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。")
                 .build()?
                 .into();
 

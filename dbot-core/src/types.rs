@@ -25,6 +25,7 @@ pub struct Message {
     pub message_type: String,
     pub direction: MessageDirection,
     pub created_at: DateTime<Utc>,
+    pub reply_to_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -56,7 +56,10 @@ impl AIQueryHandler {
     }
 
     async fn handle_query_normal(&self, query: crate::ai_detection_handler::AIQuery) {
-        match self.ai_bot.get_ai_response(&query.question).await {
+        let context = self.build_context(&query).await;
+        let question_with_context = self.format_question_with_context(&query.question, &context);
+
+        match self.ai_bot.get_ai_response(&question_with_context).await {
             Ok(response) => {
                 if let Err(e) = self.send_response(&query, &response).await {
                     error!(error = %e, "Failed to send AI response");
@@ -73,6 +76,9 @@ impl AIQueryHandler {
     async fn handle_query_streaming(&self, query: crate::ai_detection_handler::AIQuery) {
         info!(user_id = query.user_id, question = %query.question, "Processing AI query (streaming mode)");
 
+        let context = self.build_context(&query).await;
+        let question_with_context = self.format_question_with_context(&query.question, &context);
+
         let chat_id = ChatId(query.chat_id);
 
         match self.bot.send_message(chat_id, &self.thinking_message).await {
@@ -81,7 +87,7 @@ impl AIQueryHandler {
                 let bot = self.bot.clone();
                 let full_content = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
 
-                match self.ai_bot.get_ai_response_stream(&query.question, |chunk| {
+                match self.ai_bot.get_ai_response_stream(&question_with_context, |chunk| {
                     let bot = bot.clone();
                     let full_content = full_content.clone();
                     async move {
@@ -159,5 +165,232 @@ impl AIQueryHandler {
             })?;
 
         Ok(())
+    }
+
+    pub async fn build_context(&self, query: &crate::ai_detection_handler::AIQuery) -> String {
+        let mut context_parts = Vec::new();
+
+        if let Some(ref reply_to_id) = query.reply_to_message_id {
+            if let Ok(Some(replied_message)) = self.repo.get_message_by_id(reply_to_id).await {
+                context_parts.push(format!(
+                    "[回复消息]\n用户: {}\n内容: {}",
+                    replied_message.username.unwrap_or_else(|| "未知".to_string()),
+                    replied_message.content
+                ));
+            }
+        }
+
+        if let Ok(recent_messages) = self.repo.get_recent_messages_by_chat(query.chat_id, 10).await {
+            if !recent_messages.is_empty() {
+                let mut recent_context = String::from("\n[最近的消息]\n");
+                for msg in recent_messages.iter().rev() {
+                    let username = msg.username.clone().unwrap_or_else(|| "未知".to_string());
+                    recent_context.push_str(&format!("{}: {}\n", username, msg.content));
+                }
+                context_parts.push(recent_context);
+            }
+        }
+
+        context_parts.join("\n")
+    }
+
+    pub fn format_question_with_context(&self, question: &str, context: &str) -> String {
+        if context.is_empty() {
+            question.to_string()
+        } else {
+            format!("{}\n\n用户提问: {}", context, question)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openai_client::OpenAIClient;
+    use storage::MessageRecord;
+
+    #[tokio::test]
+    async fn test_build_context_with_reply_to() {
+        let database_url = "sqlite::memory:";
+        let repo = MessageRepository::new(database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let replied_message = MessageRecord::new(
+            123,
+            456,
+            Some("original_user".to_string()),
+            Some("Original".to_string()),
+            None,
+            "text".to_string(),
+            "This is the original message".to_string(),
+            "received".to_string(),
+        );
+
+        repo.save(&replied_message)
+            .await
+            .expect("Failed to save replied message");
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let openai_client = OpenAIClient::new("test_key".to_string());
+        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
+        let handler = AIQueryHandler::new(
+            ai_bot,
+            teloxide::Bot::new("test_token"),
+            repo.clone(),
+            _rx,
+            false,
+            "Thinking...".to_string(),
+        );
+
+        let query = crate::ai_detection_handler::AIQuery {
+            chat_id: 456,
+            user_id: 123,
+            question: "Can you explain more?".to_string(),
+            reply_to_message_id: Some(replied_message.id.clone()),
+        };
+
+        let context = handler.build_context(&query).await;
+
+        assert!(context.contains("[回复消息]"));
+        assert!(context.contains("original_user"));
+        assert!(context.contains("This is the original message"));
+    }
+
+    #[tokio::test]
+    async fn test_build_context_with_recent_messages() {
+        let database_url = "sqlite::memory:";
+        let repo = MessageRepository::new(database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let chat_id = 789;
+
+        for i in 0..5 {
+            let message = MessageRecord::new(
+                100 + i,
+                chat_id,
+                Some(format!("user{}", i)),
+                Some(format!("User{}", i)),
+                None,
+                "text".to_string(),
+                format!("Message {}", i),
+                "received".to_string(),
+            );
+            repo.save(&message)
+                .await
+                .expect("Failed to save message");
+        }
+
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let openai_client = OpenAIClient::new("test_key".to_string());
+        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
+        let handler = AIQueryHandler::new(
+            ai_bot,
+            teloxide::Bot::new("test_token"),
+            repo,
+            rx,
+            false,
+            "Thinking...".to_string(),
+        );
+
+        let query = crate::ai_detection_handler::AIQuery {
+            chat_id,
+            user_id: 100,
+            question: "What was discussed?".to_string(),
+            reply_to_message_id: None,
+        };
+
+        let context = handler.build_context(&query).await;
+
+        assert!(context.contains("[最近的消息]"));
+        assert!(context.contains("user0"));
+        assert!(context.contains("Message 0"));
+        assert!(context.contains("Message 4"));
+    }
+
+    #[tokio::test]
+    async fn test_build_context_empty() {
+        let database_url = "sqlite::memory:";
+        let repo = MessageRepository::new(database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let openai_client = OpenAIClient::new("test_key".to_string());
+        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
+        let handler = AIQueryHandler::new(
+            ai_bot,
+            teloxide::Bot::new("test_token"),
+            repo,
+            rx,
+            false,
+            "Thinking...".to_string(),
+        );
+
+        let query = crate::ai_detection_handler::AIQuery {
+            chat_id: 999,
+            user_id: 123,
+            question: "Hello".to_string(),
+            reply_to_message_id: None,
+        };
+
+        let context = handler.build_context(&query).await;
+
+        assert!(context.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_format_question_with_context_empty() {
+        let database_url = "sqlite::memory:";
+        let repo = MessageRepository::new(database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let openai_client = OpenAIClient::new("test_key".to_string());
+        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
+        let handler = AIQueryHandler::new(
+            ai_bot,
+            teloxide::Bot::new("test_token"),
+            repo,
+            rx,
+            false,
+            "Thinking...".to_string(),
+        );
+
+        let question = "What is AI?";
+        let context = "";
+        let result = handler.format_question_with_context(question, context);
+
+        assert_eq!(result, question);
+    }
+
+    #[tokio::test]
+    async fn test_format_question_with_context_with_data() {
+        let database_url = "sqlite::memory:";
+        let repo = MessageRepository::new(database_url)
+            .await
+            .expect("Failed to create repository");
+
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let openai_client = OpenAIClient::new("test_key".to_string());
+        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
+        let handler = AIQueryHandler::new(
+            ai_bot,
+            teloxide::Bot::new("test_token"),
+            repo,
+            rx,
+            false,
+            "Thinking...".to_string(),
+        );
+
+        let question = "What is AI?";
+        let context = "[回复消息]\n用户: test\n内容: Hello";
+        let result = handler.format_question_with_context(question, context);
+
+        assert!(result.contains(context));
+        assert!(result.contains("用户提问:"));
+        assert!(result.contains(question));
     }
 }

@@ -184,6 +184,62 @@ impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
             message_type: "text".to_string(),
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
+            reply_to_message_id: self.get_reply_to_message_id(),
         }
+    }
+}
+
+impl<'a> TelegramMessageWrapper<'a> {
+    fn get_reply_to_message_id(&self) -> Option<String> {
+        self.0.reply_to_message().map(|msg| msg.id.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_telegram_user_wrapper_to_core() {
+        let user = teloxide::types::User {
+            id: teloxide::types::UserId(123),
+            is_bot: false,
+            first_name: "Test".to_string(),
+            last_name: Some("User".to_string()),
+            username: Some("testuser".to_string()),
+            language_code: Some("en".to_string()),
+            is_premium: false,
+            added_to_attachment_menu: false,
+        };
+
+        let wrapper = TelegramUserWrapper(&user);
+        let core_user = wrapper.to_core();
+
+        assert_eq!(core_user.id, 123);
+        assert_eq!(core_user.username, Some("testuser".to_string()));
+        assert_eq!(core_user.first_name, Some("Test".to_string()));
+        assert_eq!(core_user.last_name, Some("User".to_string()));
+    }
+
+    #[test]
+    fn test_telegram_user_wrapper_minimal() {
+        let user = teloxide::types::User {
+            id: teloxide::types::UserId(456),
+            is_bot: false,
+            first_name: "Minimal".to_string(),
+            last_name: None,
+            username: None,
+            language_code: None,
+            is_premium: false,
+            added_to_attachment_menu: false,
+        };
+
+        let wrapper = TelegramUserWrapper(&user);
+        let core_user = wrapper.to_core();
+
+        assert_eq!(core_user.id, 456);
+        assert_eq!(core_user.username, None);
+        assert_eq!(core_user.first_name, Some("Minimal".to_string()));
+        assert_eq!(core_user.last_name, None);
     }
 }
