@@ -1,0 +1,46 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Cargo
+/cargo/
+
+# Build artifacts
+/debug/
+/release/
+/profiling/
+/dist/
+/build/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.production
+.env.development
+
+# OS
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Testing
+.tarpaulin/
+*.profraw
+
+# Coverage
+html/
+lcov.info

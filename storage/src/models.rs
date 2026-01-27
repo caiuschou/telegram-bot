@@ -1,0 +1,65 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct MessageRecord {
+    pub id: String,
+    pub user_id: i64,
+    pub chat_id: i64,
+    pub username: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub message_type: String,
+    pub content: String,
+    pub direction: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl MessageRecord {
+    pub fn new(
+        user_id: i64,
+        chat_id: i64,
+        username: Option<String>,
+        first_name: Option<String>,
+        last_name: Option<String>,
+        message_type: String,
+        content: String,
+        direction: String,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            user_id,
+            chat_id,
+            username,
+            first_name,
+            last_name,
+            message_type,
+            content,
+            direction,
+            created_at: Utc::now(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageQuery {
+    pub user_id: Option<i64>,
+    pub chat_id: Option<i64>,
+    pub message_type: Option<String>,
+    pub direction: Option<String>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageStats {
+    pub total_messages: i64,
+    pub sent_messages: i64,
+    pub received_messages: i64,
+    pub unique_users: i64,
+    pub unique_chats: i64,
+    pub first_message: Option<DateTime<Utc>>,
+    pub last_message: Option<DateTime<Utc>>,
+}

@@ -1,0 +1,24 @@
+[package]
+name = "dbot-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "dbot"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+dotenvy = "0.15"
+chrono = "0.4"
+teloxide = { version = "0.17", features = ["macros"] }
+dbot-core = { path = "../dbot-core" }
+bot-runtime = { path = "../bot-runtime" }
+storage = { path = "../storage" }
+telegram-bot-ai = { path = "../telegram-bot-ai" }
+openai-client = { path = "../openai-client" }
+async-trait = "0.1"
