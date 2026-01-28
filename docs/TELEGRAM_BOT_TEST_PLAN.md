@@ -4,7 +4,7 @@
 
 | ID | 任务描述 | 优先级 | 状态 | 完成日期 | 备注 |
 |----|---------|-------|------|---------|------|
-| 1.1 | 添加测试依赖库到 `telegram-bot/Cargo.toml` | 高 | ⬜ 待开始 | - | 需要添加 mockall, mockito, tempfile, tokio-test |
+| 1.1 | 添加测试依赖库到 `telegram-bot/Cargo.toml` | 高 | ✅ 已完成 | 2026-01-28 | 已添加 mockall 0.14, mockito 1.7, tempfile 3.24, tokio-test 0.4 |
 | 1.2 | 创建测试文件 `telegram-bot/tests/runner_integration_test.rs` | 高 | ⬜ 待开始 | - | 基础测试文件结构 |
 | 1.3 | 实现测试工具函数（setup_test_config, MockMemoryStore） | 高 | ⬜ 待开始 | - | 包含 .env 加载和临时目录创建 |
 | 1.4 | 实现 Mock Telegram API | 中 | ⬜ 待开始 | - | 使用 mockito Mock getMe 和 sendMessage |
