@@ -1,7 +1,8 @@
 use memory::{
     ContextBuilder, RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
-    InMemoryVectorStore, MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole,
+    MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole,
 };
+use memory_inmemory::InMemoryVectorStore;
 use chrono::Utc;
 use std::sync::Arc;
 

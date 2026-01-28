@@ -31,7 +31,7 @@
 //!
 //! - [`types`] - Core type definitions
 //! - [`store`] - Memory storage interface
-//! - [`inmemory_store`] - In-memory vector store
+
 //! - [`sqlite_store`] - SQLite-based persistent storage
 //! - [`context`] - Context building for conversations
 //! - [`strategies`] - Context building strategies
@@ -52,7 +52,6 @@
 
 pub mod types;
 pub mod store;
-pub mod inmemory_store;
 pub mod context;
 pub mod strategies;
 
@@ -60,6 +59,5 @@ pub mod migration;
 
 pub use types::*;
 pub use store::*;
-pub use inmemory_store::InMemoryVectorStore;
 pub use context::{Context, ContextBuilder, estimate_tokens};
 pub use strategies::{RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy};

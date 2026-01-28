@@ -306,13 +306,81 @@ impl ContextStrategy for UserPreferencesStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inmemory_store::InMemoryVectorStore;
     use crate::{MemoryEntry, MemoryMetadata, MemoryRole};
     use chrono::Utc;
+    use std::collections::HashMap;
     use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use uuid::Uuid;
+    use async_trait::async_trait;
 
-    async fn create_test_store_with_entries() -> Arc<InMemoryVectorStore> {
-        let store = Arc::new(InMemoryVectorStore::new());
+    struct MockStore {
+        entries: Arc<RwLock<HashMap<Uuid, MemoryEntry>>>,
+    }
+
+    impl MockStore {
+        fn new() -> Self {
+            Self {
+                entries: Arc::new(RwLock::new(HashMap::new())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl MemoryStore for MockStore {
+        async fn add(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
+            let mut entries = self.entries.write().await;
+            entries.insert(entry.id, entry);
+            Ok(())
+        }
+
+        async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>, anyhow::Error> {
+            let entries = self.entries.read().await;
+            Ok(entries.get(&id).cloned())
+        }
+
+        async fn update(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
+            let mut entries = self.entries.write().await;
+            entries.insert(entry.id, entry);
+            Ok(())
+        }
+
+        async fn delete(&self, id: Uuid) -> Result<(), anyhow::Error> {
+            let mut entries = self.entries.write().await;
+            entries.remove(&id);
+            Ok(())
+        }
+
+        async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+            let entries = self.entries.read().await;
+            Ok(entries.values()
+                .filter(|e| e.metadata.user_id.as_deref() == Some(user_id))
+                .cloned()
+                .collect())
+        }
+
+        async fn search_by_conversation(
+            &self,
+            conversation_id: &str,
+        ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+            let entries = self.entries.read().await;
+            Ok(entries.values()
+                .filter(|e| e.metadata.conversation_id.as_deref() == Some(conversation_id))
+                .cloned()
+                .collect())
+        }
+
+        async fn semantic_search(
+            &self,
+            _query_embedding: &[f32],
+            _limit: usize,
+        ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+            Ok(Vec::new())
+        }
+    }
+
+    async fn create_test_store_with_entries() -> Arc<MockStore> {
+        let store = Arc::new(MockStore::new());
 
         let metadata = MemoryMetadata {
             user_id: Some("user123".to_string()),
@@ -340,7 +408,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_recent_messages_by_conversation() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
+        let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
         let strategy = RecentMessagesStrategy::new(10);
 
         let user_id = Some("user123".to_string());
@@ -385,7 +453,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_semantic_search_no_query() {
-        let store: Arc<dyn MemoryStore> = Arc::new(InMemoryVectorStore::new());
+        let store: Arc<dyn MemoryStore> = Arc::new(MockStore::new());
         let strategy = SemanticSearchStrategy::new(5);
 
         let result = strategy
@@ -403,7 +471,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_user_preferences_extraction() {
-        let store: Arc<dyn MemoryStore> = Arc::new(InMemoryVectorStore::new());
+        let store: Arc<dyn MemoryStore> = Arc::new(MockStore::new());
 
         let metadata = MemoryMetadata {
             user_id: Some("user123".to_string()),

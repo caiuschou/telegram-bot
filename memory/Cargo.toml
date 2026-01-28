@@ -18,3 +18,7 @@ embedding = { path = "../crates/embedding" }
 
 [dev-dependencies]
 tokio-test = "0.4"
+memory-inmemory = { path = "../crates/memory-inmemory" }
+memory-sqlite = { path = "../crates/memory-sqlite" }
+openai-embedding = { path = "../crates/openai-embedding" }
+tempfile = "3"

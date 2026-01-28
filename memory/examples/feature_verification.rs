@@ -1,7 +1,10 @@
 use memory::{
-    InMemoryVectorStore, SQLiteVectorStore, OpenAIEmbedding, MemoryStore, MemoryEntry,
-    MemoryMetadata, MemoryRole, EmbeddingService
+    MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole,
 };
+use memory_inmemory::InMemoryVectorStore;
+use memory_sqlite::SQLiteVectorStore;
+use openai_embedding::OpenAIEmbedding;
+use embedding::EmbeddingService;
 use chrono::Utc;
 use tempfile::tempdir;
 
