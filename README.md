@@ -284,6 +284,7 @@ let logger = LoggingMiddleware;
 ## 📖 详细文档
 
 - [项目设置指南](SETUP.md)
+- [Memory 记忆管理](MEMORY.md) - 对话记忆、语义搜索、存储后端
 - [dbot-cli 使用文档](dbot-cli/README.md)
 - [telegram-bot 文档](telegram-bot/README.md) - 包含配置管理、类型转换、运行时等详细说明
 
