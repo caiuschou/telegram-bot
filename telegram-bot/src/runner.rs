@@ -1,6 +1,7 @@
 use anyhow::Result;
-use bot_runtime::{AIDetectionHandler, HandlerChain};
+use ai_handlers::{AIDetectionHandler, AIQueryHandler};
 use dbot_core::{init_tracing, ToCoreMessage};
+use handler_chain::HandlerChain;
 use middleware::{PersistenceMiddleware, MemoryMiddleware};
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
@@ -77,7 +78,7 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
     };
 
     // 初始化 AI 查询处理器
-    let mut ai_query_handler = bot_runtime::AIQueryHandler::new(
+    let mut ai_query_handler = AIQueryHandler::new(
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),

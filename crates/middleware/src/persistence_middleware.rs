@@ -64,6 +64,7 @@ impl Middleware for PersistenceMiddleware {
 mod tests {
     use super::*;
     use dbot_core::{User, Chat};
+    use chrono::Utc;
 
     fn create_test_message(content: &str) -> Message {
         Message {

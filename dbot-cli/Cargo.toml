@@ -17,7 +17,6 @@ dotenvy = "0.15"
 chrono = "0.4"
 teloxide = { version = "0.17", features = ["macros"] }
 dbot-core = { path = "../dbot-core" }
-bot-runtime = { path = "../bot-runtime" }
 storage = { path = "../storage" }
 telegram-bot = { path = "../telegram-bot" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }

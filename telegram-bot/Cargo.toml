@@ -10,7 +10,7 @@ log = "0.4"
 env_logger = "0.11"
 dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
-bot-runtime = { path = "../bot-runtime" }
+ai-handlers = { path = "../ai-handlers" }
 storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 openai-client = { path = "../openai-client" }
@@ -18,6 +18,7 @@ memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory-sqlite" }
 middleware = { path = "../crates/middleware" }
+handler-chain = { path = "../crates/handler-chain" }
 async-trait = "0.1"
 chrono = "0.4"
 anyhow = "1.0"
