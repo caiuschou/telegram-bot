@@ -9,8 +9,8 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
-lancedb = { version = "0.22" }
-arrow-array = { version = "53" }
-arrow-schema = { version = "53" }
+lancedb = { version = "0.23" }
+arrow-array = { version = "56" }
+arrow-schema = { version = "56" }
 futures = "0.3"
 memory = { path = "../../memory" }

@@ -40,7 +40,7 @@
 //! ```
 
 use async_trait::async_trait;
-use arrow_array::{Float32Array, RecordBatch, StringArray, UInt64Array};
+use arrow_array::{Array, Float32Array, RecordBatch, RecordBatchIterator, StringArray, UInt64Array};
 use arrow_array::types::Float32Type;
 use arrow_schema::{DataType, Field, Schema};
 use std::path::Path;
@@ -48,9 +48,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use lancedb::query::{ExecutableQuery, QueryBase};
+use futures::TryStreamExt;
 use anyhow::{anyhow, Result};
 use uuid::Uuid;
-use futures::StreamExt;
 
 /// Configuration for LanceVectorStore.
 ///
@@ -167,6 +168,7 @@ impl LanceVectorStore {
         let db = self.db.read().await;
         let table_names = db
             .table_names()
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to list tables: {}", e))?;
 
@@ -193,6 +195,7 @@ impl LanceVectorStore {
 
             // Create empty table
             db.create_empty_table(&self.config.table_name, schema)
+                .execute()
                 .await
                 .map_err(|e| anyhow!("Failed to create table: {}", e))?;
         }
@@ -215,6 +218,7 @@ impl LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
@@ -325,8 +329,8 @@ impl LanceVectorStore {
         let embedding = if vector_col.is_null(row) {
             None
         } else {
-            let values = vector_col
-                .value(row)
+            let array = vector_col.value(row);
+            let values = array
                 .as_any()
                 .downcast_ref::<Float32Array>()
                 .ok_or_else(|| anyhow!("Vector values are not Float32Array"))?;
@@ -442,14 +446,17 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
         let batch = self.entry_to_batch(&entry)?;
-        let mut stream = futures::stream::iter(vec![Ok(batch)]).boxed();
+        let schema = batch.schema();
+        let reader = RecordBatchIterator::new(vec![Ok(batch)], schema);
 
         table
-            .add(&mut stream)
+            .add(reader)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to add entry: {}", e))?;
 
@@ -460,6 +467,7 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
@@ -497,6 +505,7 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
@@ -513,6 +522,7 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
@@ -544,6 +554,7 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
@@ -575,6 +586,7 @@ impl MemoryStore for LanceVectorStore {
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
+            .execute()
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
