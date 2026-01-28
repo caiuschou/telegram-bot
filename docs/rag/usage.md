@@ -5,7 +5,7 @@
 ```rust
 use memory::{MemoryStore, InMemoryVectorStore, EmbeddingService, OpenAIEmbedding};
 use storage::MessageRepository;
-use ai_integration::TelegramBotAI;
+use telegram_bot_ai::TelegramBotAI;
 use bot_runtime::MemoryMiddleware;
 
 #[tokio::main]
@@ -21,8 +21,8 @@ async fn main() -> Result<()> {
 
     // 创建AI Bot
     let openai_client = OpenAIClient::new(api_key);
-    let ai_bot = TelegramBotAI::new(openai_client)
-        .with_memory(memory_store.clone(), embedding_service.clone());
+    let ai_bot = TelegramBotAI::new("bot_username".to_string(), openai_client)
+        .with_model("gpt-3.5-turbo".to_string());
 
     // 创建记忆中间件
     let middleware = MemoryMiddleware::new(
@@ -59,8 +59,8 @@ async fn main() -> Result<()> {
 
     // 创建AI Bot
     let openai_client = OpenAIClient::new(api_key);
-    let ai_bot = TelegramBotAI::new(openai_client)
-        .with_memory(memory_store.clone(), embedding_service.clone());
+    let ai_bot = TelegramBotAI::new("bot_username".to_string(), openai_client)
+        .with_model("gpt-3.5-turbo".to_string());
 
     Ok(())
 }

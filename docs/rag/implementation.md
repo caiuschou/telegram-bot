@@ -62,7 +62,7 @@
 
 **任务**：
 1. 在 `bot-runtime` 实现MemoryMiddleware
-2. 在 `ai-integration` 集成记忆功能
+2. 在 `telegram-bot-ai` 集成记忆功能
 3. 实现消息处理流程
 4. 编写集成测试
 

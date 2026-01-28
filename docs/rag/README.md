@@ -37,11 +37,9 @@ memory/                       # 新增：记忆管理模块
 │   └── types.rs             # 核心类型定义
 └── Cargo.toml
 
-ai-integration/              # 扩展：AI集成模块
+telegram-bot-ai/             # 扩展：AI集成模块
 ├── src/
-│   ├── lib.rs               # TelegramBotAI
-│   ├── message_handler.rs   # 消息处理（集成记忆）
-│   └── context_builder.rs   # 上下文构建（新增）
+│   └── lib.rs               # TelegramBotAI
 └── Cargo.toml
 
 bot-runtime/                 # 扩展：运行时

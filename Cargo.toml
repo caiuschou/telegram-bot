@@ -3,8 +3,7 @@ resolver = "2"
 members = [
     "dbot-core",
     "storage",
-    "bot-runtime",
-    "ai-integration",
+    "ai-handlers",
     "telegram-bot",
     "dbot-cli",
     "openai-client",

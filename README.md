@@ -25,15 +25,11 @@ dbot/
 │   │   ├── message_repo.rs     # 消息仓库实现
 │   │   └── sqlite_pool.rs      # SQLite 连接池
 │   └── Cargo.toml
-├── bot-runtime/               # Bot 运行时 ⭐
+├── ai-handlers/               # AI 处理器 ⭐
 │   ├── src/
-│   │   ├── handler.rs          # 消息处理器
-│   │   ├── middleware.rs       # 中间件：LoggingMiddleware, AuthMiddleware
-│   │   └── state.rs            # 状态管理
-│   └── Cargo.toml
-├── ai-integration/            # AI 集成
-│   ├── src/
-│   │   └── lib.rs             # TelegramBotAI 集成
+│   │   ├── ai_mention_detector.rs  # AI 提及检测器
+│   │   ├── ai_response_handler.rs  # AI 响应处理器
+│   │   └── lib.rs              # 库入口
 │   └── Cargo.toml
 ├── openai-client/             # OpenAI 客户端
 │   ├── src/
@@ -248,16 +244,16 @@ async fn main() -> Result<()> {
 }
 ```
 
-### 使用 AI 集成
+### 使用 Telegram Bot AI
 
 ```rust
-use ai_integration::TelegramBotAI;
+use telegram_bot_ai::TelegramBotAI;
 use openai_client::OpenAIClient;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = OpenAIClient::new(api_key);
-    let ai_bot = TelegramBotAI::new(client)
+    let ai_bot = TelegramBotAI::new(bot_username.to_string(), client)
         .with_model("gpt-4".to_string());
     
     let response = ai_bot.get_ai_response("Hello!").await?;
@@ -303,11 +299,10 @@ let logger = LoggingMiddleware;
 - `MessageRepository`: 消息仓库实现
 - 支持灵活查询和统计分析
 
-**bot-runtime**: Bot 运行时系统
-- `MessageHandler`: 消息持久化处理
-- `AIQueryHandler`: AI 查询处理
-- `AIDetectionHandler`: AI 消息检测
-- 中间件：日志、认证、内存管理
+**ai-handlers**: AI 处理器系统
+- `AIDetectionHandler`: AI 提及检测器
+- `AIQueryHandler`: AI 响应处理器
+- `AIQuery`: AI 查询数据结构
 
 **memory**: 内存管理系统
 - `MemoryStore trait`: 统一存储接口
@@ -319,10 +314,6 @@ let logger = LoggingMiddleware;
 - `memory-inmemory`: 内存存储实现
 - `memory-sqlite`: SQLite 持久化存储
 - `memory-lance`: Lance 向量存储（可选）
-
-**ai-integration**: AI 功能集成
-- `TelegramBotAI`: 集成 OpenAI 的 Bot
-- 支持流式响应
 
 **telegram-bot**: Telegram Bot 完整实现
 - `TelegramBot`: 实现 Bot trait
