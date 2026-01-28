@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bot_runtime::{AIDetectionHandler, HandlerChain, MessageHandler};
+use bot_runtime::{AIDetectionHandler, HandlerChain, PersistenceMiddleware, MemoryMiddleware};
 use dbot_core::{init_tracing, ToCoreMessage};
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
@@ -80,7 +80,7 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),
-        memory_store,
+        memory_store.clone(),
         query_receiver,
         config.ai_use_streaming,
         config.ai_thinking_message,
@@ -97,13 +97,17 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
         Arc::new(query_sender),
     ));
 
-    // 初始化消息处理器
-    let message_handler = Arc::new(MessageHandler::new(repo.as_ref().clone()));
+    // 初始化持久化中间件
+    let persistence_middleware = Arc::new(PersistenceMiddleware::new(repo.as_ref().clone()));
+
+    // 初始化记忆中间件
+    let memory_middleware = Arc::new(MemoryMiddleware::with_store(memory_store));
 
     // 构建处理器链
     let handler_chain = HandlerChain::new()
-        .add_handler(ai_detection_handler)
-        .add_handler(message_handler);
+        .add_middleware(persistence_middleware)
+        .add_middleware(memory_middleware)
+        .add_handler(ai_detection_handler);
 
     info!("Bot started successfully");
 
