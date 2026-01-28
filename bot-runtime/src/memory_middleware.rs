@@ -166,7 +166,7 @@ impl Middleware for MemoryMiddleware {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memory::InMemoryVectorStore;
+    use memory_inmemory::InMemoryVectorStore;
     use dbot_core::{User, Chat};
 
     fn create_test_message(content: &str) -> Message {

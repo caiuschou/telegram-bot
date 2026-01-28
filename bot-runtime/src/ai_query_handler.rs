@@ -276,7 +276,7 @@ impl AIQueryHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memory::InMemoryVectorStore;
+    use memory_inmemory::InMemoryVectorStore;
     use openai_client::OpenAIClient;
     use storage::MessageRecord;
     use std::sync::Arc;

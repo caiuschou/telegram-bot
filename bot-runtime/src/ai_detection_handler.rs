@@ -43,40 +43,63 @@ impl AIDetectionHandler {
     }
 }
 
-#[async_trait]
-impl Handler for AIDetectionHandler {
-    #[instrument(skip(self, message))]
-    async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
-        if let Some(bot_username) = self.get_bot_username().await {
-            if self.is_bot_mentioned(&message.content, &bot_username) {
-                let question = self.extract_question(&message.content, &bot_username);
+    #[async_trait]
+    impl Handler for AIDetectionHandler {
+        #[instrument(skip(self, message))]
+        async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
+            // 优先检查是否是回复机器人的消息
+            if message.reply_to_message_id.is_some() {
+                info!(
+                    user_id = message.user.id,
+                    reply_to = ?message.reply_to_message_id,
+                    "Replying to bot message, sending to AI queue"
+                );
 
-                if !question.is_empty() {
-                    info!(
-                        user_id = message.user.id,
-                        question = %question,
-                        "Bot mentioned, sending to AI queue"
-                    );
+                let query = AIQuery {
+                    chat_id: message.chat.id,
+                    user_id: message.user.id,
+                    question: message.content.clone(),
+                    reply_to_message_id: message.reply_to_message_id.clone(),
+                };
 
-                    let query = AIQuery {
-                        chat_id: message.chat.id,
-                        user_id: message.user.id,
-                        question,
-                        reply_to_message_id: message.reply_to_message_id.clone(),
-                    };
+                self.query_sender.send(query).map_err(|e| {
+                    dbot_core::DbotError::Bot(format!("Failed to send AI query: {}", e))
+                })?;
 
-                    self.query_sender.send(query).map_err(|e| {
-                        dbot_core::DbotError::Bot(format!("Failed to send AI query: {}", e))
-                    })?;
+                return Ok(HandlerResponse::Stop);
+            }
 
-                    return Ok(HandlerResponse::Stop);
+            // 检查是否是 @ 提及机器人
+            if let Some(bot_username) = self.get_bot_username().await {
+                if self.is_bot_mentioned(&message.content, &bot_username) {
+                    let question = self.extract_question(&message.content, &bot_username);
+
+                    if !question.is_empty() {
+                        info!(
+                            user_id = message.user.id,
+                            question = %question,
+                            "Bot mentioned, sending to AI queue"
+                        );
+
+                        let query = AIQuery {
+                            chat_id: message.chat.id,
+                            user_id: message.user.id,
+                            question,
+                            reply_to_message_id: message.reply_to_message_id.clone(),
+                        };
+
+                        self.query_sender.send(query).map_err(|e| {
+                            dbot_core::DbotError::Bot(format!("Failed to send AI query: {}", e))
+                        })?;
+
+                        return Ok(HandlerResponse::Stop);
+                    }
                 }
             }
-        }
 
-        Ok(HandlerResponse::Continue)
+            Ok(HandlerResponse::Continue)
+        }
     }
-}
 
 #[cfg(test)]
 mod tests {
@@ -170,7 +193,7 @@ mod tests {
             message_type: "text".to_string(),
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
-            reply_to_message_id: Some("msg456".to_string()),
+            reply_to_message_id: None,
         };
 
         let result = handler.handle(&message).await;
@@ -180,7 +203,7 @@ mod tests {
         assert_eq!(received_query.chat_id, 123);
         assert_eq!(received_query.user_id, 456);
         assert_eq!(received_query.question, "hello world");
-        assert_eq!(received_query.reply_to_message_id, Some("msg456".to_string()));
+        assert_eq!(received_query.reply_to_message_id, None);
     }
 
     #[tokio::test]
@@ -243,5 +266,78 @@ mod tests {
 
         let result = handler.handle(&message).await;
         assert!(matches!(result, Ok(HandlerResponse::Continue)));
+    }
+
+    #[tokio::test]
+    async fn test_handler_with_reply_to_message() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let handler = AIDetectionHandler::new(
+            Arc::new(tokio::sync::RwLock::new(None)),
+            Arc::new(tx),
+        );
+
+        let message = Message {
+            id: "msg123".to_string(),
+            user: User {
+                id: 456,
+                username: Some("testuser".to_string()),
+                first_name: Some("Test".to_string()),
+                last_name: None,
+            },
+            chat: Chat {
+                id: 123,
+                chat_type: "group".to_string(),
+            },
+            content: "This is a reply to bot".to_string(),
+            message_type: "text".to_string(),
+            direction: MessageDirection::Incoming,
+            created_at: chrono::Utc::now(),
+            reply_to_message_id: Some("bot_msg_456".to_string()),
+        };
+
+        let result = handler.handle(&message).await;
+        assert!(matches!(result, Ok(HandlerResponse::Stop)));
+
+        let received_query = rx.recv().await.unwrap();
+        assert_eq!(received_query.chat_id, 123);
+        assert_eq!(received_query.user_id, 456);
+        assert_eq!(received_query.question, "This is a reply to bot");
+        assert_eq!(received_query.reply_to_message_id, Some("bot_msg_456".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_handler_reply_takes_priority_over_mention() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let handler = AIDetectionHandler::new(
+            Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
+            Arc::new(tx),
+        );
+
+        let message = Message {
+            id: "msg123".to_string(),
+            user: User {
+                id: 456,
+                username: Some("testuser".to_string()),
+                first_name: Some("Test".to_string()),
+                last_name: None,
+            },
+            chat: Chat {
+                id: 123,
+                chat_type: "group".to_string(),
+            },
+            content: "@mybot hello world".to_string(),
+            message_type: "text".to_string(),
+            direction: MessageDirection::Incoming,
+            created_at: chrono::Utc::now(),
+            reply_to_message_id: Some("bot_msg_789".to_string()),
+        };
+
+        let result = handler.handle(&message).await;
+        assert!(matches!(result, Ok(HandlerResponse::Stop)));
+
+        let received_query = rx.recv().await.unwrap();
+        // 回复消息使用原始内容，不提取 @ 部分
+        assert_eq!(received_query.question, "@mybot hello world");
+        assert_eq!(received_query.reply_to_message_id, Some("bot_msg_789".to_string()));
     }
 }
