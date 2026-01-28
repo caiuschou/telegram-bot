@@ -13,6 +13,7 @@ use memory::{
     ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore,
     RecentMessagesStrategy, UserPreferencesStrategy,
 };
+use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 use chrono::Utc;
@@ -35,7 +36,7 @@ pub struct MemoryConfig {
 impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
-            store: Arc::new(memory::InMemoryVectorStore::new()) as Arc<dyn MemoryStore>,
+            store: Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>,
             max_recent_messages: 10,
             max_context_tokens: 4096,
             save_user_messages: true,

@@ -12,5 +12,12 @@ dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
 bot-runtime = { path = "../bot-runtime" }
 storage = { path = "../storage" }
+telegram-bot-ai = { path = "../telegram-bot-ai" }
+openai-client = { path = "../openai-client" }
+memory = { path = "../memory" }
+memory-inmemory = { path = "../crates/memory-inmemory" }
+memory-sqlite = { path = "../crates/memory-sqlite" }
 async-trait = "0.1"
 chrono = "0.4"
+anyhow = "1.0"
+tracing = "0.1"
