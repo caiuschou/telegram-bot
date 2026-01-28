@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, MessageDirection, Middleware, Result};
 use storage::MessageRepository;
 use tracing::{debug, error, instrument};
-use chrono::Utc;
 
 #[derive(Clone)]
 pub struct PersistenceMiddleware {

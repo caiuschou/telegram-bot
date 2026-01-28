@@ -1,7 +1,7 @@
 use dbot_core::init_tracing;
 use dotenvy::dotenv;
 use teloxide::prelude::*;
-use tracing::{error, info, instrument};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         async move {
             if let Some(text) = msg.text() {
                 info!(
-                    user_id = msg.from().map(|u| u.id.0).unwrap_or(0),
+                    user_id = msg.from.as_ref().map(|u| u.id.0).unwrap_or(0),
                     message_content = %text,
                     "Received message"
                 );

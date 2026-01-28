@@ -1,7 +1,7 @@
 use chrono::Local;
 use dbot_core::init_tracing;
 use teloxide::prelude::*;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -16,7 +16,7 @@ async fn main() {
     teloxide::repl(bot, |bot: Bot, msg: Message| async move {
         let user_id = msg.from.as_ref().map(|u| u.id.0).unwrap_or(0);
         let chat_id = msg.chat.id.0;
-        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
+        let _timestamp = Local::now().format("%Y-%m-%d %H:%M:%S");
 
         if let Some(text) = msg.text() {
             info!(user_id = user_id, chat_id = chat_id, command = %text, "Received command");

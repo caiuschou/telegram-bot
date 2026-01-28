@@ -101,6 +101,7 @@ impl ContextStrategy for RecentMessagesStrategy {
 /// Strategy for performing semantic search on conversation history.
 #[derive(Debug, Clone)]
 pub struct SemanticSearchStrategy {
+    #[allow(dead_code)]
     limit: usize,
 }
 

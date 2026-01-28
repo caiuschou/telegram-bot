@@ -58,9 +58,9 @@ pub async fn migrate<S1: MemoryStore, S2: MemoryStore>(
 /// # Returns
 ///
 /// Returns a vector of all entries.
-pub async fn backup<S: MemoryStore>(store: &S) -> Result<Vec<crate::types::MemoryEntry>> {
+pub async fn backup<S: MemoryStore>(_store: &S) -> Result<Vec<crate::types::MemoryEntry>> {
     // Try to get entries by common user IDs
-    let mut all_entries = Vec::new();
+    let all_entries = Vec::new();
 
     // Since we can't list all entries directly, we'll return empty for now
     // In a real implementation, you might add a `list_all` method to MemoryStore

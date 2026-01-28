@@ -82,6 +82,7 @@ impl MemoryMiddleware {
     }
 
     /// Builds conversation context for a message.
+    #[allow(dead_code)]
     async fn build_context(
         &self,
         user_id: &str,

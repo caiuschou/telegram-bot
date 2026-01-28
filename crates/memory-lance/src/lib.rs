@@ -98,6 +98,7 @@ pub enum DistanceType {
 }
 
 impl DistanceType {
+    #[allow(dead_code)]
     fn as_lance_metric(&self) -> lancedb::DistanceType {
         match self {
             DistanceType::Cosine => lancedb::DistanceType::Cosine,
