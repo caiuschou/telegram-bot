@@ -31,6 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Model: embedding-2 (1024 dimensions)
   - Python SDK: `pip install zhipuai`
 
+### Changed
+- Extract `HandlerChain` into a standalone `handler-chain` package
+  - Created new package at `crates/handler-chain/`
+  - Moved `handler_chain.rs` from `bot-runtime/src/` to `crates/handler-chain/src/`
+  - Updated `bot-runtime` to use the new `handler-chain` package
+  - All existing tests pass without modification
+  - Improves modularity and reusability of the handler chain implementation
+- Extract middleware implementations into a standalone `middleware` package
+  - Created new package at `crates/middleware/`
+  - Moved `middleware.rs`, `memory_middleware.rs`, and `persistence_middleware.rs` from `bot-runtime/src/` to `crates/middleware/src/`
+  - Updated `bot-runtime` and `telegram-bot` to use the new `middleware` package
+  - All existing tests pass without modification
+  - Improves modularity and reusability of middleware implementations
+
 ### Documentation
 - Improved RAG solution documentation with index-based navigation
 - Added detailed code examples for all components

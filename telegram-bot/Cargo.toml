@@ -17,6 +17,7 @@ openai-client = { path = "../openai-client" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory-sqlite" }
+middleware = { path = "../crates/middleware" }
 async-trait = "0.1"
 chrono = "0.4"
 anyhow = "1.0"

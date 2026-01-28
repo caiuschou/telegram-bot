@@ -1,6 +1,7 @@
 use anyhow::Result;
-use bot_runtime::{AIDetectionHandler, HandlerChain, PersistenceMiddleware, MemoryMiddleware};
+use bot_runtime::{AIDetectionHandler, HandlerChain};
 use dbot_core::{init_tracing, ToCoreMessage};
+use middleware::{PersistenceMiddleware, MemoryMiddleware};
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
 use memory_sqlite::SQLiteVectorStore;

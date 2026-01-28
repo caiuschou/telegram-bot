@@ -17,4 +17,6 @@ members = [
     "crates/memory-inmemory",
     "crates/memory-sqlite",
     "crates/memory-lance",
+    "crates/handler-chain",
+    "crates/middleware",
 ]

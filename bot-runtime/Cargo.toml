@@ -9,6 +9,8 @@ storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory-inmemory" }
+handler-chain = { path = "../crates/handler-chain" }
+middleware = { path = "../crates/middleware" }
 teloxide = { version = "0.17", features = ["macros"] }
 async-trait = "0.1"
 anyhow = "1.0"

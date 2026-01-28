@@ -1,7 +1,6 @@
 use dbot_core::{Handler, HandlerResponse, Message, Middleware, Result};
 use std::sync::Arc;
 use tracing::{debug, info, instrument};
-use chrono::Utc;
 
 #[derive(Clone)]
 pub struct HandlerChain {
@@ -75,6 +74,7 @@ mod tests {
     use super::*;
     use dbot_core::{User, Chat};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use chrono::Utc;
 
     fn create_test_message(content: &str) -> Message {
         Message {
