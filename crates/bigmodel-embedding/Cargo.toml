@@ -11,4 +11,5 @@ serde = { version = "1.0", features = ["derive"] }
 embedding = { path = "../embedding" }
 
 [dev-dependencies]
+dotenvy = "0.15"
 tokio = { version = "1", features = ["rt", "macros"] }

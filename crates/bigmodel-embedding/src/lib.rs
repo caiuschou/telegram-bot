@@ -4,7 +4,7 @@
 //!
 //! ## BigModelEmbedding
 //!
-//! Uses BigModel's embedding models (e.g., `embedding-v2`, `embedding-3`).
+//! Uses BigModel's embedding models (e.g., `embedding-2`, `embedding-3`).
 //!
 //! **Advantages**:
 //! - Chinese optimized embeddings
@@ -24,7 +24,7 @@
 //!
 //! fn create_service() -> BigModelEmbedding {
 //!     // The API key can be provided directly or set via BIGMODEL_API_KEY environment variable
-//!     BigModelEmbedding::new("your-api-key".to_string(), "embedding-v2".to_string())
+//!     BigModelEmbedding::new("your-api-key".to_string(), "embedding-2".to_string())
 //! }
 //!
 //! async fn example(service: &BigModelEmbedding) -> Result<(), anyhow::Error> {
@@ -40,12 +40,12 @@
 //!
 //! The `BigModelEmbedding` service requires:
 //! - **API Key**: Your BigModel API key (can also be set via BIGMODEL_API_KEY environment variable)
-//! - **Model**: The embedding model to use (default: `embedding-v2`)
+//! - **Model**: The embedding model to use (default: `embedding-2`)
 //!
 //! ## Supported Models
 //!
-//! - `embedding-v2`: 1024 dimensions, Chinese optimized
-//! - `embedding-3`: 1024 dimensions, improved quality
+//! - `embedding-2`: 1024 dimensions, Chinese optimized
+//! - `embedding-3`: 256–2048 dimensions (configurable), improved quality
 //!
 //! See [BigModel API Documentation](https://open.bigmodel.cn/dev/api#embeddings) for more details.
 
@@ -70,7 +70,7 @@ impl BigModelEmbedding {
     /// # Arguments
     ///
     /// * `api_key` - BigModel API key. If empty, will try to read from BIGMODEL_API_KEY environment variable.
-    /// * `model` - The embedding model to use (e.g., "embedding-v2", "embedding-3").
+    /// * `model` - The embedding model to use (e.g., "embedding-2", "embedding-3").
     pub fn new(api_key: String, model: String) -> Self {
         let api_key = if api_key.is_empty() {
             std::env::var("BIGMODEL_API_KEY").unwrap_or_default()
@@ -87,9 +87,9 @@ impl BigModelEmbedding {
 
     /// Creates a new BigModel embedding service with default model.
     ///
-    /// Uses `embedding-v2` as the default model.
+    /// Uses `embedding-2` as the default model.
     pub fn with_api_key(api_key: String) -> Self {
-        Self::new(api_key, "embedding-v2".to_string())
+        Self::new(api_key, "embedding-2".to_string())
     }
 
     /// Sets a different embedding model.
@@ -287,61 +287,4 @@ impl EmbeddingService for BigModelEmbedding {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires API key, run with: cargo test -p bigmodel-embedding -- --ignored
-    async fn test_bigmodel_embedding() {
-        let api_key = std::env::var("BIGMODEL_API_KEY")
-            .expect("BIGMODEL_API_KEY environment variable must be set for this test");
-
-        let service = BigModelEmbedding::new(api_key, "embedding-v2".to_string());
-
-        let embedding = service.embed("Hello world").await.unwrap();
-        assert!(!embedding.is_empty());
-        assert_eq!(embedding.len(), 1024); // embedding-v2 produces 1024 dimensions
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_bigmodel_embedding_chinese() {
-        let api_key = std::env::var("BIGMODEL_API_KEY")
-            .expect("BIGMODEL_API_KEY environment variable must be set for this test");
-
-        let service = BigModelEmbedding::with_api_key(api_key);
-
-        let embedding = service.embed("你好世界").await.unwrap();
-        assert!(!embedding.is_empty());
-        assert_eq!(embedding.len(), 1024);
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_bigmodel_embedding_batch() {
-        let api_key = std::env::var("BIGMODEL_API_KEY")
-            .expect("BIGMODEL_API_KEY environment variable must be set for this test");
-
-        let service = BigModelEmbedding::new(api_key, "embedding-v2".to_string());
-
-        let texts = vec![
-            "Hello".to_string(),
-            "World".to_string(),
-            "Goodbye".to_string(),
-        ];
-
-        let embeddings = service.embed_batch(&texts).await.unwrap();
-        assert_eq!(embeddings.len(), 3);
-        for embedding in embeddings {
-            assert!(!embedding.is_empty());
-            assert_eq!(embedding.len(), 1024);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_bigmodel_embedding_from_env() {
-        // Should not panic even without API key (will fail on actual API call)
-        let service = BigModelEmbedding::with_api_key(String::new());
-        assert_eq!(service.model, "embedding-v2");
-    }
-}
+mod bigmodel_embedding_test;
