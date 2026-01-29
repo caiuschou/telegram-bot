@@ -251,42 +251,24 @@ pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponen
     // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    // 创建 AI 查询通道
-    let (query_sender, query_receiver) = tokio::sync::mpsc::unbounded_channel();
-
-    // 初始化 OpenAI 客户端
-    let openai_client = OpenAIClient::with_base_url(
-        config.openai_api_key.clone(),
-        config.openai_base_url.clone()
-    );
-    let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client)
-        .with_model(config.ai_model.clone());
-
-    // 初始化内存存储
-    let memory_store: Arc<dyn MemoryStore> = match config.memory_store_type.as_str() {
-        "sqlite" => {
-            Arc::new(SQLiteVectorStore::new(&config.memory_sqlite_path).await?)
-        }
-        _ => Arc::new(InMemoryVectorStore::new())
-    };
-
-    // 初始化 AI 查询处理器
-    let ai_query_handler = AIQueryHandler::new(
+    // 初始化 OpenAI 客户端与 Embedding 服务（略）
+    // 初始化同步 AI 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 存记忆）
+    let sync_ai_handler = Arc::new(SyncAIHandler::new(
+        bot_username.clone(),
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
-        query_receiver,
+        embedding_service,
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
-    );
+    ));
 
     Ok(BotComponents {
         repo,
         teloxide_bot,
         bot_username,
-        query_sender,
-        ai_query_handler,
+        sync_ai_handler,
         memory_store,
     })
 }
@@ -296,8 +278,7 @@ pub struct BotComponents {
     pub repo: Arc<MessageRepository>,
     pub teloxide_bot: Bot,
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    pub query_sender: tokio::sync::mpsc::UnboundedSender<AIQuery>,
-    pub ai_query_handler: AIQueryHandler,
+    pub sync_ai_handler: Arc<SyncAIHandler>,
     pub memory_store: Arc<dyn MemoryStore>,
 }
 ```
@@ -321,12 +302,6 @@ impl TelegramBot {
         let components = initialize_bot_components(&config).await?;
         let bot = components.teloxide_bot.clone();
 
-        // 初始化 AI 检测处理器
-        let ai_detection_handler = Arc::new(AIDetectionHandler::new(
-            components.bot_username.clone(),
-            Arc::new(components.query_sender.clone()),
-        ));
-
         // 初始化持久化中间件
         let persistence_middleware = Arc::new(PersistenceMiddleware::new(
             components.repo.as_ref().clone()
@@ -337,11 +312,11 @@ impl TelegramBot {
             components.memory_store.clone()
         ));
 
-        // 构建处理器链
+        // 构建处理器链（SyncAIHandler 在链内同步执行 AI，返回 Reply 供 memory_middleware 在 after() 中存 AI 回复）
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
-            .add_handler(ai_detection_handler);
+            .add_handler(components.sync_ai_handler.clone());
 
         Ok(Self {
             config,
@@ -351,16 +326,9 @@ impl TelegramBot {
         })
     }
 
-    /// 处理消息（可测试的接口）
+    /// 处理消息（可测试的接口）。SyncAIHandler 在链内同步执行，无需单独 start_ai_handler。
     pub async fn handle_message(&self, message: &Message) -> Result<()> {
         self.handler_chain.handle(message).await
-    }
-
-    /// 启动 AI 查询处理器
-    pub fn start_ai_handler(self) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            self.components.ai_query_handler.run().await;
-        })
     }
 }
 ```

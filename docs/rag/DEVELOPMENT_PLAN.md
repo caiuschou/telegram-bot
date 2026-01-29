@@ -71,7 +71,7 @@
 | 3.2 | 实现 Middleware trait | 2h | 3.1 | 已完成 | MemoryMiddleware 实现 |
 | 3.3 | 实现消息保存逻辑 | 2h | 3.2 | 已完成 | 用户消息自动保存 |
 | 3.4 | 实现上下文检索逻辑 | 2h | 3.3 | 已完成 | 自动检索相关上下文（编译正常） |
-| 3.5 | 在 AIQueryHandler 集成 Memory Store | 2h | 3.4 | 已完成 | AI Handler 支持记忆功能 |
+| 3.5 | 在 AI Handler（SyncAIHandler）集成 Memory Store | 2h | 3.4 | 已完成 | AI Handler 支持记忆功能 |
 | 3.6 | 实现上下文检索功能 | 3h | 3.5 | 已完成 | 完整的上下文构建和检索 |
 | 3.7 | 实现 AI 回复保存逻辑 | 1h | 3.6 | 已完成 | AI 回复自动保存到 Memory |
 | 3.8 | 编写集成测试 | 3h | 3.7 | 已完成 | 完整对话流程测试通过 |

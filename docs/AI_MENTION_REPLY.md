@@ -1,5 +1,7 @@
 # Bot 被@时AI回复技术方案
 
+**当前实现说明**：runner 已采用 **SyncAIHandler**（链内同步执行 AI，返回 `Reply` 供 MemoryMiddleware 在 `after()` 中存记忆）。原有的 **AIQueryHandler**（异步通道 + 独立任务）已移除。下文中涉及 AIQueryHandler / 通道 / start_ai_handler 的描述为历史方案，实际代码以 `ai-handlers/src/sync_ai_handler.rs` 与 `telegram-bot/src/runner.rs` 为准。
+
 ## 📋 开发实施清单
 
 ---

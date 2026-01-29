@@ -28,8 +28,8 @@ dbot/
 ├── ai-handlers/               # AI 处理器 ⭐
 │   ├── src/
 │   │   ├── ai_mention_detector.rs  # AI 提及检测器
-│   │   ├── ai_response_handler.rs  # AI 响应处理器
-│   │   └── lib.rs              # 库入口
+│   │   ├── sync_ai_handler.rs     # 同步 AI 处理器（链内执行，返回 Reply 供中间件存）
+│   │   └── lib.rs                  # 库入口
 │   └── Cargo.toml
 ├── openai-client/             # OpenAI 客户端
 │   ├── src/
@@ -300,8 +300,8 @@ let logger = LoggingMiddleware;
 - 支持灵活查询和统计分析
 
 **ai-handlers**: AI 处理器系统
-- `AIDetectionHandler`: AI 提及检测器
-- `AIQueryHandler`: AI 响应处理器
+- `SyncAIHandler`: 同步 AI 处理器（链内执行，返回 Reply 供中间件存记忆）
+- `AIDetectionHandler`: AI 提及检测器（可选，与通道配合）
 - `AIQuery`: AI 查询数据结构
 
 **memory**: 内存管理系统

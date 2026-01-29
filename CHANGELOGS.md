@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **ai-handlers**: removed unused async AI pipeline
+  - Deleted `ai_response_handler.rs` and `ai_response_handler_test.rs`; runner uses only `SyncAIHandler` (in-chain sync AI, returns `Reply` for middleware). No longer exporting `AIQueryHandler`. Docs and README updated to reference `sync_ai_handler.rs` and `SyncAIHandler`.
+
 ### Added
 - middleware: unit tests split into independent file
   - Added `crates/middleware/src/memory_middleware_test.rs` with all MemoryMiddleware unit tests (MemoryConfig default, creation, message_to_memory_entry, before/after saving, build_context); tests use InMemoryVectorStore and do not call external services
@@ -16,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **ai-handlers**: new `SyncAIHandler` implementing `Handler`; on AI query (reply-to or @mention) builds context, calls AI (normal or streaming), sends reply to Telegram, returns `HandlerResponse::Reply(response_text)` so MemoryMiddleware saves it in `after()`. New module `sync_ai_handler.rs`.
   - **telegram-bot runner**: removed channel and async AI task; `BotComponents` now has `sync_ai_handler: Arc<SyncAIHandler>` instead of `query_sender` and `ai_query_handler`. Chain uses `sync_ai_handler`; user message saved in middleware `before()`, AI reply saved in middleware `after()` when handler returns `Reply(text)`. Removed `start_ai_handler()` and its call from `run_bot`.
   - **telegram-bot tests**: `test_ai_reply_complete_flow` no longer calls `start_ai_handler()` or polls; `handle_core_message` runs the full chain synchronously.
-  - **AIDetectionHandler** and **AIQueryHandler** remain in ai-handlers for now (tests, potential other use); runner no longer uses them.
+  - **AIQueryHandler** (async channel pipeline) was later removed; runner uses only **SyncAIHandler**.
 - HandlerResponse::Reply(String) so middleware can receive reply text in after()
   - dbot-core: added variant `Reply(String)` to `HandlerResponse`; handlers that produce a reply can return it for middleware (e.g. memory) to use
   - handler-chain: treats `Reply(_)` like `Stop` (break chain, pass response to after())
@@ -100,6 +104,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Python SDK: `pip install zhipuai`
 
 ### Changed
+- middleware: unit tests moved to dedicated directory
+  - Added `crates/middleware/src/test/`; `mod.rs` declares `memory_middleware_test` and `persistence_middleware_test`
+  - Moved `memory_middleware_test.rs` from `src/` to `src/test/memory_middleware_test.rs`
+  - Extracted PersistenceMiddleware tests from inline `#[cfg(test)] mod tests` in `persistence_middleware.rs` to `src/test/persistence_middleware_test.rs`
+  - `lib.rs` uses `#[cfg(test)] mod test;`; `persistence_middleware.rs` no longer contains inline tests
 - Extract `HandlerChain` into a standalone `handler-chain` package
   - Created new package at `crates/handler-chain/`
   - Moved `handler_chain.rs` from `bot-runtime/src/` to `crates/handler-chain/src/`
