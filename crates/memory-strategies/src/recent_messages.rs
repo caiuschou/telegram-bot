@@ -8,7 +8,7 @@ use memory_core::{MessageCategory, MemoryStore, StrategyResult};
 use tracing::{debug, info};
 
 use super::strategy::ContextStrategy;
-use super::utils::{format_message, truncate_for_log, MAX_LOG_CONTENT_LEN};
+use super::utils::format_message;
 
 /// Strategy for retrieving recent conversation messages.
 #[derive(Debug, Clone)]
@@ -63,7 +63,7 @@ impl ContextStrategy for RecentMessagesStrategy {
                 limit = self.limit,
                 "RecentMessagesStrategy: searching by conversation_id"
             );
-            let entries = store.search_by_conversation(conv_id).await.map_err(|e| {
+            let mut entries = store.search_by_conversation(conv_id).await.map_err(|e| {
                 tracing::error!(
                     error = %e,
                     conversation_id = %conv_id,
@@ -71,10 +71,14 @@ impl ContextStrategy for RecentMessagesStrategy {
                 );
                 e
             })?;
+            entries.sort_by_key(|e| e.metadata.timestamp);
+            let n = entries.len();
+            if n > self.limit {
+                entries = entries.into_iter().skip(n - self.limit).collect();
+            }
 
             let messages: Vec<String> = entries
                 .iter()
-                .take(self.limit)
                 .map(|entry| format_message(entry))
                 .collect();
 
@@ -82,15 +86,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                 conversation_id = %conv_id,
                 entry_count = entries.len(),
                 message_count = messages.len(),
-                "RecentMessagesStrategy: found messages by conversation_id"
+                "RecentMessagesStrategy: 最近消息 by conversation_id"
             );
             for (i, msg) in messages.iter().enumerate() {
-                info!(
-                    strategy = "RecentMessagesStrategy",
-                    index = i,
-                    content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
-                    "context message"
-                );
+                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "最近消息");
             }
             return Ok(StrategyResult::Messages {
                 category: MessageCategory::Recent,
@@ -104,7 +103,7 @@ impl ContextStrategy for RecentMessagesStrategy {
                 limit = self.limit,
                 "RecentMessagesStrategy: searching by user_id"
             );
-            let entries = store.search_by_user(uid).await.map_err(|e| {
+            let mut entries = store.search_by_user(uid).await.map_err(|e| {
                 tracing::error!(
                     error = %e,
                     user_id = %uid,
@@ -112,10 +111,14 @@ impl ContextStrategy for RecentMessagesStrategy {
                 );
                 e
             })?;
+            entries.sort_by_key(|e| e.metadata.timestamp);
+            let n = entries.len();
+            if n > self.limit {
+                entries = entries.into_iter().skip(n - self.limit).collect();
+            }
 
             let messages: Vec<String> = entries
                 .iter()
-                .take(self.limit)
                 .map(|entry| format_message(entry))
                 .collect();
 
@@ -123,15 +126,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                 user_id = %uid,
                 entry_count = entries.len(),
                 message_count = messages.len(),
-                "RecentMessagesStrategy: found messages by user_id"
+                "RecentMessagesStrategy: 最近消息 by user_id"
             );
             for (i, msg) in messages.iter().enumerate() {
-                info!(
-                    strategy = "RecentMessagesStrategy",
-                    index = i,
-                    content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
-                    "context message"
-                );
+                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "最近消息");
             }
             return Ok(StrategyResult::Messages {
                 category: MessageCategory::Recent,

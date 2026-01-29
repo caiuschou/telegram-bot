@@ -94,6 +94,10 @@ impl OpenAIClient {
             .messages(messages)
             .build()?;
 
+        if let Ok(json) = serde_json::to_string_pretty(&request) {
+            tracing::info!(request_json = %json, "OpenAI chat_completion 提交的 JSON");
+        }
+
         let response = self.client.chat().create(request).await?;
 
         if let Some(ref u) = response.usage {
@@ -140,6 +144,10 @@ impl OpenAIClient {
             .model(model)
             .messages(messages)
             .build()?;
+
+        if let Ok(json) = serde_json::to_string_pretty(&request) {
+            tracing::info!(request_json = %json, "OpenAI chat_completion_stream 提交的 JSON");
+        }
 
         let mut stream = self.client.chat().create_stream(request).await?;
 

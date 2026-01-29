@@ -8,7 +8,7 @@ use memory_core::{MemoryStore, StrategyResult};
 use tracing::{debug, info};
 
 use super::strategy::ContextStrategy;
-use super::utils::{extract_preferences, truncate_for_log, MAX_LOG_CONTENT_LEN};
+use super::utils::extract_preferences;
 
 /// Strategy for extracting user preferences from conversation history.
 #[derive(Debug, Clone)]
@@ -97,8 +97,8 @@ impl ContextStrategy for UserPreferencesStrategy {
             info!(
                 user_id = %user_id,
                 preference_count = preferences.len(),
-                preferences_preview = %truncate_for_log(&prefs_str, MAX_LOG_CONTENT_LEN),
-                "UserPreferencesStrategy: extracted user preferences"
+                preferences = %prefs_str,
+                "UserPreferencesStrategy: 用户偏好 extracted"
             );
             Ok(StrategyResult::Preferences(prefs_str))
         }

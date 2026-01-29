@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **最近消息查询顺序**：RecentMessagesStrategy 与 Lance 存储的「最近消息」顺序修正
+  - **memory-lance**：`search_by_conversation`、`search_by_user` 返回前按 `metadata.timestamp` 升序排序，保证顺序确定。
+  - **memory-strategies (RecentMessagesStrategy)**：拿到 store 结果后先按 `metadata.timestamp` 升序排序，再取**最后** `limit` 条（即「最近 N 条」按时间从旧到新），再格式化为消息。这样无论底层是 Lance（无排序）、SQLite（DESC）还是 InMemory，最近消息均为「最近 N 条、时间正序」，提交给 AI 的 Conversation (recent) 顺序正确。
+
 ### Removed
 - **Context 相关冗余代码与文档同步**
   - **ai-handlers**：删除未在流程中使用的 `SyncAIHandler::format_question_with_context`；当前流程使用 `build_messages_for_ai` → `Context::to_messages` + `get_ai_response_with_messages` / `get_ai_response_stream_with_messages`。
@@ -43,14 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **OpenAI embedding**：单条 "step: 词向量 OpenAI embed 请求"（model、text_preview、text_len）、"step: 词向量 OpenAI embed 完成"（dimension）；批量 "step: 词向量 OpenAI embed_batch 请求/完成"（batch_size、count、dimension）。
   - **BigModel embedding**：单条 "step: 词向量 BigModel embed 请求/完成"；批量 "step: 词向量 BigModel embed_batch 请求/完成"（依赖新增 tracing）。
   - **向量存储 (Lance/SQLite/InMemory)**：add 时若 entry 带 embedding 打 "step: 词向量 [Lance|SQLite|InMemory] 写入向量"（id、dimension）；semantic_search 时打 "step: 词向量 [Store] 向量检索"（dimension、limit）、"step: 词向量 [Store] 向量检索完成"（count）。
+- **Context 详细日志：最近消息、语义检索、用户偏好**
+  - **memory (ContextBuilder)**：构建完成后调用 `log_context_detail`，按块打印：`context_detail: 最近消息`（条数 + 每条 index、content_preview 500 字）；`context_detail: 语义检索`（条数 + 每条 index、content_preview）；`context_detail: 用户偏好`（preferences_preview 或「无」）。`apply_strategy_result` 在合并每条策略结果时，对 Messages 逐条打 `strategy message`（label 为 最近消息/语义检索），对 Preferences 打 `Strategy returned user preferences (用户偏好)`，预览长度统一为 `CONTEXT_LOG_PREVIEW_LEN`（500）。
+  - **memory (utils)**：新增常量 `CONTEXT_LOG_PREVIEW_LEN = 500`，供上下文详细日志截断用。
+  - **memory-strategies**：策略层日志文案增加中文标签：RecentMessagesStrategy 为「最近消息」；SemanticSearchStrategy 为「语义检索」；UserPreferencesStrategy 为「用户偏好 extracted」。
 - **RAG / context build**: Detailed logging for strategies and AI submission
   - **ContextStrategy**: Added `name(&self) -> &str` to trait; each strategy (RecentMessages, SemanticSearch, UserPreferences) returns a constant name for logging.
   - **memory-strategies**: Each strategy logs query results in detail: `RecentMessagesStrategy` and `SemanticSearchStrategy` log `entry_count`, `message_count`, and per-message `content_preview` (truncated to 400 chars). `UserPreferencesStrategy` logs `entry_count` and `preferences_preview` when preferences are found. On store/embedding failure, strategies log `error` and (for semantic search) `error_debug` and `query_preview`.
-  - **memory (ContextBuilder)**: Executing each strategy logs `strategy_name` and `strategy_index`; for Messages result logs summary (`message_count`, `total_content_len`) and per-message debug (`message_index`, `message_len`, `content_preview`); for Preferences logs `preferences_preview`; for Empty logs "Strategy returned Empty". On strategy failure, logs `strategy_name`, `error`, and full error chain (`Caused by`).
-  - **ai-handlers (SyncAIHandler)**: Before calling the AI, logs `context_len`, `context_preview`, `question`, `prompt_len`, `prompt_preview` (truncated to 500 chars) with message "Submitting to AI (streaming)" or "Submitting to AI (non-streaming)". On AI response failure (normal or stream), logs full error chain.
+  - **memory (ContextBuilder)**: Executing each strategy logs `strategy_name` and `strategy_index`; for Messages result logs summary (`message_count`, `total_content_len`) and per-message with label 最近消息/语义检索 and `content_preview` (500 chars); for Preferences logs `preferences_preview` (用户偏好). After build, `log_context_detail` logs 最近消息/语义检索/用户偏好 blocks. On strategy failure, logs `strategy_name`, `error`, and full error chain (`Caused by`).
+  - **ai-handlers (SyncAIHandler)**: Before calling the AI, logs `message_count`, `question` with message "Submitting to AI (streaming)" or "Submitting to AI (non-streaming)"; then logs **提交给 AI 的消息列表** via `log_messages_submitted_to_ai`: for each message logs `index`, `role` (System/User/Assistant), `content_preview` (truncated to 500 chars). On AI response failure (normal or stream), logs full error chain.
   - **memory-strategies/utils**: Added `truncate_for_log(s, max_len)` and `MAX_LOG_CONTENT_LEN` for safe content preview in logs.
 - **openai-client**: Request logging and masked token
   - Log each chat completion request: `model`, `message_count`, and masked `api_key` (first 7 + `***` + last 4 chars; keys ≤11 chars log as `***`).
+  - **提交的 JSON**：在发送前将请求体序列化为 JSON 并打印：`OpenAI chat_completion 提交的 JSON` / `OpenAI chat_completion_stream 提交的 JSON`，字段 `request_json` 为 `serde_json::to_string_pretty(&request)` 的完整请求体（含 model、messages 等）。
   - Log response token usage: `prompt_tokens`, `completion_tokens`, `total_tokens` for non-stream and stream (when API returns usage).
   - New public `mask_token(token)` for safe logging; optional `api_key_for_logging` stored in client when created via `new()` / `with_base_url()` (not set for `with_client()`).
   - Unit tests in `openai-client/tests/mask_token_test.rs` for `mask_token`.

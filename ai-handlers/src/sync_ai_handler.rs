@@ -7,6 +7,7 @@ use memory::{
     Context, ContextBuilder, MemoryStore, RecentMessagesStrategy, SemanticSearchStrategy,
     UserPreferencesStrategy,
 };
+use prompt::ChatMessage;
 use std::sync::Arc;
 use storage::MessageRepository;
 use telegram_bot_ai::TelegramBotAI;
@@ -17,6 +18,19 @@ use tracing::{debug, error, info, instrument};
 const MSG_SEND_FAILED: &str = "抱歉，发送回复时出错。";
 const MSG_REQUEST_FAILED: &str = "抱歉，处理您的请求时出错，请稍后重试。";
 const MSG_STREAM_FAILED: &str = "抱歉，AI 响应失败。";
+
+/// Logs the exact messages submitted to the AI (role + full content) for debugging.
+fn log_messages_submitted_to_ai(messages: &[ChatMessage]) {
+    info!(count = messages.len(), "submit_to_ai: 提交给 AI 的消息列表");
+    for (i, m) in messages.iter().enumerate() {
+        info!(
+            index = i,
+            role = ?m.role,
+            content = %m.content,
+            "submit_to_ai message"
+        );
+    }
+}
 
 /// Synchronous AI handler: when the message is an AI query (reply-to or @mention), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
 ///
@@ -213,6 +227,7 @@ impl SyncAIHandler {
             question = %question,
             "Submitting to AI (non-streaming)"
         );
+        log_messages_submitted_to_ai(&messages);
 
         let response = match self.ai_bot.get_ai_response_with_messages(messages).await {
             Ok(r) => r,
@@ -254,6 +269,7 @@ impl SyncAIHandler {
             question = %question,
             "Submitting to AI (streaming)"
         );
+        log_messages_submitted_to_ai(&messages);
 
         let chat_id = ChatId(message.chat.id);
 

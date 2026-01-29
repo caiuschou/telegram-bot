@@ -3,7 +3,7 @@
 //! Tests the token estimation logic used for context size calculation.
 //! Interacts with: context building (token limit checks), AI model APIs (context window).
 
-use super::*;
+use crate::context::*;
 
 #[test]
 fn test_estimate_tokens() {

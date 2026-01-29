@@ -486,6 +486,7 @@ impl MemoryStore for LanceVectorStore {
                 }
             }
         }
+        entries.sort_by(|a, b| a.metadata.timestamp.cmp(&b.metadata.timestamp));
 
         info!(
             user_id = %user_id,
@@ -524,6 +525,7 @@ impl MemoryStore for LanceVectorStore {
                 }
             }
         }
+        entries.sort_by(|a, b| a.metadata.timestamp.cmp(&b.metadata.timestamp));
 
         info!(
             conversation_id = %conversation_id,

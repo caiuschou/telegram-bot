@@ -274,16 +274,37 @@ async fn test_error_handling() {
 
 ## Test Organization
 
+### Crate-level tests
+
 ```
 memory/
 ├── tests/
-│   ├── types_test.rs      # Type unit tests
-│   ├── store_test.rs      # Store tests
-│   ├── embedding_test.rs  # Embedding tests
-│   └── integration_test.rs # Integration tests
+│   └── types_test.rs      # MemoryEntry, MemoryMetadata, MemoryRole
 └── src/
-    └── lib.rs
+    ├── lib.rs
+    ├── migration.rs
+    └── context/
+        ├── mod.rs
+        ├── types.rs
+        ├── builder.rs
+        ├── utils.rs
+        └── tests/           # Context module unit tests (separate directory)
+            ├── mod.rs
+            ├── estimate_tokens_test.rs
+            ├── context_test.rs
+            └── context_builder_test.rs
 ```
+
+### Context module unit tests (`src/context/tests/`)
+
+Unit tests for the context builder live in a dedicated `tests/` subdirectory under `context/`. Coverage:
+
+| Component | File | Covered |
+|-----------|------|---------|
+| `estimate_tokens` | estimate_tokens_test.rs | Empty string, single char, words; min 1 token |
+| `Context` | context_test.rs | format_for_model (with/without system, preferences, recent vs semantic), to_messages (roles), is_empty, exceeds_limit (true/false/equal) |
+| `ContextMetadata` | context_test.rs | Built via make_context and asserted in Context |
+| `ContextBuilder` | context_builder_test.rs | new, with_token_limit, for_user, for_conversation, with_query, with_strategy, with_system_message; build() aggregates strategy result and metadata |
 
 ## Running Tests
 

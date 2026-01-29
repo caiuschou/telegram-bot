@@ -1,11 +1,11 @@
 //! Unit tests for `ContextBuilder`.
 //!
-//! Tests builder creation, configuration (user, strategies, system message),
-//! and integration with MemoryStore and ContextStrategy.
+//! Tests builder creation, configuration (user, conversation, query, strategies, system message),
+//! and build() aggregation with MockStore and MockStrategy.
 //! External interactions: MemoryStore, ContextStrategy, memory_core::StrategyResult.
 
-use super::*;
-use crate::MemoryEntry;
+use crate::context::*;
+use crate::{ContextStrategy, MemoryEntry, MemoryStore};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -51,7 +51,8 @@ impl MemoryStore for MockStore {
 
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         let entries = self.entries.read().await;
-        Ok(entries.values()
+        Ok(entries
+            .values()
             .filter(|e| e.metadata.user_id.as_deref() == Some(user_id))
             .cloned()
             .collect())
@@ -62,7 +63,8 @@ impl MemoryStore for MockStore {
         conversation_id: &str,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         let entries = self.entries.read().await;
-        Ok(entries.values()
+        Ok(entries
+            .values()
             .filter(|e| e.metadata.conversation_id.as_deref() == Some(conversation_id))
             .cloned()
             .collect())
@@ -105,8 +107,7 @@ impl ContextStrategy for MockStrategy {
 #[tokio::test]
 async fn test_context_builder_creation() {
     let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
-    let builder = ContextBuilder::new(store)
-        .with_token_limit(2048);
+    let builder = ContextBuilder::new(store).with_token_limit(2048);
 
     assert_eq!(builder.token_limit, 2048);
 }
@@ -114,10 +115,25 @@ async fn test_context_builder_creation() {
 #[tokio::test]
 async fn test_context_builder_with_user() {
     let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
-    let builder = ContextBuilder::new(store)
-        .for_user("user123");
+    let builder = ContextBuilder::new(store).for_user("user123");
 
     assert_eq!(builder.user_id.as_deref(), Some("user123"));
+}
+
+#[tokio::test]
+async fn test_context_builder_for_conversation() {
+    let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
+    let builder = ContextBuilder::new(store).for_conversation("conv456");
+
+    assert_eq!(builder.conversation_id.as_deref(), Some("conv456"));
+}
+
+#[tokio::test]
+async fn test_context_builder_with_query() {
+    let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
+    let builder = ContextBuilder::new(store).with_query("search query");
+
+    assert_eq!(builder.query.as_deref(), Some("search query"));
 }
 
 #[tokio::test]
@@ -125,8 +141,7 @@ async fn test_context_builder_with_strategies() {
     let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
     let strategy = Box::new(MockStrategy);
 
-    let builder = ContextBuilder::new(store)
-        .with_strategy(strategy);
+    let builder = ContextBuilder::new(store).with_strategy(strategy);
 
     assert_eq!(builder.strategies.len(), 1);
 }
@@ -134,11 +149,35 @@ async fn test_context_builder_with_strategies() {
 #[tokio::test]
 async fn test_context_builder_with_system_message() {
     let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
-    let builder = ContextBuilder::new(store)
-        .with_system_message("You are a helpful assistant.");
+    let builder = ContextBuilder::new(store).with_system_message("You are a helpful assistant.");
 
     assert_eq!(
         builder.system_message.as_deref(),
         Some("You are a helpful assistant.")
     );
+}
+
+#[tokio::test]
+async fn test_context_builder_build_aggregates_strategy_result() {
+    let store = Arc::new(MockStore::new()) as Arc<dyn MemoryStore>;
+    let strategy = Box::new(MockStrategy);
+
+    let context = ContextBuilder::new(store)
+        .with_strategy(strategy)
+        .for_user("u1")
+        .for_conversation("c1")
+        .with_system_message("System")
+        .build()
+        .await
+        .expect("build should succeed");
+
+    assert_eq!(context.recent_messages.len(), 2);
+    assert!(context.recent_messages[0].contains("Hello"));
+    assert!(context.recent_messages[1].contains("Hi there"));
+    assert!(context.semantic_messages.is_empty());
+    assert_eq!(context.system_message.as_deref(), Some("System"));
+    assert_eq!(context.metadata.user_id.as_deref(), Some("u1"));
+    assert_eq!(context.metadata.conversation_id.as_deref(), Some("c1"));
+    assert_eq!(context.metadata.message_count, 2);
+    assert!(context.metadata.total_tokens > 0);
 }

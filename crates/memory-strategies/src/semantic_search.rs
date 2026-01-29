@@ -11,7 +11,7 @@ use memory_core::{MessageCategory, MemoryStore, StrategyResult};
 use tracing::{debug, error, info, warn};
 
 use super::strategy::ContextStrategy;
-use super::utils::{format_message, truncate_for_log, MAX_LOG_CONTENT_LEN};
+use super::utils::format_message;
 
 /// Strategy for performing semantic search on conversation history.
 ///
@@ -77,11 +77,7 @@ impl ContextStrategy for SemanticSearchStrategy {
             "SemanticSearchStrategy: starting semantic search"
         );
 
-        info!(
-            query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
-            query_len = query_text.len(),
-            "step: 词向量 生成查询向量 (embedding)"
-        );
+        info!(query = %query_text, query_len = query_text.len(), "step: 词向量 生成查询向量 (embedding)");
         let query_embedding = match self.embedding_service.embed(query_text).await {
             Ok(emb) => {
                 info!(
@@ -91,11 +87,7 @@ impl ContextStrategy for SemanticSearchStrategy {
                 emb
             }
             Err(e) => {
-                warn!(
-                    error = %e,
-                    query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
-                    "SemanticSearchStrategy: embedding failed, skipping semantic search"
-                );
+                warn!(error = %e, query = %query_text, "SemanticSearchStrategy: embedding failed, skipping semantic search");
                 return Ok(StrategyResult::Empty);
             }
         };
@@ -115,7 +107,7 @@ impl ContextStrategy for SemanticSearchStrategy {
                 error!(
                     error = %e,
                     error_debug = %err_msg,
-                    query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+                    query = %query_text,
                     limit = self.limit,
                     "SemanticSearchStrategy: semantic_search failed"
                 );
@@ -136,18 +128,13 @@ impl ContextStrategy for SemanticSearchStrategy {
             "step: 词向量 向量检索完成"
         );
         info!(
-            query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+            query = %query_text,
             entry_count = entries.len(),
             message_count = messages.len(),
-            "SemanticSearchStrategy: semantic search returned messages"
+            "SemanticSearchStrategy: 语义检索 returned messages"
         );
         for (i, msg) in messages.iter().enumerate() {
-            info!(
-                strategy = "SemanticSearchStrategy",
-                index = i,
-                content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
-                "context message"
-            );
+            info!(strategy = "SemanticSearchStrategy", index = i, content = %msg, "语义检索");
         }
 
         Ok(StrategyResult::Messages {

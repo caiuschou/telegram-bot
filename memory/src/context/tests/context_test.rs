@@ -3,7 +3,7 @@
 //! Tests context formatting for AI model input and token limit checks.
 //! External interactions: AI model APIs (format_for_model output), token limits.
 
-use super::*;
+use crate::context::*;
 use chrono::Utc;
 
 fn make_context(
