@@ -20,6 +20,7 @@
 - [回答前上下文检索](./context-retrieval-before-reply.md) - AI 回答前查询相关上下文的代码位置与流程
 - [配置](./configuration.md) - 环境变量和配置文件
 - [实现计划](./implementation.md) - 分阶段开发路线图
+- [向量搜索准确度优化计划](./vector-search-accuracy-plan.md) - 语义检索准确度优化开发任务表
 - [使用示例](./usage.md) - 代码示例和最佳实践
 - [测试策略](./testing.md) - 单元测试、集成测试、性能测试
 - [成本估算](./cost.md) - API成本和存储成本分析

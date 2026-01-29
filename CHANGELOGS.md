@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **向量搜索准确度优化开发计划**：新增 `docs/rag/vector-search-accuracy-plan.md`，以表格形式列出配置接入（MEMORY_RELEVANT_TOP_K / MEMORY_RECENT_LIMIT）、相似度阈值过滤、Lance 检索精度可选优化及文档与 CHANGELOG 等任务；`docs/rag/README.md` 增加该计划入口链接。
 - **写入记忆时算 embedding**：MemoryMiddleware 保存用户消息与 AI 回复时若配置了 embedding_service，则先对 content 做 embed，再写入 entry.embedding，使新消息参与语义检索。
   - **middleware**：MemoryConfig 新增 `embedding_service: Option<Arc<dyn EmbeddingService>>`；新增 `MemoryMiddleware::with_store_and_embedding(store, embedding_service)`；before()/after() 中若 embedding_service 为 Some 则调用 `embed(&content).await` 并设置 `entry.embedding`，失败时仍保存但不带 embedding。
   - **telegram-bot runner**：BotComponents 新增 `embedding_service`；创建 MemoryMiddleware 改为 `with_store_and_embedding(components.memory_store, components.embedding_service)`。
