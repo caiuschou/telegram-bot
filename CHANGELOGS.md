@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Create runner integration test file (TELEGRAM_BOT_TEST_PLAN task 1.2)
+  - Added `telegram-bot/tests/runner_integration_test.rs` with basic test structure
+  - `setup_test_config(temp_dir)` sets env vars and loads `BotConfig` using a temp directory
+  - Test `test_setup_test_config_loads` verifies config loading for use in later run_bot integration tests
+- Implement test helpers for Telegram bot integration tests (TELEGRAM_BOT_TEST_PLAN task 1.3)
+  - Enhanced `setup_test_config` to load `.env.test` / `.env` and isolate DB/memory paths via `TempDir`
+  - Added `MockMemoryStore` implementing `memory::MemoryStore` with in-memory `HashMap` backend
+  - Added tests `test_setup_test_config_loads` and `test_mock_memory_store_basic_crud_and_queries`
+- Add tracing-based logging to memory crate
+  - Added `tracing::instrument` and debug logs in `ContextBuilder::build` to trace context construction
+  - Added debug logs in `RecentMessagesStrategy`, `SemanticSearchStrategy`, and `UserPreferencesStrategy` to observe memory queries and preference extraction
 - Split RAG_SOLUTION.md into modular documentation structure
   - Created docs/rag/ directory with 12 separate documents
   - docs/rag/README.md - Main index and overview

@@ -6,11 +6,20 @@
 //! - `RecentMessagesStrategy`: Retrieves most recent messages
 //! - `SemanticSearchStrategy`: Performs semantic search for relevant messages
 //! - `UserPreferencesStrategy`: Extracts user preferences from history
-
+//!
+//! ## Logging
+//!
+//! Strategies emit `tracing` debug logs so that memory behavior can be
+//! inspected in production:
+//! - Selected retrieval path (by conversation / by user / empty)
+//! - Number of entries/messages returned
+//! - Whether user preferences were detected
+//!
 use async_trait::async_trait;
 use crate::context::StrategyResult;
 use crate::store::MemoryStore;
 use crate::types::{MemoryEntry, MemoryRole};
+use tracing::debug;
 
 /// Trait for context building strategies.
 #[async_trait]
@@ -70,6 +79,11 @@ impl ContextStrategy for RecentMessagesStrategy {
     ) -> Result<StrategyResult, anyhow::Error> {
         // If conversation ID is provided, use it
         if let Some(conv_id) = conversation_id {
+            debug!(
+                conversation_id = conv_id,
+                limit = self.limit,
+                "RecentMessagesStrategy: searching by conversation_id"
+            );
             let entries = store.search_by_conversation(conv_id).await?;
 
             let messages: Vec<String> = entries
@@ -78,11 +92,20 @@ impl ContextStrategy for RecentMessagesStrategy {
                 .map(|entry| format_message(&entry))
                 .collect();
 
+            debug!(
+                message_count = messages.len(),
+                "RecentMessagesStrategy: found messages by conversation_id"
+            );
             return Ok(StrategyResult::Messages(messages));
         }
 
         // If only user ID is provided, search by user
         if let Some(uid) = user_id {
+            debug!(
+                user_id = uid,
+                limit = self.limit,
+                "RecentMessagesStrategy: searching by user_id"
+            );
             let entries = store.search_by_user(uid).await?;
 
             let messages: Vec<String> = entries
@@ -91,9 +114,14 @@ impl ContextStrategy for RecentMessagesStrategy {
                 .map(|entry| format_message(&entry))
                 .collect();
 
+            debug!(
+                message_count = messages.len(),
+                "RecentMessagesStrategy: found messages by user_id"
+            );
             return Ok(StrategyResult::Messages(messages));
         }
 
+        debug!("RecentMessagesStrategy: no user_id or conversation_id, returning Empty");
         Ok(StrategyResult::Empty)
     }
 }
@@ -149,6 +177,10 @@ impl ContextStrategy for SemanticSearchStrategy {
         // Note: This requires embedding service to be integrated
         // For now, we'll return empty result as semantic search
         // needs embedding generation for the query
+        debug!(
+            limit = self.limit,
+            "SemanticSearchStrategy: semantic search not yet implemented, returning Empty"
+        );
         Ok(StrategyResult::Empty)
     }
 }
@@ -200,16 +232,36 @@ impl ContextStrategy for UserPreferencesStrategy {
     ) -> Result<StrategyResult, anyhow::Error> {
         let user_id = match user_id {
             Some(uid) => uid,
-            None => return Ok(StrategyResult::Empty),
+            None => {
+                debug!(
+                    "UserPreferencesStrategy: no user_id provided, returning Empty"
+                );
+                return Ok(StrategyResult::Empty);
+            }
         };
 
         let entries = store.search_by_user(user_id).await?;
 
+        debug!(
+            user_id = user_id,
+            entry_count = entries.len(),
+            "UserPreferencesStrategy: loaded entries for preference extraction"
+        );
+
         let preferences = extract_preferences(&entries);
 
         if preferences.is_empty() {
+            debug!(
+                user_id = user_id,
+                "UserPreferencesStrategy: no preferences detected, returning Empty"
+            );
             Ok(StrategyResult::Empty)
         } else {
+            debug!(
+                user_id = user_id,
+                preference_count = preferences.len(),
+                "UserPreferencesStrategy: extracted user preferences"
+            );
             Ok(StrategyResult::Preferences(format!(
                 "User Preferences: {}",
                 preferences.join(", ")

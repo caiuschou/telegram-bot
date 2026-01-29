@@ -29,3 +29,5 @@ mockall = "0.14"
 mockito = "1.7"
 tempfile = "3.24"
 tokio-test = "0.4"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

@@ -5,16 +5,16 @@
 | ID | 任务描述 | 优先级 | 状态 | 完成日期 | 备注 |
 |----|---------|-------|------|---------|------|
 | 1.1 | 添加测试依赖库到 `telegram-bot/Cargo.toml` | 高 | ✅ 已完成 | 2026-01-28 | 已添加 mockall 0.14, mockito 1.7, tempfile 3.24, tokio-test 0.4 |
-| 1.2 | 创建测试文件 `telegram-bot/tests/runner_integration_test.rs` | 高 | ⬜ 待开始 | - | 基础测试文件结构 |
-| 1.3 | 实现测试工具函数（setup_test_config, MockMemoryStore） | 高 | ⬜ 待开始 | - | 包含 .env 加载和临时目录创建 |
-| 1.4 | 实现 Mock Telegram API | 中 | ⬜ 待开始 | - | 使用 mockito Mock getMe 和 sendMessage |
-| 2.1 | 重构 `runner.rs` - 提取 Bot 组件初始化逻辑 | 高 | ⬜ 待开始 | - | 创建 `initialize_bot_components` 函数 |
-| 2.2 | 重构 `runner.rs` - 创建可测试的 TelegramBot 结构 | 高 | ⬜ 待开始 | - | 支持依赖注入，便于测试 |
-| 2.3 | 实现 TelegramBot::new 和 new_with_memory_store 方法 | 高 | ⬜ 待开始 | - | 支持注入自定义 MemoryStore |
-| 2.4 | 实现 TelegramBot::handle_message 方法 | 高 | ⬜ 待开始 | - | 可测试的消息处理接口 |
-| 2.5 | 实现 TelegramBot::start_ai_handler 方法 | 高 | ⬜ 待开始 | - | 启动 AI 查询处理器 |
-| 3.1 | 实现 Lance 向量存储验证 | 高 | ⬜ 待开始 | - | 验证数据库创建和向量存储 |
-| 3.2 | 实现 Lance 向量查询验证 | 高 | ⬜ 待开始 | - | 验证向量相似度搜索 |
+| 1.2 | 创建测试文件 `telegram-bot/tests/runner_integration_test.rs` | 高 | ✅ 已完成 | 2026-01-28 | 基础测试文件结构 |
+| 1.3 | 实现测试工具函数（setup_test_config, MockMemoryStore） | 高 | ✅ 已完成 | 2026-01-28 | 包含 .env 加载、临时目录和内存向量存储 Mock |
+| 1.4 | 实现 Mock Telegram API | 中 | ✅ 已完成 | 2026-01-28 | 使用 mockito 在集成测试中提供 getMe 和 sendMessage Mock 工具函数 |
+| 2.1 | 重构 `runner.rs` - 提取 Bot 组件初始化逻辑 | 高 | ✅ 已完成 | 2026-01-28 | 已实现 `initialize_bot_components` 和 `BotComponents` 结构，并通过 crate 测试 |
+| 2.2 | 重构 `runner.rs` - 创建可测试的 TelegramBot 结构 | 高 | ✅ 已完成 | 2026-01-28 | 在 `runner.rs` 中引入可测试的 `TelegramBot` 结构和 `BotComponents`，并通过所有现有测试 |
+| 2.3 | 实现 TelegramBot::new 和 new_with_memory_store 方法 | 高 | ✅ 已完成 | 2026-01-28 | 在 `runner.rs` 中实现 `TelegramBot::new` 和 `new_with_memory_store`，并通过自定义 MemoryStore 注入支持测试 |
+| 2.4 | 实现 TelegramBot::handle_message 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `handle_message`，复用现有 `HandlerChain` 逻辑，便于单元测试 |
+| 2.5 | 实现 TelegramBot::start_ai_handler 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `start_ai_handler`，以后台任务方式启动 AI 查询处理器 |
+| 3.1 | 实现 Lance 向量存储验证 | 高 | ⬜ 待开始 | - | 验证数据库创建和向量存储（当前通过 `MockMemoryStore` 提供计数器基础设施） |
+| 3.2 | 实现 Lance 向量查询验证 | 高 | ⬜ 待开始 | - | 验证向量相似度搜索（当前通过 `MockMemoryStore` 提供查询计数器） |
 | 3.3 | 实现真实 OpenAI API 集成测试 | 高 | ⬜ 待开始 | - | 使用真实 API Key 进行测试 |
 | 3.4 | 实现 AI 回复流程端到端测试 | 高 | ⬜ 待开始 | - | 完整流程验证 |
 | 4.1 | 创建配置示例文件 `.env.test.example` | 低 | ⬜ 待开始 | - | 包含所有测试配置项 |

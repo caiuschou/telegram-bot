@@ -32,6 +32,7 @@ use crate::store::MemoryStore;
 use crate::strategies::ContextStrategy;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
+use tracing::{debug, instrument};
 
 /// Represents a constructed context for AI conversation.
 ///
@@ -191,12 +192,23 @@ impl ContextBuilder {
     ///
     /// A constructed `Context` containing system message, conversation history,
     /// user preferences, and metadata.
+    #[instrument(
+        skip(self),
+        fields(
+            user_id = ?self.user_id,
+            conversation_id = ?self.conversation_id,
+            strategy_count = self.strategies.len()
+        )
+    )]
     pub async fn build(&self) -> Result<Context, anyhow::Error> {
+        debug!("Starting context build");
+
         let mut history = Vec::new();
         let mut preferences: Option<String> = None;
 
         // Execute strategies in order
         for strategy in &self.strategies {
+            debug!("Executing context strategy");
             let strategy_result = strategy
                 .build_context(
                     &*self.store,
@@ -208,9 +220,11 @@ impl ContextBuilder {
 
             match strategy_result {
                 StrategyResult::Messages(messages) => {
+                    debug!(message_count = messages.len(), "Strategy returned messages");
                     history.extend(messages);
                 }
                 StrategyResult::Preferences(prefs) => {
+                    debug!("Strategy returned user preferences");
                     preferences = Some(prefs);
                 }
                 StrategyResult::Empty => {}
@@ -228,6 +242,12 @@ impl ContextBuilder {
             message_count: history.len(),
             created_at: Utc::now(),
         };
+
+        debug!(
+            total_tokens = metadata.total_tokens,
+            message_count = metadata.message_count,
+            "Finished context build"
+        );
 
         Ok(Context {
             system_message: self.system_message.clone(),
