@@ -678,8 +678,8 @@ cargo clippy
 # 运行测试
 cargo test
 
-# 查看测试覆盖率
-cargo tarpaulin --out Html
+# 查看测试覆盖率（需先安装: cargo install cargo-llvm-cov）
+cargo llvm-cov --workspace --html --open
 ```
 
 ## 12. 常见问题和解决方案
