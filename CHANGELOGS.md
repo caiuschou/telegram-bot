@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- SyncAIHandler: AI runs synchronously in the handler chain, returns Reply(text) for middleware to save (Option 1)
+  - **ai-handlers**: new `SyncAIHandler` implementing `Handler`; on AI query (reply-to or @mention) builds context, calls AI (normal or streaming), sends reply to Telegram, returns `HandlerResponse::Reply(response_text)` so MemoryMiddleware saves it in `after()`. New module `sync_ai_handler.rs`.
+  - **telegram-bot runner**: removed channel and async AI task; `BotComponents` now has `sync_ai_handler: Arc<SyncAIHandler>` instead of `query_sender` and `ai_query_handler`. Chain uses `sync_ai_handler`; user message saved in middleware `before()`, AI reply saved in middleware `after()` when handler returns `Reply(text)`. Removed `start_ai_handler()` and its call from `run_bot`.
+  - **telegram-bot tests**: `test_ai_reply_complete_flow` no longer calls `start_ai_handler()` or polls; `handle_core_message` runs the full chain synchronously.
+  - **AIDetectionHandler** and **AIQueryHandler** remain in ai-handlers for now (tests, potential other use); runner no longer uses them.
+- HandlerResponse::Reply(String) so middleware can receive reply text in after()
+  - dbot-core: added variant `Reply(String)` to `HandlerResponse`; handlers that produce a reply can return it for middleware (e.g. memory) to use
+  - handler-chain: treats `Reply(_)` like `Stop` (break chain, pass response to after())
+  - memory_middleware: in after(), when response is `Reply(text)` and save_ai_responses is true, saves text as Assistant to MemoryStore via new `reply_to_memory_entry(message, text)`; removed TODO
+  - ai-handlers: removed duplicate user-message save in handle_query (user message is already saved by MemoryMiddleware in before()); AI reply still saved in handler (current flow produces reply asynchronously, so after() does not see Reply yet)
 - memory/context: split unit tests into separate files by type
   - **context/estimate_tokens_test.rs**: tests for `estimate_tokens` (token estimation)
   - **context/context_builder_test.rs**: tests for `ContextBuilder` (creation, for_user, with_strategy, with_system_message; MockStore and MockStrategy)

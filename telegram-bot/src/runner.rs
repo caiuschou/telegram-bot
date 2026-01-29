@@ -1,4 +1,4 @@
-use ai_handlers::{AIDetectionHandler, AIQuery, AIQueryHandler};
+use ai_handlers::SyncAIHandler;
 use anyhow::Result;
 use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
 use handler_chain::HandlerChain;
@@ -27,10 +27,8 @@ pub struct BotComponents {
     pub teloxide_bot: Bot,
     /// Bot 的用户名缓存
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    /// 发送到 AI 查询处理器的通道
-    pub query_sender: tokio::sync::mpsc::UnboundedSender<AIQuery>,
-    /// AI 查询处理器
-    pub ai_query_handler: AIQueryHandler,
+    /// 同步 AI 处理器（在链内执行，返回 Reply 供 middleware 存记忆）
+    pub sync_ai_handler: Arc<SyncAIHandler>,
     /// 向量记忆存储
     pub memory_store: Arc<dyn MemoryStore>,
 }
@@ -74,9 +72,6 @@ async fn build_bot_components(
     // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    // 创建 AI 查询通道
-    let (query_sender, query_receiver) = tokio::sync::mpsc::unbounded_channel();
-
     // 初始化 OpenAI 客户端
     let openai_client = OpenAIClient::with_base_url(
         config.openai_api_key.clone(),
@@ -103,24 +98,23 @@ async fn build_bot_components(
         }
     };
 
-    // 初始化 AI 查询处理器
-    let ai_query_handler = AIQueryHandler::new(
+    // 初始化同步 AI 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 在 after() 中存记忆）
+    let sync_ai_handler = Arc::new(SyncAIHandler::new(
+        bot_username.clone(),
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
         embedding_service,
-        query_receiver,
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
-    );
+    ));
 
     Ok(BotComponents {
         repo,
         teloxide_bot,
         bot_username,
-        query_sender,
-        ai_query_handler,
+        sync_ai_handler,
         memory_store,
     })
 }
@@ -187,12 +181,6 @@ impl TelegramBot {
     pub async fn new(config: BotConfig) -> Result<Self> {
         let components = initialize_bot_components(&config).await?;
 
-        // 初始化 AI 检测处理器
-        let ai_detection_handler = Arc::new(AIDetectionHandler::new(
-            components.bot_username.clone(),
-            Arc::new(components.query_sender.clone()),
-        ));
-
         // 初始化持久化中间件
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
@@ -202,11 +190,11 @@ impl TelegramBot {
             components.memory_store.clone(),
         ));
 
-        // 构建处理器链
+        // 构建处理器链（SyncAIHandler 在链内同步执行 AI，返回 Reply 供 memory_middleware 在 after() 中存 AI 回复）
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
-            .add_handler(ai_detection_handler);
+            .add_handler(components.sync_ai_handler.clone());
 
         Ok(Self {
             config,
@@ -222,12 +210,6 @@ impl TelegramBot {
     ) -> Result<Self> {
         let components = initialize_bot_components_with_store(&config, memory_store).await?;
 
-        // 初始化 AI 检测处理器
-        let ai_detection_handler = Arc::new(AIDetectionHandler::new(
-            components.bot_username.clone(),
-            Arc::new(components.query_sender.clone()),
-        ));
-
         // 初始化持久化中间件
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
@@ -241,7 +223,7 @@ impl TelegramBot {
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
-            .add_handler(ai_detection_handler);
+            .add_handler(components.sync_ai_handler.clone());
 
         Ok(Self {
             config,
@@ -286,13 +268,6 @@ impl TelegramBot {
         Ok(())
     }
 
-    /// 启动 AI 查询处理器任务。
-    pub fn start_ai_handler(self) {
-        let mut handler = self.components.ai_query_handler;
-        tokio::spawn(async move {
-            handler.run().await;
-        });
-    }
 }
 
 /// 运行 Telegram Bot 的主入口
@@ -315,9 +290,6 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
     let handler_chain = bot.handler_chain.clone();
     let bot_username = bot.components.bot_username.clone();
     let teloxide_bot = bot.components.teloxide_bot.clone();
-
-    // 启动 AI 查询处理器（在后台任务中运行）
-    bot.start_ai_handler();
 
     info!("Bot started successfully");
 

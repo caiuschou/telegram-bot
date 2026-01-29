@@ -64,7 +64,7 @@ impl MemoryMiddleware {
         })
     }
 
-    /// Creates a memory entry from a bot message.
+    /// Creates a memory entry from a bot message (user role).
     fn message_to_memory_entry(&self, message: &Message) -> MemoryEntry {
         let user_id = Some(message.user.id.to_string());
         let conversation_id = Some(message.chat.id.to_string());
@@ -79,6 +79,23 @@ impl MemoryMiddleware {
         };
 
         MemoryEntry::new(message.content.clone(), metadata)
+    }
+
+    /// Creates a memory entry for an assistant reply (e.g. from HandlerResponse::Reply(text)).
+    fn reply_to_memory_entry(&self, message: &Message, reply_text: &str) -> MemoryEntry {
+        let user_id = Some(message.user.id.to_string());
+        let conversation_id = Some(message.chat.id.to_string());
+
+        let metadata = MemoryMetadata {
+            user_id,
+            conversation_id,
+            role: MemoryRole::Assistant,
+            timestamp: Utc::now(),
+            tokens: None,
+            importance: None,
+        };
+
+        MemoryEntry::new(reply_text.to_string(), metadata)
     }
 
     /// Builds conversation context for a message.
@@ -141,11 +158,11 @@ impl Middleware for MemoryMiddleware {
         Ok(true)
     }
 
-    #[instrument(skip(self, message, _response))]
+    #[instrument(skip(self, message, response))]
     async fn after(
         &self,
         message: &Message,
-        _response: &HandlerResponse,
+        response: &HandlerResponse,
     ) -> Result<()> {
         let user_id = message.user.id.to_string();
         let conversation_id = message.chat.id.to_string();
@@ -156,9 +173,21 @@ impl Middleware for MemoryMiddleware {
             "MemoryMiddleware: Processing response"
         );
 
-        // TODO: Save AI response to memory when the AI response mechanism is updated
-        // The current HandlerResponse enum (Continue, Stop, Ignore) doesn't include response text
-        // This requires modifying the AI integration to return the response text
+        // Save AI response to memory when handler returns Reply(text) and config allows.
+        if self.config.save_ai_responses {
+            if let HandlerResponse::Reply(text) = response {
+                let entry = self.reply_to_memory_entry(message, text);
+                if let Err(e) = self.config.store.add(entry.clone()).await {
+                    error!(error = %e, "Failed to save AI response to memory");
+                } else {
+                    debug!(
+                        user_id = %user_id,
+                        conversation_id = %conversation_id,
+                        "Saved AI response to memory"
+                    );
+                }
+            }
+        }
 
         Ok(())
     }
@@ -244,10 +273,25 @@ mod tests {
 
         middleware.after(&message, &response).await.unwrap();
 
-        // Note: AI response saving is not yet implemented
-        // This test just verifies the method doesn't panic
+        // Continue carries no reply text, so nothing is saved
         let entries = store.search_by_user("123").await.unwrap();
         assert_eq!(entries.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_memory_middleware_after_saves_reply_to_memory() {
+        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
+        let middleware = MemoryMiddleware::with_store(store.clone());
+        let message = create_test_message("Hello");
+
+        let response = HandlerResponse::Reply("AI reply here.".to_string());
+
+        middleware.after(&message, &response).await.unwrap();
+
+        let entries = store.search_by_user("123").await.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "AI reply here.");
+        assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
     }
 
     #[tokio::test]

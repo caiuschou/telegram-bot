@@ -34,11 +34,17 @@ pub enum MessageDirection {
     Outgoing,
 }
 
+/// Handler result for the chain. `Reply(text)` carries the response body so middleware (e.g. memory) can use it in `after()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HandlerResponse {
+    /// Pass to next handler.
     Continue,
+    /// Stop the chain; no response body.
     Stop,
+    /// Skip this handler, try next.
     Ignore,
+    /// Stop the chain and attach reply text for middleware (e.g. save AI response to memory in `after()`).
+    Reply(String),
 }
 
 pub trait ToCoreUser: Send + Sync {

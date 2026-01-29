@@ -78,7 +78,7 @@ impl AIQueryHandler {
             "Processing AI query"
         );
 
-        self.save_to_memory(&query, &query.question, MemoryRole::User).await;
+        // User message is saved by MemoryMiddleware in before(); avoid duplicate save here.
 
         if self.use_streaming {
             self.handle_query_streaming(query).await

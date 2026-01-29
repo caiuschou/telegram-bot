@@ -47,7 +47,7 @@ impl HandlerChain {
             );
 
             match response {
-                HandlerResponse::Stop => {
+                HandlerResponse::Stop | HandlerResponse::Reply(_) => {
                     info!("Handler chain stopped");
                     final_response = response;
                     break;
@@ -187,6 +187,51 @@ mod tests {
 
         assert_eq!(result, HandlerResponse::Stop);
         assert_eq!(handle_count.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_handler_reply_stops_chain_and_passes_to_after() {
+        struct ReplyHandler;
+
+        #[async_trait::async_trait]
+        impl Handler for ReplyHandler {
+            async fn handle(&self, _message: &Message) -> Result<HandlerResponse> {
+                Ok(HandlerResponse::Reply("AI reply.".to_string()))
+            }
+        }
+
+        let after_count = Arc::new(AtomicUsize::new(0));
+
+        struct CaptureResponseMiddleware {
+            after_count: Arc<AtomicUsize>,
+        }
+
+        #[async_trait::async_trait]
+        impl Middleware for CaptureResponseMiddleware {
+            async fn before(&self, _message: &Message) -> Result<bool> {
+                Ok(true)
+            }
+
+            async fn after(&self, _message: &Message, response: &HandlerResponse) -> Result<()> {
+                self.after_count.fetch_add(1, Ordering::SeqCst);
+                if let HandlerResponse::Reply(text) = response {
+                    assert_eq!(text, "AI reply.");
+                }
+                Ok(())
+            }
+        }
+
+        let chain = HandlerChain::new()
+            .add_middleware(Arc::new(CaptureResponseMiddleware {
+                after_count: after_count.clone(),
+            }))
+            .add_handler(Arc::new(ReplyHandler));
+
+        let message = create_test_message("test");
+        let result = chain.handle(&message).await.unwrap();
+
+        assert_eq!(result, HandlerResponse::Reply("AI reply.".to_string()));
+        assert_eq!(after_count.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
