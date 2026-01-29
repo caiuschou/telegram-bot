@@ -110,19 +110,6 @@ fn test_format_for_model_distinguishes_recent_and_semantic() {
 }
 
 #[test]
-fn test_conversation_history_returns_recent_then_semantic() {
-    let ctx = make_context(
-        None,
-        vec!["A".to_string(), "B".to_string()],
-        vec!["C".to_string()],
-        None,
-        5,
-    );
-    let all = ctx.conversation_history();
-    assert_eq!(all, vec!["A", "B", "C"]);
-}
-
-#[test]
 fn test_is_empty() {
     let empty = make_context(None, vec![], vec![], None, 0);
     assert!(empty.is_empty());

@@ -422,16 +422,6 @@ impl Context {
         )
     }
 
-    /// Returns all messages in order: recent first, then semantic.
-    /// Use when you need a single combined list (e.g. for backward compatibility or token count).
-    pub fn conversation_history(&self) -> Vec<String> {
-        self.recent_messages
-            .iter()
-            .chain(self.semantic_messages.iter())
-            .cloned()
-            .collect()
-    }
-
     /// Returns true if there are no recent and no semantic messages.
     pub fn is_empty(&self) -> bool {
         self.recent_messages.is_empty() && self.semantic_messages.is_empty()

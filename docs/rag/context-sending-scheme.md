@@ -22,26 +22,29 @@
 | 3. 单条格式化 | `memory-strategies::utils::format_message` | 每条 `MemoryEntry` 转为 `"{Role}: {content}"`，其中 Role 来自 `entry.metadata.role`：`User` → `"User:"`，`Assistant` → `"Assistant:"`，`System` → `"System:"`。 |
 | 4. 归入 Context | `ContextBuilder::build` | 策略返回 `StrategyResult::Messages { category: Recent, messages }`，这些字符串进入 `Context.recent_messages`。 |
 | 5. 拼成一段文本 | `prompt::format_for_model` | 输出 `"Conversation (recent):\n"` + 每行一条 `"User: ..."` / `"Assistant: ..."`，即历史消息是**多行纯文本**，不是 JSON 数组。 |
-| 6. 放入本次请求 | `SyncAIHandler::format_question_with_context` + `TelegramBotAI::get_ai_response` | 这段文本作为**唯一一条 user 消息的 content 的前半部分**，后半部分为 `"\n\n用户提问: "` + 当前用户问题。 |
+| 6. 放入本次请求 | `SyncAIHandler::build_messages_for_ai` → `Context::to_messages` + `TelegramBotAI::get_ai_response_with_messages` / `get_ai_response_stream_with_messages` | 将 context 转为 `Vec<ChatMessage>`（system / user / assistant），与当前用户问题一起作为多条 API 消息发送。 |
 
-### 2.2 融入方式：文本块 vs 多条 API 消息
+### 2.2 融入方式：多条 API 消息
 
-OpenAI Chat Completions 的 `messages` 可以是多轮对话，例如：
+OpenAI Chat Completions 的 `messages` 支持多轮对话，例如：
 
 ```json
 [
+  { "role": "system", "content": "You are helpful." },
   { "role": "user", "content": "你好" },
   { "role": "assistant", "content": "你好！有什么可以帮你的？" },
   { "role": "user", "content": "今天天气怎么样" }
 ]
 ```
 
-**当前实现采用的不是上述方式**。历史消息没有拆成多条 `role: user` / `role: assistant` 的 API 消息，而是：
+**当前实现采用上述方式**。`Context::to_messages(include_system, current_question)` 将近期对话、语义参考、用户偏好与当前问题组装为 `Vec<ChatMessage>`，其中：
 
-- 在应用内先格式化成 **「User: ...」「Assistant: ...」的多行文本**；
-- 再整体作为 **一条 `role: user` 的 `content`** 的前半段，与「用户提问: 」+ 当前问题拼接。
+- 可选一条 `role: system`（系统说明）；
+- 近期对话（recent）被解析为多条 `role: user` / `role: assistant` / `role: system`，与 API 一一对应；
+- 用户偏好与语义参考合并为一条或多条 `role: user` 的 content；
+- 最后一条 `role: user` 为当前用户问题。
 
-因此：**历史消息是以「会话摘要文本块」的形式融入 OpenAI 会话的**，模型看到的是「一段包含近期对话记录的文字 + 当前问题」，而不是 API 层面的多轮 message 列表。这样做的优点是实现简单、token 可控（可截断/省略），缺点是多轮边界在 content 内由模型自行理解。
+`SyncAIHandler::build_messages_for_ai` 调用 `to_messages` 后，将结果传给 `TelegramBotAI::get_ai_response_with_messages` 或 `get_ai_response_stream_with_messages`，直接作为 OpenAI 请求体中的 `messages` 数组。
 
 ### 2.3 单条历史消息的文本格式
 

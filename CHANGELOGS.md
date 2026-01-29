@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Context 相关冗余代码与文档同步**
+  - **ai-handlers**：删除未在流程中使用的 `SyncAIHandler::format_question_with_context`；当前流程使用 `build_messages_for_ai` → `Context::to_messages` + `get_ai_response_with_messages` / `get_ai_response_stream_with_messages`。
+  - **memory**：删除仅被单测使用的 `Context::conversation_history()`；生产代码无调用方。
+  - **测试**：`sync_ai_handler_test.rs` 移除对 `format_question_with_context` 的测试；`context_test.rs` 移除 `test_conversation_history_returns_recent_then_semantic`。
+  - **文档**：`docs/rag/context-sending-scheme.md` 与 `docs/rag/context-retrieval-before-reply.md` 更新为当前实现（`to_messages` + `get_ai_response_with_messages`），不再描述已废弃的「单条 user 消息 + format_question_with_context」流程。
+
 ### Added
 - **Context 返回带类型的 chat messages（system / user / assistant）**
   - **prompt crate**：新增 `parse_message_line(line)`，解析 "User: ..." / "Assistant: ..." / "System: ..." 为对应角色的 `ChatMessage`；新增 `format_for_model_as_messages_with_roles(...)`，将 recent 对话行解析为多条带正确角色的消息，再追加可选的 preferences+semantic 块与当前问题。

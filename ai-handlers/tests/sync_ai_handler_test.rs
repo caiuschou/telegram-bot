@@ -1,6 +1,6 @@
 //! Unit tests for SyncAIHandler.
 //!
-//! Covers: is_bot_mentioned, extract_question, get_question, format_question_with_context.
+//! Covers: is_bot_mentioned, extract_question, get_question.
 //! Uses in-memory SQLite, MockEmbeddingService, and dummy Bot/TelegramBotAI; does not call Telegram or OpenAI.
 
 use ai_handlers::SyncAIHandler;
@@ -163,24 +163,4 @@ async fn test_get_question_no_bot_username_mention_ignored() {
     let msg = make_message("@bot hello", None);
     let q = h.get_question(&msg, None);
     assert_eq!(q, None);
-}
-
-// --- format_question_with_context ---
-
-#[tokio::test]
-async fn test_format_question_with_context_empty_context() {
-    let h = test_handler(Some("bot")).await;
-    let out = h.format_question_with_context("What is AI?", "");
-    assert_eq!(out, "What is AI?");
-}
-
-#[tokio::test]
-async fn test_format_question_with_context_non_empty() {
-    let h = test_handler(Some("bot")).await;
-    let ctx = "Previous: User said hello. Bot said hi.";
-    let out = h.format_question_with_context("What did I say?", ctx);
-    assert_eq!(
-        out,
-        "Previous: User said hello. Bot said hi.\n\n用户提问: What did I say?"
-    );
 }

@@ -37,16 +37,18 @@ SyncAIHandler.handle() 识别为 AI 查询
     ↓
 process_normal / process_streaming
     ↓
-build_memory_context(user_id, conversation_id, question)   ← 先查相关上下文
+build_messages_for_ai(user_id, conversation_id, question)
     ↓
-ContextBuilder 依次执行策略：
-  - RecentMessagesStrategy：最近 N 条消息
-  - SemanticSearchStrategy：用 question 做语义检索（embed + semantic_search）
-  - UserPreferencesStrategy：用户偏好
+  build_memory_context(...)   ← 先查相关上下文
     ↓
-format_question_with_context(question, context)
+  ContextBuilder 依次执行策略：
+    - RecentMessagesStrategy：最近 N 条消息
+    - SemanticSearchStrategy：用 question 做语义检索（embed + semantic_search）
+    - UserPreferencesStrategy：用户偏好
     ↓
-get_ai_response(question_with_context) / get_ai_response_stream(...)   ← 再调用 AI
+  context.to_messages(true, question)  → Vec<ChatMessage>
+    ↓
+get_ai_response_with_messages(messages) / get_ai_response_stream_with_messages(messages, ...)   ← 再调用 AI
     ↓
 发送回复并写入记忆
 ```
@@ -61,42 +63,40 @@ get_ai_response(question_with_context) / get_ai_response_stream(...)   ← 再�
 
 ### 普通模式（process_normal）
 
-在处理每条 AI 查询时，先调用 `build_memory_context` 得到上下文，再调用 `get_ai_response`。
+在处理每条 AI 查询时，先通过 `build_messages_for_ai` 构建上下文并转为 chat messages，再调用 `get_ai_response_with_messages`。
 
 | 行号（约） | 说明 |
 |-----------|------|
-| 159-185   | `process_normal`：先 `build_memory_context`，再 `format_question_with_context`，最后 `get_ai_response` |
+| 218-250   | `process_normal`：先 `build_messages_for_ai`（内部 `build_memory_context` + `context.to_messages`），再 `get_ai_response_with_messages(messages)` |
 
 相关代码逻辑：
 
 ```rust
-let context = self
-    .build_memory_context(&user_id_str, &conversation_id_str, &query.question)
+let messages = self
+    .build_messages_for_ai(&user_id, &conversation_id, question)
     .await;
-let question_with_context = self.format_question_with_context(&query.question, &context);
 
-match self.ai_bot.get_ai_response(&question_with_context).await {
+match self.ai_bot.get_ai_response_with_messages(messages).await {
     // ...
 }
 ```
 
 ### 流式模式（process_streaming）
 
-同样先构建上下文，再流式请求 AI。
+同样先通过 `build_messages_for_ai` 构建 messages，再流式请求 AI。
 
 | 行号（约） | 说明 |
 |-----------|------|
-| 189-256   | `process_streaming`：先 `build_memory_context`，再 `format_question_with_context`，最后 `get_ai_response_stream` |
+| 256-318   | `process_streaming`：先 `build_messages_for_ai`，再 `get_ai_response_stream_with_messages(messages, ...)` |
 
 相关代码逻辑：
 
 ```rust
-let context = self
-    .build_memory_context(&user_id_str, &conversation_id_str, &query.question)
+let messages = self
+    .build_messages_for_ai(&user_id, &conversation_id, question)
     .await;
-let question_with_context = self.format_question_with_context(&query.question, &context);
 // ...
-match self.ai_bot.get_ai_response_stream(&question_with_context, |chunk| { ... })
+match self.ai_bot.get_ai_response_stream_with_messages(messages, |chunk| { ... }).await { ... }
 ```
 
 ---

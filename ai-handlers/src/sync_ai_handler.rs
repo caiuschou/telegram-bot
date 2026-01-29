@@ -149,16 +149,6 @@ impl SyncAIHandler {
         }
     }
 
-    /// Prepends memory context to the user question when context is non-empty. Used before sending to LLM.
-    /// External: none (pure function). Public for integration tests in `tests/`.
-    pub fn format_question_with_context(&self, question: &str, context: &str) -> String {
-        if context.is_empty() {
-            question.to_string()
-        } else {
-            format!("{}\n\n用户提问: {}", context, question)
-        }
-    }
-
     // ---------- Sending & logging ----------
 
     async fn send_response_for_message(&self, message: &Message, response: &str) -> Result<()> {
