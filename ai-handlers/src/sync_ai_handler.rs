@@ -55,17 +55,23 @@ impl SyncAIHandler {
         self.bot_username.read().await.clone()
     }
 
-    fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
+    /// Returns true if the given text contains a @mention of the bot. Used by handler to detect AI queries.
+    /// External: none (pure function). Public for integration tests in `tests/`.
+    pub fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
         text.contains(&format!("@{}", bot_username))
     }
 
-    fn extract_question(&self, text: &str, bot_username: &str) -> String {
+    /// Strips the bot @mention from text and returns the trimmed question. Used when processing @mention messages.
+    /// External: none (pure function). Public for integration tests in `tests/`.
+    pub fn extract_question(&self, text: &str, bot_username: &str) -> String {
         text.replace(&format!("@{}", bot_username), "")
             .trim()
             .to_string()
     }
 
-    fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
+    /// Resolves the user question: from reply-to-message content or from @mention text. Returns None if not an AI query.
+    /// External: uses Message (dbot_core) fields only. Public for integration tests in `tests/`.
+    pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
         if message.reply_to_message_id.is_some() {
             return Some(message.content.clone());
         }
@@ -113,7 +119,9 @@ impl SyncAIHandler {
         }
     }
 
-    fn format_question_with_context(&self, question: &str, context: &str) -> String {
+    /// Prepends memory context to the user question when context is non-empty. Used before sending to LLM.
+    /// External: none (pure function). Public for integration tests in `tests/`.
+    pub fn format_question_with_context(&self, question: &str, context: &str) -> String {
         if context.is_empty() {
             question.to_string()
         } else {
@@ -178,6 +186,12 @@ impl SyncAIHandler {
             }
             Err(e) => {
                 error!(error = %e, "Failed to get AI response");
+                // 401 / 令牌类错误通常为 OPENAI_API_KEY 或 OPENAI_BASE_URL 配置问题，便于排查时在日志中识别
+                if format!("{}", e).contains("401") || format!("{}", e).contains("令牌") {
+                    error!(
+                        "Hint: 401/令牌错误通常表示 OPENAI_API_KEY 已过期、无效，或与 OPENAI_BASE_URL 对应的服务不匹配，请检查 .env 配置"
+                    );
+                }
                 let _ = self
                     .send_response_for_message(message, "抱歉，处理您的请求时出错，请稍后重试。")
                     .await;

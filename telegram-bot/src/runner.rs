@@ -66,8 +66,21 @@ async fn build_bot_components(
             })?,
     );
 
-    // 初始化 Telegram Bot
-    let teloxide_bot = Bot::new(config.bot_token.clone());
+    // 初始化 Telegram Bot；若配置了 TELEGRAM_API_URL / TELOXIDE_API_URL（如测试 mock 服务器），则指向该 URL
+    let teloxide_bot = {
+        let bot = Bot::new(config.bot_token.clone());
+        if let Some(ref url_str) = config.telegram_api_url {
+            match reqwest::Url::parse(url_str) {
+                Ok(url) => bot.set_api_url(url),
+                Err(e) => {
+                    error!(error = %e, url = %url_str, "Invalid TELEGRAM_API_URL, using default");
+                    bot
+                }
+            }
+        } else {
+            bot
+        }
+    };
 
     // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));

@@ -7,11 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-- **ai-handlers**: removed unused async AI pipeline
-  - Deleted `ai_response_handler.rs` and `ai_response_handler_test.rs`; runner uses only `SyncAIHandler` (in-chain sync AI, returns `Reply` for middleware). No longer exporting `AIQueryHandler`. Docs and README updated to reference `sync_ai_handler.rs` and `SyncAIHandler`.
+### Added
+- **openai-client**: Request logging and masked token
+  - Log each chat completion request: `model`, `message_count`, and masked `api_key` (first 7 + `***` + last 4 chars; keys ≤11 chars log as `***`).
+  - Log response token usage: `prompt_tokens`, `completion_tokens`, `total_tokens` for non-stream and stream (when API returns usage).
+  - New public `mask_token(token)` for safe logging; optional `api_key_for_logging` stored in client when created via `new()` / `with_base_url()` (not set for `with_client()`).
+  - Unit tests in `openai-client/tests/mask_token_test.rs` for `mask_token`.
+  - Dependency: `tracing`.
+
+### Fixed
+- **telegram-bot integration test**: Telegram API 改为 mock，不再访问真实 API
+  - `test_ai_reply_complete_flow` 此前使用假 `BOT_TOKEN` 调用真实 Telegram，导致 "Invalid bot token"。
+  - 新增可选配置 `BotConfig::telegram_api_url`（环境变量 `TELEGRAM_API_URL` 或 `TELOXIDE_API_URL`），runner 中若设置则对 `Bot` 调用 `set_api_url` 指向该 URL。
+  - 集成测试中启动 `mockito::Server::new_async()`，注册 getMe / sendMessage mock（路径 `/bot<token>/getMe`、`/bot<token>/sendMessage`），并设置 `TELEGRAM_API_URL`，使 Telegram 请求发往本地 mock，无需真实 token。
+  - 测试结束移除 `TELEGRAM_API_URL`，避免影响其他测试。
 
 ### Added
+- **ai-handlers**: SyncAIHandler unit tests in dedicated directory (same level as `src`)
+  - Added `ai-handlers/tests/sync_ai_handler_test.rs` (integration tests; `tests/` and `src/` are siblings).
+  - Tests cover: `is_bot_mentioned`, `extract_question`, `get_question`, `format_question_with_context` (reply-to content, @mention extraction, empty context vs with context).
+  - Uses in-memory SQLite, `MockEmbeddingService`, and dummy Bot/TelegramBotAI; no Telegram or OpenAI calls.
+  - Exposed `is_bot_mentioned`, `extract_question`, `get_question`, `format_question_with_context` as `pub` with doc comments for tests in `tests/`; removed `src/tests/` and `#[cfg(test)] mod tests` from lib.rs.
 - middleware: unit tests split into independent file
   - Added `crates/middleware/src/memory_middleware_test.rs` with all MemoryMiddleware unit tests (MemoryConfig default, creation, message_to_memory_entry, before/after saving, build_context); tests use InMemoryVectorStore and do not call external services
   - Removed inline `#[cfg(test)] mod tests` from `memory_middleware.rs`
@@ -102,6 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add ZhipuAI SDK and API references in references.md
   - Model: embedding-2 (1024 dimensions)
   - Python SDK: `pip install zhipuai`
+
+### Removed
+- **ai-handlers**: removed unused async AI pipeline
+  - Deleted `ai_response_handler.rs` and `ai_response_handler_test.rs`; runner uses only `SyncAIHandler` (in-chain sync AI, returns `Reply` for middleware). No longer exporting `AIQueryHandler`. Docs and README updated to reference `sync_ai_handler.rs` and `SyncAIHandler`.
 
 ### Changed
 - middleware: unit tests moved to dedicated directory

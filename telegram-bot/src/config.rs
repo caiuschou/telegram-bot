@@ -18,6 +18,9 @@ pub struct BotConfig {
     pub embedding_provider: String,
     /// 智谱 / BigModel API Key。当 `embedding_provider == "zhipuai"` 时必填。
     pub bigmodel_api_key: String,
+    /// 可选：Telegram Bot API 基础 URL。设置后 Bot 请求将发往该 URL（用于测试时指向 mock 服务器）。
+    /// 环境变量：`TELEGRAM_API_URL` 或 `TELOXIDE_API_URL`。
+    pub telegram_api_url: Option<String>,
 }
 
 impl BotConfig {
@@ -49,6 +52,10 @@ impl BotConfig {
             .or_else(|_| env::var("ZHIPUAI_API_KEY"))
             .unwrap_or_default();
 
+        let telegram_api_url = env::var("TELEGRAM_API_URL")
+            .or_else(|_| env::var("TELOXIDE_API_URL"))
+            .ok();
+
         Ok(Self {
             bot_token,
             database_url,
@@ -63,6 +70,7 @@ impl BotConfig {
             memory_lance_path,
             embedding_provider,
             bigmodel_api_key,
+            telegram_api_url,
         })
     }
 }
@@ -91,10 +99,13 @@ mod tests {
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
+        env::remove_var("TELEGRAM_API_URL");
+        env::remove_var("TELOXIDE_API_URL");
 
         let config = BotConfig::load(None).unwrap();
 
         assert_eq!(config.bot_token, "test_token");
+        assert!(config.telegram_api_url.is_none());
         assert_eq!(config.database_url, "file:./telegram_bot.db");
         assert_eq!(config.log_file, "logs/telegram-bot.log");
         assert_eq!(config.openai_api_key, "test_key");
@@ -133,6 +144,8 @@ mod tests {
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
+        env::remove_var("TELEGRAM_API_URL");
+        env::remove_var("TELOXIDE_API_URL");
 
         let config = BotConfig::load(None).unwrap();
 

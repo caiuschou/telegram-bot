@@ -72,6 +72,34 @@ cargo build --release --bin telegram-bot
 1. 检查程序对目录有写入权限
 2. 尝试删除现有的 `telegram_bot.db` 文件重新初始化
 
+### 错误: Failed to get AI response / 令牌已过期或验证不正确 (code: 401)
+
+**原因**: 调用对话模型 API（由 `OPENAI_API_KEY` + `OPENAI_BASE_URL` 指定）时，服务端返回 401，表示认证失败。常见情况：
+
+- **API Key 过期或已撤销**：在对应平台重新生成 Key 并更新 `.env` 中的 `OPENAI_API_KEY`
+- **Key 与 Base URL 不匹配**：例如 Key 是 A 平台的，`OPENAI_BASE_URL` 却指向 B 平台或代理，需保证 Key 和 URL 属于同一服务
+- **Key 填写错误**：多/少空格、复制不完整、误用其他环境的 Key
+
+**解决方法**:
+1. 确认 `.env` 中 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 对应同一服务（官方 OpenAI、代理或国内兼容接口等）
+2. 在提供 Key 的平台检查该 Key 是否有效、未过期、未撤销
+3. 若使用代理或自建接口，确认其要求的认证方式（如 Bearer token）与当前配置一致
+4. 重新生成 Key 后，更新 `OPENAI_API_KEY` 并重启 Bot
+
+### 错误: Failed to send message / Failed to send AI response（JSON: EOF, raw: ""）
+
+**现象**: 日志出现 `Failed to send message` 或 `Failed to send AI response`，错误内容为 `An error while parsing JSON: EOF while parsing a value at line 1 column 0 (raw: "")`。
+
+**原因**: 向 Telegram 发送消息时，请求的接口返回了**空响应体**，teloxide 按 JSON 解析失败。常见情况：
+
+- **环境里设置了 `TELEGRAM_API_URL` 或 `TELOXIDE_API_URL`**：例如跑过集成测试后未取消，或误指向了 mock/代理，该地址返回了空内容而非 Telegram 标准 JSON。
+- 网络或代理导致响应被截断、返回空 body。
+
+**解决方法**:
+1. **正式环境不要设置** Telegram 自定义 URL：在 `.env` 和当前 shell 中**不要**设置 `TELEGRAM_API_URL`、`TELOXIDE_API_URL`，让 Bot 使用默认 `api.telegram.org`。
+2. 若刚跑过测试，在运行 Bot 的终端执行 `unset TELEGRAM_API_URL TELOXIDE_API_URL` 后重新启动。
+3. 确认网络可访问 `api.telegram.org`，且无代理/防火墙把响应体清空。
+
 ## 可用命令
 
 | 命令 | 功能 |
@@ -105,6 +133,8 @@ cargo build --release --bin telegram-bot
 ```
 
 ## 日志查看
+
+通过 `run_bot`（如 `dbot`）启动时，会先创建 `logs` 目录并初始化日志：**日志会同时写入控制台和文件** `logs/telegram-bot.log`（路径相对运行时的当前工作目录）。若从项目根目录运行，完整路径为 `./logs/telegram-bot.log`。
 
 实时查看日志：
 
