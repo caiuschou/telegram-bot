@@ -128,6 +128,28 @@ let store = LanceVectorStore::with_config(config).await?;
 - 检查 `LANCE_DB_PATH` 目录是否存在
 - 确保程序有读写权限
 
+## 完整策略：Lance + SemanticSearchStrategy
+
+语义检索策略（`SemanticSearchStrategy`）与 Lance 存储配合使用，构成完整的“词向量写入 → 向量检索 → 上下文构建”链路：
+
+1. **写入**：消息经 `EmbeddingService` 得到向量后，以 `MemoryEntry`（含 `embedding`）写入 `LanceVectorStore`。
+2. **检索**：用户提问时，`SemanticSearchStrategy` 用 `EmbeddingService` 对查询文本生成查询向量，再调用 `store.semantic_search(&query_embedding, limit)`，由 Lance 做最近邻检索。
+3. **上下文**：检索到的 `MemoryEntry` 被格式化为消息列表，作为 AI 的上下文。
+
+### 验证方式
+
+项目通过集成测试使用**真实 Lance 存储**和**可复现的词向量**验证该链路：
+
+- **memory-lance** 测试：
+  - `lance_vector_store_integration_test.rs`：Lance 的 CRUD、按用户/会话检索、语义检索、持久化。
+  - `lance_semantic_strategy_integration_test.rs`：Lance + `SemanticSearchStrategy` + 按查询返回向量的 Mock Embedding；写入三条带不同 one-hot 向量的 MemoryEntry，对查询「猫」断言返回「关于猫」的消息（最近邻一致）。
+
+运行 Lance 相关测试：
+
+```bash
+cargo test -p memory-lance
+```
+
 ## 参考文档
 
 - [Lance 官方文档](https://lancedb.github.io/lance/)

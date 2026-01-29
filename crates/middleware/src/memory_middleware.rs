@@ -121,7 +121,7 @@ impl MemoryMiddleware {
         let context = builder.build().await
             .map_err(|e| dbot_core::DbotError::Unknown(e.to_string()))?;
 
-        if context.conversation_history.is_empty() {
+        if context.is_empty() {
             Ok(None)
         } else {
             let formatted = context.format_for_model(false);

@@ -4,7 +4,7 @@
 //! External interactions: MemoryStore (search_by_conversation, search_by_user); AI context.
 
 use async_trait::async_trait;
-use memory_core::{MemoryStore, StrategyResult};
+use memory_core::{MessageCategory, MemoryStore, StrategyResult};
 use tracing::{debug, info};
 
 use super::strategy::ContextStrategy;
@@ -29,6 +29,10 @@ impl RecentMessagesStrategy {
 
 #[async_trait]
 impl ContextStrategy for RecentMessagesStrategy {
+    fn name(&self) -> &str {
+        "RecentMessages"
+    }
+
     /// Builds context by retrieving the most recent conversation messages.
     ///
     /// Prioritizes conversation-based retrieval if conversation_id is provided,
@@ -88,7 +92,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                     "context message"
                 );
             }
-            return Ok(StrategyResult::Messages(messages));
+            return Ok(StrategyResult::Messages {
+                category: MessageCategory::Recent,
+                messages,
+            });
         }
 
         if let Some(uid) = user_id {
@@ -126,7 +133,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                     "context message"
                 );
             }
-            return Ok(StrategyResult::Messages(messages));
+            return Ok(StrategyResult::Messages {
+                category: MessageCategory::Recent,
+                messages,
+            });
         }
 
         debug!("RecentMessagesStrategy: no user_id or conversation_id, returning Empty");

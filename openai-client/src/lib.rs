@@ -4,8 +4,8 @@ use std::sync::Arc;
 use tracing;
 
 pub use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-    ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestMessage,
+    ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
 };
 
 /// Masks an API key/token for safe logging: shows first 7 chars + "***" + last 4 chars.

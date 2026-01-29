@@ -20,4 +20,5 @@ members = [
     "crates/memory-lance",
     "crates/handler-chain",
     "crates/middleware",
+    "crates/prompt",
 ]

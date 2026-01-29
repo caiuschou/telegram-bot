@@ -38,11 +38,11 @@ Performs semantic search using vector embeddings. Returns the top `limit` most s
 
 ### Implementations
 
-#### Planned Implementations
+#### Implementations
 
-- **InMemoryVectorStore**: Simple in-memory storage for testing and development
-- **SQLiteVectorStore**: Persistent storage using SQLite
-- **LanceVectorStore**: High-performance vector database (future)
+- **InMemoryVectorStore** (memory-inmemory): Simple in-memory storage for testing and development
+- **SQLiteVectorStore** (memory-sqlite): Persistent storage using SQLite
+- **LanceVectorStore** (memory-lance): High-performance vector storage using LanceDB; supports semantic search and is verified by integration tests with real vectors (see `memory-lance/tests/lance_vector_store_integration_test.rs` and `lance_semantic_strategy_integration_test.rs`)
 
 ### Example Usage
 

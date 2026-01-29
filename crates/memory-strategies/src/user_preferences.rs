@@ -23,6 +23,10 @@ impl UserPreferencesStrategy {
 
 #[async_trait]
 impl ContextStrategy for UserPreferencesStrategy {
+    fn name(&self) -> &str {
+        "UserPreferences"
+    }
+
     /// Builds context by extracting user preferences from conversation history.
     ///
     /// Analyzes all historical messages for a user to identify expressed

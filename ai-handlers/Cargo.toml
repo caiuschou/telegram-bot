@@ -9,6 +9,7 @@ storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory-inmemory" }
+prompt = { path = "../crates/prompt" }
 embedding = { path = "../crates/embedding" }
 teloxide = { version = "0.17", features = ["macros"] }
 async-trait = "0.1"

@@ -3,8 +3,29 @@ use openai_client::{
     ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
     ChatCompletionRequestUserMessageArgs, OpenAIClient,
 };
+use prompt::{ChatMessage, MessageRole};
 use teloxide::{prelude::*, types::Message};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
+
+fn chat_message_to_openai(msg: &ChatMessage) -> anyhow::Result<ChatCompletionRequestMessage> {
+    use openai_client::ChatCompletionRequestAssistantMessageArgs;
+    let content = msg.content.clone();
+    let openai_msg: ChatCompletionRequestMessage = match msg.role {
+        MessageRole::System => ChatCompletionRequestSystemMessageArgs::default()
+            .content(content)
+            .build()?
+            .into(),
+        MessageRole::User => ChatCompletionRequestUserMessageArgs::default()
+            .content(content)
+            .build()?
+            .into(),
+        MessageRole::Assistant => ChatCompletionRequestAssistantMessageArgs::default()
+            .content(content)
+            .build()?
+            .into(),
+    };
+    Ok(openai_msg)
+}
 
 #[derive(Clone)]
 pub struct TelegramBotAI {
@@ -102,24 +123,28 @@ impl TelegramBotAI {
 
     #[instrument(skip(self))]
     pub async fn get_ai_response(&self, question: &str) -> Result<String> {
-        debug!(question = %question, model = %self.model, "Getting AI response");
+        self.get_ai_response_with_messages(vec![ChatMessage::user(question)])
+            .await
+    }
 
-        let system_message: ChatCompletionRequestMessage =
+    /// Default system instruction (Chinese assistant, plain text for Telegram). Used when prepending system to messages.
+    const DEFAULT_SYSTEM_CONTENT: &'static str = "你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。";
+
+    /// Sends messages that map one-to-one to OpenAI `messages` (e.g. from `prompt::format_for_model_as_messages` or `Context::to_messages`).
+    /// Prepends a system message so the full list is [System(DEFAULT_SYSTEM_CONTENT), ...messages].
+    #[instrument(skip(self, messages))]
+    pub async fn get_ai_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String> {
+        let mut openai_messages: Vec<ChatCompletionRequestMessage> = vec![
             ChatCompletionRequestSystemMessageArgs::default()
-                .content("你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。")
+                .content(Self::DEFAULT_SYSTEM_CONTENT)
                 .build()?
-                .into();
-
-        let user_message: ChatCompletionRequestMessage =
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(question)
-                .build()?
-                .into();
-
-        let messages = vec![system_message, user_message];
-
+                .into(),
+        ];
+        for msg in &messages {
+            openai_messages.push(chat_message_to_openai(msg)?);
+        }
         self.openai_client
-            .chat_completion(&self.model, messages)
+            .chat_completion(&self.model, openai_messages)
             .await
     }
 
@@ -133,24 +158,32 @@ impl TelegramBotAI {
         F: FnMut(openai_client::StreamChunk) -> Fut,
         Fut: std::future::Future<Output = Result<()>>,
     {
-        debug!(question = %question, model = %self.model, "Getting AI stream response");
+        self.get_ai_response_stream_with_messages(vec![ChatMessage::user(question)], callback)
+            .await
+    }
 
-        let system_message: ChatCompletionRequestMessage =
+    /// Stream variant of `get_ai_response_with_messages`: messages map one-to-one to OpenAI; system message is prepended.
+    #[instrument(skip(self, messages, callback))]
+    pub async fn get_ai_response_stream_with_messages<F, Fut>(
+        &self,
+        messages: Vec<ChatMessage>,
+        callback: F,
+    ) -> Result<String>
+    where
+        F: FnMut(openai_client::StreamChunk) -> Fut,
+        Fut: std::future::Future<Output = Result<()>>,
+    {
+        let mut openai_messages: Vec<ChatCompletionRequestMessage> = vec![
             ChatCompletionRequestSystemMessageArgs::default()
-                .content("你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。")
+                .content(Self::DEFAULT_SYSTEM_CONTENT)
                 .build()?
-                .into();
-
-        let user_message: ChatCompletionRequestMessage =
-            ChatCompletionRequestUserMessageArgs::default()
-                .content(question)
-                .build()?
-                .into();
-
-        let messages = vec![system_message, user_message];
-
+                .into(),
+        ];
+        for msg in &messages {
+            openai_messages.push(chat_message_to_openai(msg)?);
+        }
         self.openai_client
-            .chat_completion_stream(&self.model, messages, callback)
+            .chat_completion_stream(&self.model, openai_messages, callback)
             .await
             .map_err(|e| anyhow::anyhow!("Stream error: {}", e))
     }

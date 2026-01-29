@@ -44,7 +44,7 @@ async fn test_recent_messages_by_conversation() {
         .unwrap();
 
     match result {
-        StrategyResult::Messages(msgs) => {
+        StrategyResult::Messages { messages: msgs, .. } => {
             assert_eq!(msgs.len(), 2);
             let combined = msgs.join(" ");
             assert!(combined.contains("How are you?"));

@@ -9,6 +9,9 @@ use memory_core::{MemoryStore, StrategyResult};
 /// Trait for context building strategies.
 #[async_trait]
 pub trait ContextStrategy: Send + Sync {
+    /// Returns the strategy name for logging and diagnostics.
+    fn name(&self) -> &str;
+
     /// Builds context using strategy.
     async fn build_context(
         &self,

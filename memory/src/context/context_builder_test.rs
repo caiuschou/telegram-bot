@@ -81,6 +81,10 @@ struct MockStrategy;
 
 #[async_trait::async_trait]
 impl ContextStrategy for MockStrategy {
+    fn name(&self) -> &str {
+        "MockStrategy"
+    }
+
     async fn build_context(
         &self,
         _store: &dyn MemoryStore,
@@ -88,10 +92,13 @@ impl ContextStrategy for MockStrategy {
         _conversation_id: &Option<String>,
         _query: &Option<String>,
     ) -> Result<crate::StrategyResult, anyhow::Error> {
-        Ok(crate::StrategyResult::Messages(vec![
-            "User: Hello".to_string(),
-            "Assistant: Hi there!".to_string(),
-        ]))
+        Ok(crate::StrategyResult::Messages {
+            category: crate::MessageCategory::Recent,
+            messages: vec![
+                "User: Hello".to_string(),
+                "Assistant: Hi there!".to_string(),
+            ],
+        })
     }
 }
 

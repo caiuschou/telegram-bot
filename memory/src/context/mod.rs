@@ -28,11 +28,11 @@
 //! # }
 //! ```
 
-use memory_core::MemoryStore;
+use memory_core::{MessageCategory, MemoryStore};
 use memory_strategies::ContextStrategy;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, info, instrument};
 
 /// Represents a constructed context for AI conversation.
 ///
@@ -48,15 +48,18 @@ use tracing::{debug, error, instrument};
 /// # Components
 ///
 /// - system_message: Optional AI personality/behavior instructions
-/// - conversation_history: Chronological sequence of messages
+/// - recent_messages: Main dialogue record (recent conversation) for the AI
+/// - semantic_messages: Retrieved reference context from semantic search
 /// - user_preferences: Extracted user preferences for personalization
 /// - metadata: Context metadata including token counts and timestamps
 #[derive(Debug, Clone)]
 pub struct Context {
     /// System message if provided
     pub system_message: Option<String>,
-    /// Conversation history formatted for AI input
-    pub conversation_history: Vec<String>,
+    /// Recent conversation messages — main dialogue record for the AI.
+    pub recent_messages: Vec<String>,
+    /// Semantically retrieved messages — reference context for the current query.
+    pub semantic_messages: Vec<String>,
     /// User preferences extracted from history
     pub user_preferences: Option<String>,
     /// Metadata about the context
@@ -103,7 +106,8 @@ pub struct ContextMetadata {
 ///
 /// Strategies are executed in the order they were added. Each strategy's
 /// result is aggregated into the final context:
-/// - Messages are appended to conversation_history
+/// - Messages with category Recent go to recent_messages (main dialogue)
+/// - Messages with category Semantic go to semantic_messages (reference)
 /// - Preferences replace previous preferences (last strategy wins)
 /// - Empty results are ignored
 pub struct ContextBuilder {
@@ -203,12 +207,18 @@ impl ContextBuilder {
     pub async fn build(&self) -> Result<Context, anyhow::Error> {
         debug!("Starting context build");
 
-        let mut history = Vec::new();
+        let mut recent_messages = Vec::new();
+        let mut semantic_messages = Vec::new();
         let mut preferences: Option<String> = None;
 
         // Execute strategies in order (RecentMessages, SemanticSearch, UserPreferences)
         for (strategy_index, strategy) in self.strategies.iter().enumerate() {
-            debug!(strategy_index, "Executing context strategy");
+            let strategy_name = strategy.name();
+            info!(
+                strategy_index,
+                strategy_name,
+                "Executing context strategy"
+            );
             let strategy_result = strategy
                 .build_context(
                     &*self.store,
@@ -220,6 +230,7 @@ impl ContextBuilder {
                 .map_err(|e| {
                     error!(
                         strategy_index,
+                        strategy_name,
                         error = %e,
                         "Context build: strategy failed"
                     );
@@ -232,27 +243,61 @@ impl ContextBuilder {
                 })?;
 
             match strategy_result {
-                memory_core::StrategyResult::Messages(messages) => {
-                    debug!(message_count = messages.len(), "Strategy returned messages");
-                    history.extend(messages);
+                memory_core::StrategyResult::Messages { category, messages } => {
+                    let total_len: usize = messages.iter().map(|m| m.len()).sum();
+                    info!(
+                        strategy_name,
+                        strategy_index,
+                        message_count = messages.len(),
+                        total_content_len = total_len,
+                        "Strategy returned messages"
+                    );
+                    for (i, msg) in messages.iter().enumerate() {
+                        let preview = truncate_for_log(msg, 400);
+                        debug!(
+                            strategy_name,
+                            strategy_index,
+                            message_index = i,
+                            message_len = msg.len(),
+                            content_preview = %preview,
+                            "Context message from strategy"
+                        );
+                    }
+                    match category {
+                        MessageCategory::Recent => recent_messages.extend(messages),
+                        MessageCategory::Semantic => semantic_messages.extend(messages),
+                    }
                 }
                 memory_core::StrategyResult::Preferences(prefs) => {
-                    debug!("Strategy returned user preferences");
+                    info!(
+                        strategy_name,
+                        strategy_index,
+                        preferences_preview = %truncate_for_log(&prefs, 400),
+                        "Strategy returned user preferences"
+                    );
                     preferences = Some(prefs);
                 }
-                memory_core::StrategyResult::Empty => {}
+                memory_core::StrategyResult::Empty => {
+                    info!(
+                        strategy_name,
+                        strategy_index,
+                        "Strategy returned Empty"
+                    );
+                }
             }
         }
 
+        let message_count = recent_messages.len() + semantic_messages.len();
         // Calculate tokens
-        let total_tokens = self.calculate_total_tokens(&history, &preferences);
+        let total_tokens =
+            self.calculate_total_tokens(&recent_messages, &semantic_messages, &preferences);
 
         // Create metadata
         let metadata = ContextMetadata {
             user_id: self.user_id.clone(),
             conversation_id: self.conversation_id.clone(),
             total_tokens,
-            message_count: history.len(),
+            message_count,
             created_at: Utc::now(),
         };
 
@@ -264,7 +309,8 @@ impl ContextBuilder {
 
         Ok(Context {
             system_message: self.system_message.clone(),
-            conversation_history: history,
+            recent_messages,
+            semantic_messages,
             user_preferences: preferences,
             metadata,
         })
@@ -292,7 +338,8 @@ impl ContextBuilder {
     /// precise token limits, consider using tiktoken library for accurate estimation.
     fn calculate_total_tokens(
         &self,
-        history: &[String],
+        recent_messages: &[String],
+        semantic_messages: &[String],
         preferences: &Option<String>,
     ) -> usize {
         let mut total = 0;
@@ -302,8 +349,8 @@ impl ContextBuilder {
             total += estimate_tokens(msg);
         }
 
-        // History tokens
-        for msg in history {
+        // Recent and semantic message tokens
+        for msg in recent_messages.iter().chain(semantic_messages.iter()) {
             total += estimate_tokens(msg);
         }
 
@@ -313,6 +360,16 @@ impl ContextBuilder {
         }
 
         total
+    }
+}
+
+/// Truncates a string for logging; appends "..." if truncated.
+/// Used when logging strategy message content to avoid dumping huge strings.
+fn truncate_for_log(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
     }
 }
 
@@ -334,58 +391,50 @@ pub fn estimate_tokens(text: &str) -> usize {
 }
 
 impl Context {
-    /// Formats the context for AI model input.
+    /// Returns context as a single string for AI models (no current question).
     ///
-    /// Constructs a formatted string representation of the context suitable for
-    /// passing to AI language models. The format is designed to be easily parsed
-    /// by models and follows common conversation formatting patterns.
-    ///
-    /// # Format Structure
-    ///
-    /// ```text
-    /// System: {system_message}
-    ///
-    /// User Preferences: {preferences}
-    ///
-    /// {message_1}
-    /// {message_2}
-    /// ...
-    /// ```
-    ///
-    /// # Arguments
-    ///
-    /// * `include_system` - If true, includes the system message in the output
-    ///
-    /// # Returns
-    ///
-    /// A newline-separated string ready for submission to AI models.
-    ///
-    /// # External Interactions
-    ///
-    /// - **AI Models**: Formatted string is directly consumed by LLM APIs
-    /// - **Conversation Parsers**: Format follows standard conversation patterns
+    /// Delegates to `prompt::format_for_model`. Used when only the context block is needed
+    /// (e.g. middleware returning context string). External: output sent to LLM APIs.
     pub fn format_for_model(&self, include_system: bool) -> String {
-        let mut output = String::new();
+        prompt::format_for_model(
+            include_system,
+            self.system_message.as_deref(),
+            self.user_preferences.as_deref(),
+            &self.recent_messages,
+            &self.semantic_messages,
+        )
+    }
 
-        // Add system message if requested
-        if include_system {
-            if let Some(ref system_msg) = self.system_message {
-                output.push_str(&format!("System: {}\n\n", system_msg));
-            }
-        }
+    /// Returns context as chat messages with different types (system, user, assistant).
+    ///
+    /// Calls `prompt::format_for_model_as_messages_with_roles` so recent conversation
+    /// lines ("User: ...", "Assistant: ...", "System: ...") become separate `ChatMessage`
+    /// with matching roles. Order: optional System, parsed recent (User/Assistant/System),
+    /// optional User(preferences+semantic block), User(question).
+    pub fn to_messages(&self, include_system: bool, current_question: &str) -> Vec<prompt::ChatMessage> {
+        prompt::format_for_model_as_messages_with_roles(
+            include_system,
+            self.system_message.as_deref(),
+            self.user_preferences.as_deref(),
+            &self.recent_messages,
+            &self.semantic_messages,
+            current_question,
+        )
+    }
 
-        // Add user preferences if available
-        if let Some(ref prefs) = self.user_preferences {
-            output.push_str(&format!("User Preferences: {}\n\n", prefs));
-        }
+    /// Returns all messages in order: recent first, then semantic.
+    /// Use when you need a single combined list (e.g. for backward compatibility or token count).
+    pub fn conversation_history(&self) -> Vec<String> {
+        self.recent_messages
+            .iter()
+            .chain(self.semantic_messages.iter())
+            .cloned()
+            .collect()
+    }
 
-        // Add conversation history
-        for msg in &self.conversation_history {
-            output.push_str(msg);
-            output.push('\n');
-        }
-
-        output
+    /// Returns true if there are no recent and no semantic messages.
+    pub fn is_empty(&self) -> bool {
+        self.recent_messages.is_empty() && self.semantic_messages.is_empty()
     }
 
     /// Checks if the context exceeds the token limit.

@@ -7,13 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- **telegram-bot runner**: 移除外层循环，单次运行 repl
-  - 不再使用 `loop` 包裹 `teloxide::repl`，不再在 long polling 退出后自动重连（无 `RECONNECT_DELAY_SECS`、无 `tokio::select!` 与 Ctrl+C 监听）；`repl` 返回后进程直接退出。
-- **telegram-bot runner**: 每条消息在独立任务中处理，不阻塞轮询
-  - 在 repl 闭包内用 `tokio::spawn` 执行 `handler_chain.handle`，收到消息后立即返回 `Ok(())`，实际处理在后台任务中完成，确保长时间处理（如 AI 调用）不会阻塞收下一条消息。
-
 ### Added
+- **Context 返回带类型的 chat messages（system / user / assistant）**
+  - **prompt crate**：新增 `parse_message_line(line)`，解析 "User: ..." / "Assistant: ..." / "System: ..." 为对应角色的 `ChatMessage`；新增 `format_for_model_as_messages_with_roles(...)`，将 recent 对话行解析为多条带正确角色的消息，再追加可选的 preferences+semantic 块与当前问题。
+  - **memory Context**：`to_messages(include_system, current_question)` 改为调用 `prompt::format_for_model_as_messages_with_roles`，返回的 `Vec<ChatMessage>` 中 recent 为多条 User/Assistant/System，与 OpenAI messages 数组一一对应。
+  - **单元测试**：`prompt/tests/format_for_model_test.rs` 增加 `parse_message_line` 与 `format_for_model_as_messages_with_roles` 测试；`memory/context_test.rs` 增加 `test_to_messages_returns_chat_messages_with_different_roles`。
+- **prompt crate**：将 AI prompt 格式化逻辑独立为 crate
+  - 新增 `crates/prompt`：提供 `format_for_model(include_system, system_message, user_preferences, recent_messages, semantic_messages)` 及常量 `SECTION_RECENT` / `SECTION_SEMANTIC`；无依赖，可被 memory 或其他上下文来源复用。
+  - **memory**：`Context::format_for_model()` 委托给 `prompt::format_for_model()`，格式规则集中在 prompt crate。
+- **Context: 区分最近对话与语义检索，并将最近对话作为 AI 对话记录**
+  - **memory-core**: 新增 `MessageCategory` 枚举（`Recent` / `Semantic`），`StrategyResult::Messages` 改为带 `category` 和 `messages`，供 ContextBuilder 按来源分类。
+  - **memory-strategies**: `RecentMessagesStrategy` 返回 `Messages { category: Recent, messages }`，`SemanticSearchStrategy` 返回 `Messages { category: Semantic, messages }`。
+  - **memory Context**: `conversation_history` 拆分为 `recent_messages`（主对话记录）与 `semantic_messages`（相关参考）；新增 `conversation_history()` 返回合并列表、`is_empty()` 判断是否无消息。
+  - **format_for_model()**: 输出分段标题「Conversation (recent):」与「Relevant reference (semantic):」，模型可区分主对话与检索参考。
+  - 调用方与测试已更新：middleware、ai-handlers 使用 `context.is_empty()`；集成测试使用 `context.recent_messages` / `context.semantic_messages`。
+- **memory-lance**: Lance + SemanticSearchStrategy 完整策略集成测试（真实词向量与存储验证）
+  - 新增 `tests/lance_semantic_strategy_integration_test.rs`：使用临时 Lance 库、可复现的 1536 维 one-hot 向量和按查询返回向量的 Mock Embedding，验证 `SemanticSearchStrategy.build_context` 对查询「猫」返回「关于猫」的最近邻消息；并验证无查询时返回 Empty。
+  - 测试依赖：`embedding`、`async-trait` 作为 dev-dependencies，便于在测试中实现 `EmbeddingService`。
+  - 文档：`docs/rag/LANCE_USAGE.md` 增加「完整策略：Lance + SemanticSearchStrategy」与验证方式；`docs/rag/memory/storage.md` 将 LanceVectorStore 列为已实现并注明集成测试。
 - **消息处理全流程 step 日志**：收到消息后的每个步骤均打 info 日志，便于排查与追踪
   - **runner**：收到消息打 "Received message"；spawn 处理任务时打 "step: processing message (handler chain started)"。
   - **handler_chain**：开始打 "step: handler_chain started"；每个 middleware before 前后打 "step: middleware before" / "step: middleware before done"（含 middleware 类型名）；每个 handler 前后打 "step: handler processing" / "step: handler done"（含 response_type、reply_len，不打印完整 Reply 内容）；每个 middleware after 前后打 "step: middleware after" / "step: middleware after done"；结束打 "step: handler_chain finished"。
@@ -26,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **BigModel embedding**：单条 "step: 词向量 BigModel embed 请求/完成"；批量 "step: 词向量 BigModel embed_batch 请求/完成"（依赖新增 tracing）。
   - **向量存储 (Lance/SQLite/InMemory)**：add 时若 entry 带 embedding 打 "step: 词向量 [Lance|SQLite|InMemory] 写入向量"（id、dimension）；semantic_search 时打 "step: 词向量 [Store] 向量检索"（dimension、limit）、"step: 词向量 [Store] 向量检索完成"（count）。
 - **RAG / context build**: Detailed logging for strategies and AI submission
+  - **ContextStrategy**: Added `name(&self) -> &str` to trait; each strategy (RecentMessages, SemanticSearch, UserPreferences) returns a constant name for logging.
   - **memory-strategies**: Each strategy logs query results in detail: `RecentMessagesStrategy` and `SemanticSearchStrategy` log `entry_count`, `message_count`, and per-message `content_preview` (truncated to 400 chars). `UserPreferencesStrategy` logs `entry_count` and `preferences_preview` when preferences are found. On store/embedding failure, strategies log `error` and (for semantic search) `error_debug` and `query_preview`.
-  - **memory (ContextBuilder)**: When a strategy fails, logs `strategy_index`, `error`, and full error chain (`Caused by`).
+  - **memory (ContextBuilder)**: Executing each strategy logs `strategy_name` and `strategy_index`; for Messages result logs summary (`message_count`, `total_content_len`) and per-message debug (`message_index`, `message_len`, `content_preview`); for Preferences logs `preferences_preview`; for Empty logs "Strategy returned Empty". On strategy failure, logs `strategy_name`, `error`, and full error chain (`Caused by`).
   - **ai-handlers (SyncAIHandler)**: Before calling the AI, logs `context_len`, `context_preview`, `question`, `prompt_len`, `prompt_preview` (truncated to 500 chars) with message "Submitting to AI (streaming)" or "Submitting to AI (non-streaming)". On AI response failure (normal or stream), logs full error chain.
   - **memory-strategies/utils**: Added `truncate_for_log(s, max_len)` and `MAX_LOG_CONTENT_LEN` for safe content preview in logs.
 - **openai-client**: Request logging and masked token
@@ -36,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New public `mask_token(token)` for safe logging; optional `api_key_for_logging` stored in client when created via `new()` / `with_base_url()` (not set for `with_client()`).
   - Unit tests in `openai-client/tests/mask_token_test.rs` for `mask_token`.
   - Dependency: `tracing`.
+
+### Changed
+- **telegram-bot runner**: 移除外层循环，单次运行 repl
+  - 不再使用 `loop` 包裹 `teloxide::repl`，不再在 long polling 退出后自动重连（无 `RECONNECT_DELAY_SECS`、无 `tokio::select!` 与 Ctrl+C 监听）；`repl` 返回后进程直接退出。
+- **telegram-bot runner**: 每条消息在独立任务中处理，不阻塞轮询
+  - 在 repl 闭包内用 `tokio::spawn` 执行 `handler_chain.handle`，收到消息后立即返回 `Ok(())`，实际处理在后台任务中完成，确保长时间处理（如 AI 调用）不会阻塞收下一条消息。
 
 ### Fixed
 - **telegram-bot integration test**: Telegram API 改为 mock，不再访问真实 API

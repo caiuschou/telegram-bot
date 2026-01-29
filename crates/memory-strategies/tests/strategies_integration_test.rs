@@ -75,7 +75,7 @@ async fn test_all_strategies_integration() {
         .unwrap();
 
     match &recent_result {
-        StrategyResult::Messages(msgs) => {
+        StrategyResult::Messages { messages: msgs, .. } => {
             assert_eq!(msgs.len(), 2, "recent messages should return conversation messages");
             assert!(msgs.join(" ").contains("Hello"));
             assert!(msgs.join(" ").contains("How are you?"));
@@ -84,7 +84,7 @@ async fn test_all_strategies_integration() {
     }
 
     match &semantic_result {
-        StrategyResult::Messages(msgs) => {
+        StrategyResult::Messages { messages: msgs, .. } => {
             assert!(!msgs.is_empty(), "semantic search should return some messages");
         }
         StrategyResult::Empty => {}

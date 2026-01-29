@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use embedding::EmbeddingService;
-use memory_core::{MemoryStore, StrategyResult};
+use memory_core::{MessageCategory, MemoryStore, StrategyResult};
 use tracing::{debug, error, info, warn};
 
 use super::strategy::ContextStrategy;
@@ -39,6 +39,10 @@ impl SemanticSearchStrategy {
 
 #[async_trait]
 impl ContextStrategy for SemanticSearchStrategy {
+    fn name(&self) -> &str {
+        "SemanticSearch"
+    }
+
     /// Builds context by performing semantic search for relevant messages.
     ///
     /// 1. If query text is present, generates embedding via EmbeddingService.
@@ -146,6 +150,9 @@ impl ContextStrategy for SemanticSearchStrategy {
             );
         }
 
-        Ok(StrategyResult::Messages(messages))
+        Ok(StrategyResult::Messages {
+            category: MessageCategory::Semantic,
+            messages,
+        })
     }
 }

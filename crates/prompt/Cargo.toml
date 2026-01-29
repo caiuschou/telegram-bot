@@ -1,0 +1,7 @@
+[package]
+name = "prompt"
+version = "0.1.0"
+edition = "2021"
+description = "AI prompt formatting: system message, preferences, conversation (recent), and semantic reference"
+
+[dependencies]
