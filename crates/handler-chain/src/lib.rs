@@ -30,25 +30,69 @@ impl HandlerChain {
     pub async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
         let mut final_response = HandlerResponse::Continue;
 
+        info!(
+            user_id = message.user.id,
+            chat_id = message.chat.id,
+            message_id = %message.id,
+            "step: handler_chain started"
+        );
+
         for mw in &self.middleware {
+            let mw_name = std::any::type_name_of_val(mw.as_ref());
+            info!(
+                user_id = message.user.id,
+                middleware = %mw_name,
+                "step: middleware before"
+            );
             let should_continue = mw.before(message).await?;
             if !should_continue {
-                info!("Middleware chain stopped before handler execution");
+                info!(
+                    user_id = message.user.id,
+                    middleware = %mw_name,
+                    "step: middleware before returned false, chain stopped"
+                );
                 return Ok(HandlerResponse::Stop);
             }
+            info!(
+                user_id = message.user.id,
+                middleware = %mw_name,
+                "step: middleware before done"
+            );
         }
 
         for handler in &self.handlers {
+            let handler_name = std::any::type_name_of_val(handler.as_ref());
+            info!(
+                user_id = message.user.id,
+                handler = %handler_name,
+                "step: handler processing"
+            );
             let response = handler.handle(message).await?;
             debug!(
-                handler = std::any::type_name_of_val(handler.as_ref()),
+                handler = %handler_name,
                 response = ?response,
                 "Handler processed"
+            );
+            let (response_type, reply_len) = match &response {
+                HandlerResponse::Continue => ("Continue", None),
+                HandlerResponse::Stop => ("Stop", None),
+                HandlerResponse::Ignore => ("Ignore", None),
+                HandlerResponse::Reply(s) => ("Reply", Some(s.len())),
+            };
+            info!(
+                user_id = message.user.id,
+                handler = %handler_name,
+                response_type = %response_type,
+                reply_len = ?reply_len,
+                "step: handler done"
             );
 
             match response {
                 HandlerResponse::Stop | HandlerResponse::Reply(_) => {
-                    info!("Handler chain stopped");
+                    info!(
+                        user_id = message.user.id,
+                        "step: handler chain stopped by handler"
+                    );
                     final_response = response;
                     break;
                 }
@@ -62,8 +106,26 @@ impl HandlerChain {
         }
 
         for mw in self.middleware.iter().rev() {
+            let mw_name = std::any::type_name_of_val(mw.as_ref());
+            info!(
+                user_id = message.user.id,
+                middleware = %mw_name,
+                "step: middleware after"
+            );
             mw.after(message, &final_response).await?;
+            info!(
+                user_id = message.user.id,
+                middleware = %mw_name,
+                "step: middleware after done"
+            );
         }
+
+        info!(
+            user_id = message.user.id,
+            chat_id = message.chat.id,
+            message_id = %message.id,
+            "step: handler_chain finished"
+        );
 
         Ok(final_response)
     }

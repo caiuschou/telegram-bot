@@ -30,10 +30,10 @@ Example:
 
 ## Configuring Log Level
 
-Set the `RUST_LOG` environment variable:
+Set the `RUST_LOG` environment variable (e.g. in `.env` or when running):
 
 ```bash
-# Debug mode
+# Debug mode (app crates only; framework stays at warn)
 RUST_LOG=debug cargo run
 
 # Info mode (default)
@@ -42,6 +42,10 @@ RUST_LOG=info cargo run
 # Only errors
 RUST_LOG=error cargo run
 ```
+
+The logger automatically filters **Telegram bot framework** logs so they do not flood at debug/trace:
+- `teloxide`, `reqwest`, `hyper`, `hyper_util` are set to **warn** in addition to your `RUST_LOG` level.
+- To see framework debug (e.g. for teloxide), set explicitly: `RUST_LOG=debug,teloxide=debug`.
 
 ## Log Rotation
 

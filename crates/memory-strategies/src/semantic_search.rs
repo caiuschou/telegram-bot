@@ -8,10 +8,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use embedding::EmbeddingService;
 use memory_core::{MemoryStore, StrategyResult};
-use tracing::{debug, warn};
+use tracing::{debug, error, info, warn};
 
 use super::strategy::ContextStrategy;
-use super::utils::format_message;
+use super::utils::{format_message, truncate_for_log, MAX_LOG_CONTENT_LEN};
 
 /// Strategy for performing semantic search on conversation history.
 ///
@@ -67,27 +67,84 @@ impl ContextStrategy for SemanticSearchStrategy {
             }
         };
 
+        info!(
+            query_len = query_text.len(),
+            limit = self.limit,
+            "SemanticSearchStrategy: starting semantic search"
+        );
+
+        info!(
+            query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+            query_len = query_text.len(),
+            "step: 词向量 生成查询向量 (embedding)"
+        );
         let query_embedding = match self.embedding_service.embed(query_text).await {
-            Ok(emb) => emb,
+            Ok(emb) => {
+                info!(
+                    dimension = emb.len(),
+                    "step: 词向量 查询向量生成完成"
+                );
+                emb
+            }
             Err(e) => {
-                warn!(error = %e, "SemanticSearchStrategy: embedding failed, skipping semantic search");
+                warn!(
+                    error = %e,
+                    query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+                    "SemanticSearchStrategy: embedding failed, skipping semantic search"
+                );
                 return Ok(StrategyResult::Empty);
             }
         };
 
-        let entries = store
+        info!(
+            dimension = query_embedding.len(),
+            limit = self.limit,
+            "step: 词向量 向量检索 (semantic_search)"
+        );
+        let entries = match store
             .semantic_search(&query_embedding, self.limit)
-            .await?;
+            .await
+        {
+            Ok(ent) => ent,
+            Err(e) => {
+                let err_msg = format!("{:?}", e);
+                error!(
+                    error = %e,
+                    error_debug = %err_msg,
+                    query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+                    limit = self.limit,
+                    "SemanticSearchStrategy: semantic_search failed"
+                );
+                return Err(anyhow::anyhow!(
+                    "SemanticSearchStrategy semantic_search failed: {}",
+                    e
+                ));
+            }
+        };
 
         let messages: Vec<String> = entries
-            .into_iter()
-            .map(|entry| format_message(&entry))
+            .iter()
+            .map(|entry| format_message(entry))
             .collect();
 
-        debug!(
+        info!(
+            entry_count = entries.len(),
+            "step: 词向量 向量检索完成"
+        );
+        info!(
+            query_preview = %truncate_for_log(query_text, MAX_LOG_CONTENT_LEN),
+            entry_count = entries.len(),
             message_count = messages.len(),
             "SemanticSearchStrategy: semantic search returned messages"
         );
+        for (i, msg) in messages.iter().enumerate() {
+            info!(
+                strategy = "SemanticSearchStrategy",
+                index = i,
+                content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
+                "context message"
+            );
+        }
 
         Ok(StrategyResult::Messages(messages))
     }

@@ -15,6 +15,7 @@ use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use lancedb::query::{ExecutableQuery, QueryBase};
 use futures::TryStreamExt;
 use anyhow::{anyhow, Result};
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::config::LanceConfig;
@@ -356,6 +357,22 @@ impl LanceVectorStore {
 #[async_trait]
 impl MemoryStore for LanceVectorStore {
     async fn add(&self, entry: MemoryEntry) -> Result<()> {
+        if entry.embedding.is_some() {
+            info!(
+                id = %entry.id,
+                dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
+                "step: 词向量 Lance 写入向量"
+            );
+        }
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            role = ?entry.metadata.role,
+            has_embedding = entry.embedding.is_some(),
+            "Writing entry to Lance vector store"
+        );
+
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
@@ -373,10 +390,17 @@ impl MemoryStore for LanceVectorStore {
             .await
             .map_err(|e| anyhow!("Failed to add entry: {}", e))?;
 
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            "Entry written to Lance vector store"
+        );
         Ok(())
     }
 
     async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>> {
+        info!(id = %id, "Querying Lance vector store by id");
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
@@ -399,11 +423,13 @@ impl MemoryStore for LanceVectorStore {
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
                 if entry.id == id {
+                    info!(id = %id, found = true, "Lance vector store get returned");
                     return Ok(Some(entry));
                 }
             }
         }
 
+        info!(id = %id, found = false, "Lance vector store get returned");
         Ok(None)
     }
 
@@ -432,6 +458,7 @@ impl MemoryStore for LanceVectorStore {
     }
 
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>> {
+        info!(user_id = %user_id, "Querying Lance vector store by user");
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
@@ -460,10 +487,16 @@ impl MemoryStore for LanceVectorStore {
             }
         }
 
+        info!(
+            user_id = %user_id,
+            count = entries.len(),
+            "Lance vector store search_by_user returned"
+        );
         Ok(entries)
     }
 
     async fn search_by_conversation(&self, conversation_id: &str) -> Result<Vec<MemoryEntry>> {
+        info!(conversation_id = %conversation_id, "Querying Lance vector store by conversation");
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
@@ -492,30 +525,78 @@ impl MemoryStore for LanceVectorStore {
             }
         }
 
+        info!(
+            conversation_id = %conversation_id,
+            count = entries.len(),
+            "Lance vector store search_by_conversation returned"
+        );
         Ok(entries)
     }
 
     async fn semantic_search(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<MemoryEntry>> {
+        info!(
+            dimension = query_embedding.len(),
+            limit = limit,
+            "step: 词向量 Lance 向量检索"
+        );
+        info!(
+            embedding_len = query_embedding.len(),
+            expected_dim = self.config.embedding_dim,
+            limit = limit,
+            "Querying Lance vector store semantic_search"
+        );
         let db = self.db.read().await;
         let table = db
             .open_table(&self.config.table_name)
             .execute()
             .await
-            .map_err(|e| anyhow!("Failed to open table: {}", e))?;
+            .map_err(|e| {
+                error!(error = %e, "Lance semantic_search: failed to open table");
+                anyhow!("Failed to open table: {}", e)
+            })?;
 
         let results = table
             .query()
             .nearest_to(query_embedding)
-            .map_err(|e| anyhow!("Failed to create vector query: {}", e))?
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    query_dim = query_embedding.len(),
+                    expected_dim = self.config.embedding_dim,
+                    "Lance semantic_search: failed to create vector query (dimension mismatch?)"
+                );
+                anyhow!(
+                    "Failed to create vector query (query_dim={}, expected_dim={}): {}",
+                    query_embedding.len(),
+                    self.config.embedding_dim,
+                    e
+                )
+            })?
             .limit(limit)
             .execute()
             .await
-            .map_err(|e| anyhow!("Failed to execute vector search: {}", e))?;
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    query_dim = query_embedding.len(),
+                    expected_dim = self.config.embedding_dim,
+                    "Lance semantic_search: failed to execute vector search"
+                );
+                anyhow!(
+                    "Failed to execute vector search (query_dim={}, expected_dim={}): {}",
+                    query_embedding.len(),
+                    self.config.embedding_dim,
+                    e
+                )
+            })?;
 
         let results = results
             .try_collect::<Vec<_>>()
             .await
-            .map_err(|e| anyhow!("Failed to collect results: {}", e))?;
+            .map_err(|e| {
+                error!(error = %e, "Lance semantic_search: failed to collect results");
+                anyhow!("Failed to collect results: {}", e)
+            })?;
 
         let mut entries = Vec::new();
         for batch in results {
@@ -525,6 +606,16 @@ impl MemoryStore for LanceVectorStore {
             }
         }
 
+        info!(
+            limit = limit,
+            count = entries.len(),
+            "step: 词向量 Lance 向量检索完成"
+        );
+        info!(
+            limit = limit,
+            count = entries.len(),
+            "Lance vector store semantic_search returned"
+        );
         Ok(entries)
     }
 }

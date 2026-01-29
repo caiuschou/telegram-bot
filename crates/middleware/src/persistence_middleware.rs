@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, MessageDirection, Middleware, Result};
 use storage::MessageRepository;
-use tracing::{debug, error, instrument};
+use tracing::{error, info, instrument};
 
 #[derive(Clone)]
 pub struct PersistenceMiddleware {
@@ -18,11 +18,12 @@ impl PersistenceMiddleware {
 impl Middleware for PersistenceMiddleware {
     #[instrument(skip(self, message))]
     async fn before(&self, message: &Message) -> Result<bool> {
-        debug!(
+        info!(
             user_id = message.user.id,
             chat_id = message.chat.id,
+            message_id = %message.id,
             message_type = %message.message_type,
-            "Persisting message"
+            "step: PersistenceMiddleware before, saving message"
         );
 
         let record = storage::MessageRecord::new(
@@ -45,17 +46,22 @@ impl Middleware for PersistenceMiddleware {
             dbot_core::DbotError::Database(e.to_string())
         })?;
 
-        debug!(
+        info!(
             user_id = message.user.id,
             message_id = %message.id,
-            "Message persisted successfully"
+            "step: PersistenceMiddleware before done, message saved"
         );
 
         Ok(true)
     }
 
     #[instrument(skip(self))]
-    async fn after(&self, _message: &Message, _response: &HandlerResponse) -> Result<()> {
+    async fn after(&self, message: &Message, _response: &HandlerResponse) -> Result<()> {
+        info!(
+            user_id = message.user.id,
+            chat_id = message.chat.id,
+            "step: PersistenceMiddleware after"
+        );
         Ok(())
     }
 }

@@ -66,6 +66,7 @@ use sqlx::{sqlite::SqliteConnectOptions, Row, SqlitePool};
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
+use tracing::info;
 use uuid::Uuid;
 
 /// SQLite-based vector store for persistent memory storage.
@@ -298,6 +299,22 @@ impl MemoryStore for SQLiteVectorStore {
     /// - Importance: Converted from f32 to f64
     /// - Embedding: Serialized to binary BLOB (little-endian, 4 bytes per float)
     async fn add(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
+        if entry.embedding.is_some() {
+            info!(
+                id = %entry.id,
+                dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
+                "step: 词向量 SQLite 写入向量"
+            );
+        }
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            role = ?entry.metadata.role,
+            has_embedding = entry.embedding.is_some(),
+            "Writing entry to SQLite vector store"
+        );
+
         let role_str = match entry.metadata.role {
             MemoryRole::User => "User",
             MemoryRole::Assistant => "Assistant",
@@ -333,6 +350,12 @@ impl MemoryStore for SQLiteVectorStore {
         .execute(&self.pool)
         .await?;
 
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            "Entry written to SQLite vector store"
+        );
         Ok(())
     }
 
@@ -350,11 +373,14 @@ impl MemoryStore for SQLiteVectorStore {
     /// - Uses indexed primary key lookup (O(log n) in B-tree)
     /// - Fast retrieval due to PRIMARY KEY index on id column
     async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>, anyhow::Error> {
+        info!(id = %id, "Querying SQLite vector store by id");
         let row = sqlx::query("SELECT * FROM memory_entries WHERE id = ?1")
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await?;
 
+        let found = row.is_some();
+        info!(id = %id, found, "SQLite vector store get returned");
         match row {
             Some(r) => Ok(Some(Self::row_to_entry(&r)?)),
             None => Ok(None),
@@ -457,6 +483,7 @@ impl MemoryStore for SQLiteVectorStore {
     /// - Uses indexed lookup for user_id column
     /// - Results sorted by timestamp during query execution
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(user_id = %user_id, "Querying SQLite vector store by user");
         let rows = sqlx::query("SELECT * FROM memory_entries WHERE user_id = ?1 ORDER BY timestamp DESC")
             .bind(user_id)
             .fetch_all(&self.pool)
@@ -467,6 +494,11 @@ impl MemoryStore for SQLiteVectorStore {
             entries.push(Self::row_to_entry(&row)?);
         }
 
+        info!(
+            user_id = %user_id,
+            count = entries.len(),
+            "SQLite vector store search_by_user returned"
+        );
         Ok(entries)
     }
 
@@ -490,6 +522,7 @@ impl MemoryStore for SQLiteVectorStore {
         &self,
         conversation_id: &str,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(conversation_id = %conversation_id, "Querying SQLite vector store by conversation");
         let rows = sqlx::query("SELECT * FROM memory_entries WHERE conversation_id = ?1 ORDER BY timestamp DESC")
             .bind(conversation_id)
             .fetch_all(&self.pool)
@@ -500,6 +533,11 @@ impl MemoryStore for SQLiteVectorStore {
             entries.push(Self::row_to_entry(&row)?);
         }
 
+        info!(
+            conversation_id = %conversation_id,
+            count = entries.len(),
+            "SQLite vector store search_by_conversation returned"
+        );
         Ok(entries)
     }
 
@@ -546,6 +584,16 @@ impl MemoryStore for SQLiteVectorStore {
         query_embedding: &[f32],
         limit: usize,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(
+            dimension = query_embedding.len(),
+            limit = limit,
+            "step: 词向量 SQLite 向量检索"
+        );
+        info!(
+            embedding_len = query_embedding.len(),
+            limit = limit,
+            "Querying SQLite vector store semantic_search"
+        );
         let rows = sqlx::query("SELECT * FROM memory_entries WHERE embedding IS NOT NULL")
             .fetch_all(&self.pool)
             .await?;
@@ -567,6 +615,16 @@ impl MemoryStore for SQLiteVectorStore {
             .map(|(_, entry)| entry)
             .collect();
 
+        info!(
+            limit = limit,
+            count = results.len(),
+            "step: 词向量 SQLite 向量检索完成"
+        );
+        info!(
+            limit = limit,
+            count = results.len(),
+            "SQLite vector store semantic_search returned"
+        );
         Ok(results)
     }
 }

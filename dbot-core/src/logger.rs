@@ -8,7 +8,7 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::{
     fmt::format::FmtSpan,
     layer::{Context, SubscriberExt},
-    Layer, Registry,
+    EnvFilter, Layer, Registry,
 };
 
 pub struct AppLayer {
@@ -76,15 +76,24 @@ impl AppLayer {
     }
 }
 
+/// 初始化全局 tracing 订阅者。
+/// 从环境变量 RUST_LOG 读取日志级别（如 info、debug、trace）；若未设置则默认为 info。不做任何额外过滤。
+/// 注意：需在调用本函数前加载 .env（如 dotenvy::dotenv()），否则 RUST_LOG 不会生效。
 pub fn init_tracing(log_file_path: &str) -> anyhow::Result<()> {
     let app_layer = AppLayer::new(log_file_path)?;
 
-    let subscriber = Registry::default().with(app_layer).with(
-        tracing_subscriber::fmt::layer()
-            .with_span_events(FmtSpan::CLOSE)
-            .with_target(false)
-            .with_thread_ids(true),
-    );
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let subscriber = Registry::default()
+        .with(env_filter)
+        .with(app_layer)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_span_events(FmtSpan::CLOSE)
+                .with_target(false)
+                .with_thread_ids(true),
+        );
 
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow::anyhow!("Failed to set global subscriber: {}", e))?;

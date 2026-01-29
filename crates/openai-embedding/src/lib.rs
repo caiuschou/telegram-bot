@@ -144,8 +144,19 @@ impl EmbeddingService for OpenAIEmbedding {
     async fn embed(&self, text: &str) -> Result<Vec<f32>, anyhow::Error> {
         // Default timeout for a single embed request (connect + request + response).
         const EMBED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+        const LOG_PREVIEW_LEN: usize = 200;
+        let text_preview = if text.len() <= LOG_PREVIEW_LEN {
+            text.to_string()
+        } else {
+            format!("{}...", &text[..LOG_PREVIEW_LEN])
+        };
 
-        debug!("OpenAI embed request started");
+        info!(
+            model = %self.model,
+            text_preview = %text_preview,
+            text_len = text.len(),
+            "step: 词向量 OpenAI embed 请求"
+        );
 
         let request = CreateEmbeddingRequestArgs::default()
             .model(self.model.clone())
@@ -183,7 +194,10 @@ impl EmbeddingService for OpenAIEmbedding {
             }
         };
 
-        info!(dimension = embedding.len(), "OpenAI embed request completed");
+        info!(
+            dimension = embedding.len(),
+            "step: 词向量 OpenAI embed 完成"
+        );
         Ok(embedding)
     }
 
@@ -237,7 +251,11 @@ impl EmbeddingService for OpenAIEmbedding {
             return Ok(vec![]);
         }
 
-        debug!("OpenAI embed_batch request started");
+        info!(
+            model = %self.model,
+            batch_size = texts.len(),
+            "step: 词向量 OpenAI embed_batch 请求"
+        );
 
         // Timeout for batch request (longer than single embed due to larger payload).
         const EMBED_BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
@@ -295,7 +313,7 @@ impl EmbeddingService for OpenAIEmbedding {
         info!(
             count = embeddings.len(),
             dimension = dimension,
-            "OpenAI embed_batch request completed"
+            "step: 词向量 OpenAI embed_batch 完成"
         );
         Ok(embeddings)
     }

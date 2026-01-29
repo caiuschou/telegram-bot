@@ -32,7 +32,7 @@ use memory_core::MemoryStore;
 use memory_strategies::ContextStrategy;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
-use tracing::{debug, instrument};
+use tracing::{debug, error, instrument};
 
 /// Represents a constructed context for AI conversation.
 ///
@@ -206,9 +206,9 @@ impl ContextBuilder {
         let mut history = Vec::new();
         let mut preferences: Option<String> = None;
 
-        // Execute strategies in order
-        for strategy in &self.strategies {
-            debug!("Executing context strategy");
+        // Execute strategies in order (RecentMessages, SemanticSearch, UserPreferences)
+        for (strategy_index, strategy) in self.strategies.iter().enumerate() {
+            debug!(strategy_index, "Executing context strategy");
             let strategy_result = strategy
                 .build_context(
                     &*self.store,
@@ -216,7 +216,20 @@ impl ContextBuilder {
                     &self.conversation_id,
                     &self.query,
                 )
-                .await?;
+                .await
+                .map_err(|e| {
+                    error!(
+                        strategy_index,
+                        error = %e,
+                        "Context build: strategy failed"
+                    );
+                    for (i, cause) in e.chain().enumerate() {
+                        if i > 0 {
+                            error!(cause = %cause, "Caused by");
+                        }
+                    }
+                    e
+                })?;
 
             match strategy_result {
                 memory_core::StrategyResult::Messages(messages) => {

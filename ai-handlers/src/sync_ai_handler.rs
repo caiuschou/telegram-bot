@@ -13,6 +13,17 @@ use telegram_bot_ai::TelegramBotAI;
 use teloxide::{prelude::*, Bot};
 use tracing::{debug, error, info, instrument};
 
+/// Maximum character length for context/prompt in logs (avoids dumping huge strings).
+const MAX_LOG_CONTENT_LEN: usize = 500;
+
+fn truncate_for_log(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
 /// Synchronous AI handler: when the message is an AI query (reply-to or @mention), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
 ///
 /// **External interactions:** Telegram Bot API (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), TelegramBotAI (LLM).
@@ -113,7 +124,14 @@ impl SyncAIHandler {
                 }
             }
             Err(e) => {
-                error!(error = %e, "Failed to build memory context");
+                // 打印完整错误链，便于排查（常见原因：Lance 向量维度与 embedding 服务不一致）
+                for (i, cause) in e.chain().enumerate() {
+                    if i == 0 {
+                        error!(cause = %cause, "Failed to build memory context");
+                    } else {
+                        error!(cause = %cause, "Caused by");
+                    }
+                }
                 String::new()
             }
         }
@@ -173,6 +191,15 @@ impl SyncAIHandler {
             .await;
         let question_with_context = self.format_question_with_context(question, &context);
 
+        info!(
+            context_len = context.len(),
+            context_preview = %truncate_for_log(&context, MAX_LOG_CONTENT_LEN),
+            question = %question,
+            prompt_len = question_with_context.len(),
+            prompt_preview = %truncate_for_log(&question_with_context, MAX_LOG_CONTENT_LEN),
+            "Submitting to AI (non-streaming)"
+        );
+
         match self.ai_bot.get_ai_response(&question_with_context).await {
             Ok(response) => {
                 if let Err(e) = self.send_response_for_message(message, &response).await {
@@ -185,7 +212,13 @@ impl SyncAIHandler {
                 Ok(HandlerResponse::Reply(response))
             }
             Err(e) => {
-                error!(error = %e, "Failed to get AI response");
+                for (i, cause) in e.chain().enumerate() {
+                    if i == 0 {
+                        error!(cause = %cause, "Failed to get AI response");
+                    } else {
+                        error!(cause = %cause, "Caused by");
+                    }
+                }
                 // 401 / 令牌类错误通常为 OPENAI_API_KEY 或 OPENAI_BASE_URL 配置问题，便于排查时在日志中识别
                 if format!("{}", e).contains("401") || format!("{}", e).contains("令牌") {
                     error!(
@@ -215,6 +248,15 @@ impl SyncAIHandler {
             .build_memory_context(&user_id_str, &conversation_id_str, question)
             .await;
         let question_with_context = self.format_question_with_context(question, &context);
+
+        info!(
+            context_len = context.len(),
+            context_preview = %truncate_for_log(&context, MAX_LOG_CONTENT_LEN),
+            question = %question,
+            prompt_len = question_with_context.len(),
+            prompt_preview = %truncate_for_log(&question_with_context, MAX_LOG_CONTENT_LEN),
+            "Submitting to AI (streaming)"
+        );
 
         let chat_id = ChatId(message.chat.id);
 
@@ -259,7 +301,13 @@ impl SyncAIHandler {
                 Ok(HandlerResponse::Reply(full_response))
             }
             Err(e) => {
-                error!(error = %e, "AI stream response failed");
+                for (i, cause) in e.chain().enumerate() {
+                    if i == 0 {
+                        error!(cause = %cause, "AI stream response failed");
+                    } else {
+                        error!(cause = %cause, "Caused by");
+                    }
+                }
                 let _ = self
                     .bot
                     .edit_message_text(chat_id, message_id, "抱歉，AI 响应失败。")
@@ -274,10 +322,22 @@ impl SyncAIHandler {
 impl Handler for SyncAIHandler {
     #[instrument(skip(self, message))]
     async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
+        info!(
+            user_id = message.user.id,
+            chat_id = message.chat.id,
+            "step: SyncAIHandler handle start"
+        );
+
         let bot_username = self.get_bot_username().await;
         let question = match self.get_question(message, bot_username.as_deref()) {
             Some(q) => q,
-            None => return Ok(HandlerResponse::Continue),
+            None => {
+                info!(
+                    user_id = message.user.id,
+                    "step: SyncAIHandler not AI query (no reply-to, no @mention), skip"
+                );
+                return Ok(HandlerResponse::Continue);
+            }
         };
 
         if message.reply_to_message_id.is_some() {

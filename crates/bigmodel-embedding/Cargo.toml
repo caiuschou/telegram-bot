@@ -9,6 +9,7 @@ anyhow = "1.0"
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 embedding = { path = "../embedding" }
+tracing = "0.1"
 
 [dev-dependencies]
 dotenvy = "0.15"

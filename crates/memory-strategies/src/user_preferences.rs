@@ -5,10 +5,10 @@
 
 use async_trait::async_trait;
 use memory_core::{MemoryStore, StrategyResult};
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::strategy::ContextStrategy;
-use super::utils::extract_preferences;
+use super::utils::{extract_preferences, truncate_for_log, MAX_LOG_CONTENT_LEN};
 
 /// Strategy for extracting user preferences from conversation history.
 #[derive(Debug, Clone)]
@@ -65,10 +65,17 @@ impl ContextStrategy for UserPreferencesStrategy {
             }
         };
 
-        let entries = store.search_by_user(user_id).await?;
+        let entries = store.search_by_user(user_id).await.map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %user_id,
+                "UserPreferencesStrategy: search_by_user failed"
+            );
+            e
+        })?;
 
-        debug!(
-            user_id = user_id,
+        info!(
+            user_id = %user_id,
             entry_count = entries.len(),
             "UserPreferencesStrategy: loaded entries for preference extraction"
         );
@@ -77,20 +84,19 @@ impl ContextStrategy for UserPreferencesStrategy {
 
         if preferences.is_empty() {
             debug!(
-                user_id = user_id,
+                user_id = %user_id,
                 "UserPreferencesStrategy: no preferences detected, returning Empty"
             );
             Ok(StrategyResult::Empty)
         } else {
-            debug!(
-                user_id = user_id,
+            let prefs_str = format!("User Preferences: {}", preferences.join(", "));
+            info!(
+                user_id = %user_id,
                 preference_count = preferences.len(),
+                preferences_preview = %truncate_for_log(&prefs_str, MAX_LOG_CONTENT_LEN),
                 "UserPreferencesStrategy: extracted user preferences"
             );
-            Ok(StrategyResult::Preferences(format!(
-                "User Preferences: {}",
-                preferences.join(", ")
-            )))
+            Ok(StrategyResult::Preferences(prefs_str))
         }
     }
 }

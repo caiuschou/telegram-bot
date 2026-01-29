@@ -53,6 +53,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use embedding::EmbeddingService;
+use tracing::info;
 
 const BIGMODEL_API_BASE: &str = "https://open.bigmodel.cn/api/paas/v4/embeddings";
 
@@ -177,6 +178,19 @@ impl EmbeddingService for BigModelEmbedding {
     /// - The response is malformed or missing embeddings
     /// - Insufficient API quota
     async fn embed(&self, text: &str) -> Result<Vec<f32>, anyhow::Error> {
+        const LOG_PREVIEW_LEN: usize = 200;
+        let text_preview = if text.len() <= LOG_PREVIEW_LEN {
+            text.to_string()
+        } else {
+            format!("{}...", &text[..LOG_PREVIEW_LEN])
+        };
+        info!(
+            model = %self.model,
+            text_preview = %text_preview,
+            text_len = text.len(),
+            "step: 词向量 BigModel embed 请求"
+        );
+
         let request = EmbeddingRequest {
             model: &self.model,
             input: Input::Single(text),
@@ -204,6 +218,10 @@ impl EmbeddingService for BigModelEmbedding {
             .embedding
             .clone();
 
+        info!(
+            dimension = embedding.len(),
+            "step: 词向量 BigModel embed 完成"
+        );
         Ok(embedding)
     }
 
@@ -242,6 +260,12 @@ impl EmbeddingService for BigModelEmbedding {
         if texts.is_empty() {
             return Ok(vec![]);
         }
+
+        info!(
+            model = %self.model,
+            batch_size = texts.len(),
+            "step: 词向量 BigModel embed_batch 请求"
+        );
 
         let inputs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
 
@@ -282,6 +306,12 @@ impl EmbeddingService for BigModelEmbedding {
             ));
         }
 
+        let dimension = embeddings.first().map(|v| v.len()).unwrap_or(0);
+        info!(
+            count = embeddings.len(),
+            dimension = dimension,
+            "step: 词向量 BigModel embed_batch 完成"
+        );
         Ok(embeddings)
     }
 }

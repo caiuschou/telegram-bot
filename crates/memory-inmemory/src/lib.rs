@@ -52,6 +52,7 @@ use memory::store::MemoryStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
 /// In-memory vector store for testing and development.
@@ -112,14 +113,42 @@ impl Default for InMemoryVectorStore {
 #[async_trait::async_trait]
 impl MemoryStore for InMemoryVectorStore {
     async fn add(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
+        if entry.embedding.is_some() {
+            info!(
+                id = %entry.id,
+                dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
+                "step: 词向量 InMemory 写入向量"
+            );
+        }
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            role = ?entry.metadata.role,
+            has_embedding = entry.embedding.is_some(),
+            "Writing entry to in-memory vector store"
+        );
+
         let mut entries = self.entries.write().await;
-        entries.insert(entry.id, entry);
+        entries.insert(entry.id, entry.clone());
+        drop(entries);
+
+        info!(
+            id = %entry.id,
+            user_id = ?entry.metadata.user_id,
+            conversation_id = ?entry.metadata.conversation_id,
+            "Entry written to in-memory vector store"
+        );
         Ok(())
     }
 
     async fn get(&self, id: Uuid) -> Result<Option<MemoryEntry>, anyhow::Error> {
+        info!(id = %id, "Querying in-memory vector store by id");
         let entries = self.entries.read().await;
-        Ok(entries.get(&id).cloned())
+        let result = entries.get(&id).cloned();
+        let found = result.is_some();
+        info!(id = %id, found, "In-memory vector store get returned");
+        Ok(result)
     }
 
     async fn update(&self, entry: MemoryEntry) -> Result<(), anyhow::Error> {
@@ -135,12 +164,18 @@ impl MemoryStore for InMemoryVectorStore {
     }
 
     async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(user_id = %user_id, "Querying in-memory vector store by user");
         let entries = self.entries.read().await;
         let results: Vec<MemoryEntry> = entries
             .values()
             .filter(|e| e.metadata.user_id.as_deref() == Some(user_id))
             .cloned()
             .collect();
+        info!(
+            user_id = %user_id,
+            count = results.len(),
+            "In-memory vector store search_by_user returned"
+        );
         Ok(results)
     }
 
@@ -148,12 +183,18 @@ impl MemoryStore for InMemoryVectorStore {
         &self,
         conversation_id: &str,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(conversation_id = %conversation_id, "Querying in-memory vector store by conversation");
         let entries = self.entries.read().await;
         let results: Vec<MemoryEntry> = entries
             .values()
             .filter(|e| e.metadata.conversation_id.as_deref() == Some(conversation_id))
             .cloned()
             .collect();
+        info!(
+            conversation_id = %conversation_id,
+            count = results.len(),
+            "In-memory vector store search_by_conversation returned"
+        );
         Ok(results)
     }
 
@@ -162,6 +203,16 @@ impl MemoryStore for InMemoryVectorStore {
         query_embedding: &[f32],
         limit: usize,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+        info!(
+            dimension = query_embedding.len(),
+            limit = limit,
+            "step: 词向量 InMemory 向量检索"
+        );
+        info!(
+            embedding_len = query_embedding.len(),
+            limit = limit,
+            "Querying in-memory vector store semantic_search"
+        );
         let entries = self.entries.read().await;
 
         let mut similarities: Vec<(f32, MemoryEntry)> = entries
@@ -182,6 +233,16 @@ impl MemoryStore for InMemoryVectorStore {
             .map(|(_, entry)| entry)
             .collect();
 
+        info!(
+            limit = limit,
+            count = results.len(),
+            "step: 词向量 InMemory 向量检索完成"
+        );
+        info!(
+            limit = limit,
+            count = results.len(),
+            "In-memory vector store semantic_search returned"
+        );
         Ok(results)
     }
 }

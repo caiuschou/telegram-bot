@@ -13,6 +13,7 @@ lancedb = { version = "0.23" }
 arrow-array = { version = "56" }
 arrow-schema = { version = "56" }
 futures = "0.3"
+tracing = "0.1"
 memory = { path = "../../memory" }
 
 [dev-dependencies]

@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **telegram-bot runner**: 移除外层循环，单次运行 repl
+  - 不再使用 `loop` 包裹 `teloxide::repl`，不再在 long polling 退出后自动重连（无 `RECONNECT_DELAY_SECS`、无 `tokio::select!` 与 Ctrl+C 监听）；`repl` 返回后进程直接退出。
+- **telegram-bot runner**: 每条消息在独立任务中处理，不阻塞轮询
+  - 在 repl 闭包内用 `tokio::spawn` 执行 `handler_chain.handle`，收到消息后立即返回 `Ok(())`，实际处理在后台任务中完成，确保长时间处理（如 AI 调用）不会阻塞收下一条消息。
+
 ### Added
+- **消息处理全流程 step 日志**：收到消息后的每个步骤均打 info 日志，便于排查与追踪
+  - **runner**：收到消息打 "Received message"；spawn 处理任务时打 "step: processing message (handler chain started)"。
+  - **handler_chain**：开始打 "step: handler_chain started"；每个 middleware before 前后打 "step: middleware before" / "step: middleware before done"（含 middleware 类型名）；每个 handler 前后打 "step: handler processing" / "step: handler done"（含 response_type、reply_len，不打印完整 Reply 内容）；每个 middleware after 前后打 "step: middleware after" / "step: middleware after done"；结束打 "step: handler_chain finished"。
+  - **PersistenceMiddleware**：before 打 "step: PersistenceMiddleware before, saving message"、保存后打 "step: PersistenceMiddleware before done, message saved"；after 打 "step: PersistenceMiddleware after"。
+  - **MemoryMiddleware**：before 打 "step: MemoryMiddleware before, saving user message to memory"、保存后打 "step: MemoryMiddleware before done, user message saved to memory"（或 save_user_messages=false 时打 skip）；after 打 "step: MemoryMiddleware after"、若保存 AI 回复打 "step: MemoryMiddleware after done, AI reply saved to memory"（无 Reply 或 save_ai_responses=false 时打相应 skip）。
+  - **SyncAIHandler**：进入打 "step: SyncAIHandler handle start"；非 AI 查询（无 reply-to、无 @mention）打 "step: SyncAIHandler not AI query, skip" 并返回；AI 查询仍保留原有 "Replying to bot message" / "Bot mentioned, processing" 及 "Submitting to AI" 等日志。
+- **词向量 (embedding/vector) 处理日志**：处理词向量时在各层打印 step 日志，便于排查 RAG 与向量检索
+  - **SemanticSearchStrategy**：生成查询向量前 "step: 词向量 生成查询向量 (embedding)"（含 query_preview、query_len）；生成完成后 "step: 词向量 查询向量生成完成"（dimension）；向量检索前 "step: 词向量 向量检索 (semantic_search)"（dimension、limit）；检索完成后 "step: 词向量 向量检索完成"（entry_count）。
+  - **OpenAI embedding**：单条 "step: 词向量 OpenAI embed 请求"（model、text_preview、text_len）、"step: 词向量 OpenAI embed 完成"（dimension）；批量 "step: 词向量 OpenAI embed_batch 请求/完成"（batch_size、count、dimension）。
+  - **BigModel embedding**：单条 "step: 词向量 BigModel embed 请求/完成"；批量 "step: 词向量 BigModel embed_batch 请求/完成"（依赖新增 tracing）。
+  - **向量存储 (Lance/SQLite/InMemory)**：add 时若 entry 带 embedding 打 "step: 词向量 [Lance|SQLite|InMemory] 写入向量"（id、dimension）；semantic_search 时打 "step: 词向量 [Store] 向量检索"（dimension、limit）、"step: 词向量 [Store] 向量检索完成"（count）。
+- **RAG / context build**: Detailed logging for strategies and AI submission
+  - **memory-strategies**: Each strategy logs query results in detail: `RecentMessagesStrategy` and `SemanticSearchStrategy` log `entry_count`, `message_count`, and per-message `content_preview` (truncated to 400 chars). `UserPreferencesStrategy` logs `entry_count` and `preferences_preview` when preferences are found. On store/embedding failure, strategies log `error` and (for semantic search) `error_debug` and `query_preview`.
+  - **memory (ContextBuilder)**: When a strategy fails, logs `strategy_index`, `error`, and full error chain (`Caused by`).
+  - **ai-handlers (SyncAIHandler)**: Before calling the AI, logs `context_len`, `context_preview`, `question`, `prompt_len`, `prompt_preview` (truncated to 500 chars) with message "Submitting to AI (streaming)" or "Submitting to AI (non-streaming)". On AI response failure (normal or stream), logs full error chain.
+  - **memory-strategies/utils**: Added `truncate_for_log(s, max_len)` and `MAX_LOG_CONTENT_LEN` for safe content preview in logs.
 - **openai-client**: Request logging and masked token
   - Log each chat completion request: `model`, `message_count`, and masked `api_key` (first 7 + `***` + last 4 chars; keys ≤11 chars log as `***`).
   - Log response token usage: `prompt_tokens`, `completion_tokens`, `total_tokens` for non-stream and stream (when API returns usage).

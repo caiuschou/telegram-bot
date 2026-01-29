@@ -5,10 +5,10 @@
 
 use async_trait::async_trait;
 use memory_core::{MemoryStore, StrategyResult};
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::strategy::ContextStrategy;
-use super::utils::format_message;
+use super::utils::{format_message, truncate_for_log, MAX_LOG_CONTENT_LEN};
 
 /// Strategy for retrieving recent conversation messages.
 #[derive(Debug, Clone)]
@@ -59,18 +59,35 @@ impl ContextStrategy for RecentMessagesStrategy {
                 limit = self.limit,
                 "RecentMessagesStrategy: searching by conversation_id"
             );
-            let entries = store.search_by_conversation(conv_id).await?;
+            let entries = store.search_by_conversation(conv_id).await.map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    conversation_id = %conv_id,
+                    "RecentMessagesStrategy: search_by_conversation failed"
+                );
+                e
+            })?;
 
             let messages: Vec<String> = entries
-                .into_iter()
+                .iter()
                 .take(self.limit)
-                .map(|entry| format_message(&entry))
+                .map(|entry| format_message(entry))
                 .collect();
 
-            debug!(
+            info!(
+                conversation_id = %conv_id,
+                entry_count = entries.len(),
                 message_count = messages.len(),
                 "RecentMessagesStrategy: found messages by conversation_id"
             );
+            for (i, msg) in messages.iter().enumerate() {
+                info!(
+                    strategy = "RecentMessagesStrategy",
+                    index = i,
+                    content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
+                    "context message"
+                );
+            }
             return Ok(StrategyResult::Messages(messages));
         }
 
@@ -80,18 +97,35 @@ impl ContextStrategy for RecentMessagesStrategy {
                 limit = self.limit,
                 "RecentMessagesStrategy: searching by user_id"
             );
-            let entries = store.search_by_user(uid).await?;
+            let entries = store.search_by_user(uid).await.map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    user_id = %uid,
+                    "RecentMessagesStrategy: search_by_user failed"
+                );
+                e
+            })?;
 
             let messages: Vec<String> = entries
-                .into_iter()
+                .iter()
                 .take(self.limit)
-                .map(|entry| format_message(&entry))
+                .map(|entry| format_message(entry))
                 .collect();
 
-            debug!(
+            info!(
+                user_id = %uid,
+                entry_count = entries.len(),
                 message_count = messages.len(),
                 "RecentMessagesStrategy: found messages by user_id"
             );
+            for (i, msg) in messages.iter().enumerate() {
+                info!(
+                    strategy = "RecentMessagesStrategy",
+                    index = i,
+                    content_preview = %truncate_for_log(msg, MAX_LOG_CONTENT_LEN),
+                    "context message"
+                );
+            }
             return Ok(StrategyResult::Messages(messages));
         }
 

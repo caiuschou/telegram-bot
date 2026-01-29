@@ -4,7 +4,7 @@ use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
 use handler_chain::HandlerChain;
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
-use memory_lance::LanceVectorStore;
+use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
 use middleware::{MemoryMiddleware, PersistenceMiddleware};
 use openai_client::OpenAIClient;
@@ -151,8 +151,23 @@ pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponen
                 .memory_lance_path
                 .clone()
                 .unwrap_or_else(|| "./data/lance_db".to_string());
-            info!(db_path = %lance_path, "Using Lance vector store");
-            Arc::new(LanceVectorStore::new(&lance_path).await.map_err(|e| {
+            // 与 embedding 服务维度一致：智谱 embedding-2 为 1024，OpenAI text-embedding-3-small 为 1536。
+            // 若切换 provider，需删除已有 Lance 目录或确保表按新维度重建，否则 semantic_search 会报错。
+            let embedding_dim = match config.embedding_provider.as_str() {
+                "zhipuai" => 1024,
+                _ => 1536,
+            };
+            let lance_config = LanceConfig {
+                db_path: lance_path.clone(),
+                embedding_dim,
+                ..Default::default()
+            };
+            info!(
+                db_path = %lance_path,
+                embedding_dim = embedding_dim,
+                "Using Lance vector store"
+            );
+            Arc::new(LanceVectorStore::with_config(lance_config).await.map_err(|e| {
                 error!(error = %e, "Failed to initialize Lance store");
                 anyhow::anyhow!("Failed to initialize Lance store: {}", e)
             })?)
@@ -318,27 +333,49 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
         }
     });
 
-    // 启动 bot 监听
+    // 启动 bot 监听：单次运行 repl，long polling 退出后进程结束（无外层循环、无自动重连）。
+    let chain = handler_chain.clone();
     teloxide::repl(
-        teloxide_bot,
+        teloxide_bot.clone(),
         move |_bot: Bot, msg: teloxide::types::Message| {
-            let handler_chain = handler_chain.clone();
+            let handler_chain = chain.clone();
 
             async move {
                 let wrapper = TelegramMessageWrapper(&msg);
                 let core_msg = wrapper.to_core();
 
-                if let Some(text) = msg.text() {
-                    info!(
-                        user_id = core_msg.user.id,
-                        message_content = %text,
-                        "Received message"
-                    );
+                // 每条收到的消息都打日志；仅文本消息带 message_content，非文本（图/贴纸等）不打 content 避免空字段
+                match msg.text() {
+                    Some(text) => {
+                        info!(
+                            user_id = core_msg.user.id,
+                            chat_id = core_msg.chat.id,
+                            message_content = %text,
+                            "Received message"
+                        );
+                    }
+                    None => {
+                        info!(
+                            user_id = core_msg.user.id,
+                            chat_id = core_msg.chat.id,
+                            "Received non-text message"
+                        );
+                    }
                 }
 
-                if let Err(e) = handler_chain.handle(&core_msg).await {
-                    error!(error = %e, user_id = core_msg.user.id, "Handler chain failed");
-                }
+                // 在新任务中处理消息，避免长时间处理（如 AI 调用）阻塞轮询收下一条消息
+                let chain_for_task = handler_chain.clone();
+                tokio::spawn(async move {
+                    info!(
+                        user_id = core_msg.user.id,
+                        chat_id = core_msg.chat.id,
+                        message_id = %core_msg.id,
+                        "step: processing message (handler chain started)"
+                    );
+                    if let Err(e) = chain_for_task.handle(&core_msg).await {
+                        error!(error = %e, user_id = core_msg.user.id, "Handler chain failed");
+                    }
+                });
 
                 Ok(())
             }

@@ -15,7 +15,7 @@ use memory::{
 };
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{error, info, instrument};
 use chrono::Utc;
 
 /// Configuration for MemoryMiddleware.
@@ -137,10 +137,11 @@ impl Middleware for MemoryMiddleware {
         let user_id = message.user.id.to_string();
         let conversation_id = message.chat.id.to_string();
 
-        debug!(
+        info!(
             user_id = %user_id,
             conversation_id = %conversation_id,
-            "MemoryMiddleware: Processing message"
+            message_id = %message.id,
+            "step: MemoryMiddleware before, saving user message to memory"
         );
 
         // Save user message to memory
@@ -150,13 +151,18 @@ impl Middleware for MemoryMiddleware {
             if let Err(e) = self.config.store.add(entry.clone()).await {
                 error!(error = %e, "Failed to save user message to memory");
             } else {
-                debug!(
+                info!(
                     user_id = %user_id,
                     conversation_id = %conversation_id,
-                    message_id = %entry.id,
-                    "Saved user message to memory"
+                    entry_id = %entry.id,
+                    "step: MemoryMiddleware before done, user message saved to memory"
                 );
             }
+        } else {
+            info!(
+                user_id = %user_id,
+                "step: MemoryMiddleware before done (save_user_messages=false, skip)"
+            );
         }
 
         Ok(true)
@@ -171,10 +177,11 @@ impl Middleware for MemoryMiddleware {
         let user_id = message.user.id.to_string();
         let conversation_id = message.chat.id.to_string();
 
-        debug!(
+        info!(
             user_id = %user_id,
             conversation_id = %conversation_id,
-            "MemoryMiddleware: Processing response"
+            has_reply = matches!(response, HandlerResponse::Reply(_)),
+            "step: MemoryMiddleware after"
         );
 
         // Save AI response to memory when handler returns Reply(text) and config allows.
@@ -184,13 +191,24 @@ impl Middleware for MemoryMiddleware {
                 if let Err(e) = self.config.store.add(entry.clone()).await {
                     error!(error = %e, "Failed to save AI response to memory");
                 } else {
-                    debug!(
+                    info!(
                         user_id = %user_id,
                         conversation_id = %conversation_id,
-                        "Saved AI response to memory"
+                        entry_id = %entry.id,
+                        "step: MemoryMiddleware after done, AI reply saved to memory"
                     );
                 }
+            } else {
+                info!(
+                    user_id = %user_id,
+                    "step: MemoryMiddleware after done (no Reply, skip save)"
+                );
             }
+        } else {
+            info!(
+                user_id = %user_id,
+                "step: MemoryMiddleware after done (save_ai_responses=false, skip)"
+            );
         }
 
         Ok(())

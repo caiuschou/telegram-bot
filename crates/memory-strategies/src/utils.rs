@@ -5,6 +5,18 @@
 
 use memory_core::{MemoryEntry, MemoryRole};
 
+/// Maximum character length for content in logs (avoids dumping huge strings).
+pub(crate) const MAX_LOG_CONTENT_LEN: usize = 400;
+
+/// Truncates a string for logging; appends "..." if truncated.
+pub(crate) fn truncate_for_log(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
 /// Formats a memory entry as a message string.
 ///
 /// Converts a MemoryEntry into a human-readable message format suitable for

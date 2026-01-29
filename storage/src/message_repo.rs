@@ -64,6 +64,14 @@ impl MessageRepository {
     pub async fn save(&self, message: &MessageRecord) -> Result<(), sqlx::Error> {
         let pool = self.pool_manager.pool();
 
+        info!(
+            id = %message.id,
+            user_id = message.user_id,
+            chat_id = message.chat_id,
+            direction = %message.direction,
+            "Writing message to storage"
+        );
+
         sqlx::query(
             r#"
             INSERT INTO messages (id, user_id, chat_id, username, first_name, last_name, message_type, content, direction, created_at)
@@ -84,13 +92,17 @@ impl MessageRepository {
         .await?;
 
         info!(
-            "Saved message: id={}, content={}",
-            message.id, message.content
+            id = %message.id,
+            user_id = message.user_id,
+            chat_id = message.chat_id,
+            direction = %message.direction,
+            "Message written to storage"
         );
         Ok(())
     }
 
     pub async fn get_stats(&self) -> Result<MessageStats, sqlx::Error> {
+        info!("Querying message stats");
         let pool = self.pool_manager.pool();
 
         let total_messages: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM messages")
@@ -125,6 +137,14 @@ impl MessageRepository {
                 .fetch_optional(pool)
                 .await?;
 
+        info!(
+            total_messages = total_messages.0,
+            sent_messages = sent_messages.0,
+            received_messages = received_messages.0,
+            unique_users = unique_users.0,
+            unique_chats = unique_chats.0,
+            "Message stats query returned"
+        );
         Ok(MessageStats {
             total_messages: total_messages.0,
             sent_messages: sent_messages.0,
@@ -140,6 +160,12 @@ impl MessageRepository {
         &self,
         query: &MessageQuery,
     ) -> Result<Vec<MessageRecord>, sqlx::Error> {
+        info!(
+            user_id = ?query.user_id,
+            chat_id = ?query.chat_id,
+            limit = ?query.limit,
+            "Querying messages"
+        );
         let pool = self.pool_manager.pool();
         let mut sql = String::from("SELECT * FROM messages WHERE 1=1");
         let mut params: Vec<String> = Vec::new();
@@ -166,7 +192,12 @@ impl MessageRepository {
         }
 
         let messages: Vec<MessageRecord> = query_builder.fetch_all(pool).await?;
-        info!("Retrieved {} messages", messages.len());
+        info!(
+            count = messages.len(),
+            user_id = ?query.user_id,
+            chat_id = ?query.chat_id,
+            "Messages query returned"
+        );
 
         Ok(messages)
     }
@@ -176,6 +207,11 @@ impl MessageRepository {
         keyword: &str,
         limit: Option<i64>,
     ) -> Result<Vec<MessageRecord>, sqlx::Error> {
+        info!(
+            keyword = %keyword,
+            limit = ?limit,
+            "Querying messages by keyword"
+        );
         let pool = self.pool_manager.pool();
         let pattern = format!("%{}%", keyword);
         let mut sql =
@@ -187,7 +223,11 @@ impl MessageRepository {
 
         let messages = sqlx::query_as(&sql).bind(&pattern).fetch_all(pool).await?;
 
-        info!("Found {} messages matching '{}'", messages.len(), keyword);
+        info!(
+            count = messages.len(),
+            keyword = %keyword,
+            "Messages keyword search returned"
+        );
         Ok(messages)
     }
 
@@ -209,6 +249,7 @@ impl MessageRepository {
     }
 
     pub async fn get_message_by_id(&self, message_id: &str) -> Result<Option<MessageRecord>, sqlx::Error> {
+        info!(message_id = %message_id, "Querying message by id");
         let pool = self.pool_manager.pool();
 
         let message = sqlx::query_as::<_, MessageRecord>("SELECT * FROM messages WHERE id = ?")
@@ -216,6 +257,11 @@ impl MessageRepository {
             .fetch_optional(pool)
             .await?;
 
+        info!(
+            message_id = %message_id,
+            found = message.is_some(),
+            "Message by id query returned"
+        );
         Ok(message)
     }
 
@@ -224,6 +270,11 @@ impl MessageRepository {
         chat_id: i64,
         limit: i64,
     ) -> Result<Vec<MessageRecord>, sqlx::Error> {
+        info!(
+            chat_id = chat_id,
+            limit = limit,
+            "Querying recent messages by chat"
+        );
         let pool = self.pool_manager.pool();
 
         let messages: Vec<MessageRecord> = sqlx::query_as::<_, MessageRecord>(
@@ -235,9 +286,10 @@ impl MessageRepository {
         .await?;
 
         info!(
-            "Retrieved {} recent messages for chat {}",
-            messages.len(),
-            chat_id
+            count = messages.len(),
+            chat_id = chat_id,
+            limit = limit,
+            "Recent messages by chat query returned"
         );
 
         Ok(messages)
