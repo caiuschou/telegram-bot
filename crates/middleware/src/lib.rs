@@ -5,6 +5,8 @@
 
 mod middleware;
 mod memory_middleware;
+#[cfg(test)]
+mod memory_middleware_test;
 mod persistence_middleware;
 
 pub use middleware::{AuthMiddleware, LoggingMiddleware};

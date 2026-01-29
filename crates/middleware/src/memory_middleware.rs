@@ -21,7 +21,7 @@ use chrono::Utc;
 /// Configuration for MemoryMiddleware.
 #[derive(Clone)]
 pub struct MemoryConfig {
-    /// Memory store instance
+    /// Memory store instance (used by middleware and by tests for assertions).
     pub store: Arc<dyn MemoryStore>,
     /// Maximum number of recent messages to include in context
     pub max_recent_messages: usize,
@@ -47,7 +47,8 @@ impl Default for MemoryConfig {
 
 /// Middleware for managing conversation memory.
 pub struct MemoryMiddleware {
-    config: MemoryConfig,
+    /// Config exposed as pub(crate) for unit tests in memory_middleware_test.
+    pub(crate) config: MemoryConfig,
 }
 
 impl MemoryMiddleware {
@@ -65,7 +66,8 @@ impl MemoryMiddleware {
     }
 
     /// Creates a memory entry from a bot message (user role).
-    fn message_to_memory_entry(&self, message: &Message) -> MemoryEntry {
+    /// pub(crate) for unit tests in memory_middleware_test.
+    pub(crate) fn message_to_memory_entry(&self, message: &Message) -> MemoryEntry {
         let user_id = Some(message.user.id.to_string());
         let conversation_id = Some(message.chat.id.to_string());
 
@@ -82,7 +84,8 @@ impl MemoryMiddleware {
     }
 
     /// Creates a memory entry for an assistant reply (e.g. from HandlerResponse::Reply(text)).
-    fn reply_to_memory_entry(&self, message: &Message, reply_text: &str) -> MemoryEntry {
+    /// pub(crate) for unit tests in memory_middleware_test.
+    pub(crate) fn reply_to_memory_entry(&self, message: &Message, reply_text: &str) -> MemoryEntry {
         let user_id = Some(message.user.id.to_string());
         let conversation_id = Some(message.chat.id.to_string());
 
@@ -99,8 +102,9 @@ impl MemoryMiddleware {
     }
 
     /// Builds conversation context for a message.
+    /// pub(crate) for unit tests in memory_middleware_test.
     #[allow(dead_code)]
-    async fn build_context(
+    pub(crate) async fn build_context(
         &self,
         user_id: &str,
         conversation_id: &str,
@@ -190,124 +194,5 @@ impl Middleware for MemoryMiddleware {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use memory_inmemory::InMemoryVectorStore;
-    use dbot_core::{User, Chat};
-
-    fn create_test_message(content: &str) -> Message {
-        Message {
-            id: "test_message_id".to_string(),
-            content: content.to_string(),
-            user: User {
-                id: 123,
-                username: Some("test_user".to_string()),
-                first_name: Some("Test".to_string()),
-                last_name: None,
-            },
-            chat: Chat {
-                id: 456,
-                chat_type: "private".to_string(),
-            },
-            message_type: "text".to_string(),
-            direction: dbot_core::MessageDirection::Incoming,
-            created_at: Utc::now(),
-            reply_to_message_id: None,
-        }
-    }
-
-    #[test]
-    fn test_memory_config_default() {
-        let config = MemoryConfig::default();
-        assert_eq!(config.max_recent_messages, 10);
-        assert_eq!(config.max_context_tokens, 4096);
-        assert!(config.save_user_messages);
-        assert!(config.save_ai_responses);
-    }
-
-    #[test]
-    fn test_memory_middleware_creation() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store);
-        assert!(middleware.config.save_user_messages);
-    }
-
-    #[test]
-    fn test_message_to_memory_entry() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store);
-        let message = create_test_message("Test message");
-
-        let entry = middleware.message_to_memory_entry(&message);
-
-        assert_eq!(entry.content, "Test message");
-        assert_eq!(entry.metadata.role, MemoryRole::User);
-        assert_eq!(entry.metadata.user_id, Some("123".to_string()));
-        assert_eq!(entry.metadata.conversation_id, Some("456".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_memory_middleware_saves_user_messages() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store.clone());
-        let message = create_test_message("Hello");
-
-        middleware.before(&message).await.unwrap();
-
-        let entries = store.search_by_user("123").await.unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].content, "Hello");
-    }
-
-    #[tokio::test]
-    async fn test_memory_middleware_after_handler_response() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store.clone());
-        let message = create_test_message("Hello");
-
-        let response = HandlerResponse::Continue;
-
-        middleware.after(&message, &response).await.unwrap();
-
-        // Continue carries no reply text, so nothing is saved
-        let entries = store.search_by_user("123").await.unwrap();
-        assert_eq!(entries.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_memory_middleware_after_saves_reply_to_memory() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store.clone());
-        let message = create_test_message("Hello");
-
-        let response = HandlerResponse::Reply("AI reply here.".to_string());
-
-        middleware.after(&message, &response).await.unwrap();
-
-        let entries = store.search_by_user("123").await.unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].content, "AI reply here.");
-        assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
-    }
-
-    #[tokio::test]
-    async fn test_memory_middleware_builds_context() {
-        let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
-        let middleware = MemoryMiddleware::with_store(store.clone());
-
-        let message = create_test_message("Hello");
-        middleware.before(&message).await.unwrap();
-
-        let context = middleware
-            .build_context("123", "456")
-            .await
-            .unwrap();
-
-        assert!(context.is_some());
-        assert!(context.unwrap().contains("Hello"));
     }
 }
