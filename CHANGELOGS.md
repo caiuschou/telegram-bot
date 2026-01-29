@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- memory/context: split unit tests into separate files by type
+  - **context/estimate_tokens_test.rs**: tests for `estimate_tokens` (token estimation)
+  - **context/context_builder_test.rs**: tests for `ContextBuilder` (creation, for_user, with_strategy, with_system_message; MockStore and MockStrategy)
+  - **context/context_test.rs**: tests for `Context` and `ContextMetadata` (format_for_model, exceeds_limit)
+  - Replaced single `context.rs` with `context/mod.rs` and the three test modules; removed inline `#[cfg(test)] mod tests` from context
 - Split memory strategies into independent crates
   - **memory-core** (crates/memory-core): Core types (`MemoryEntry`, `MemoryMetadata`, `MemoryRole`), `MemoryStore` trait, and `StrategyResult` enum. Used by `memory` and `memory-strategies` to avoid circular dependency.
   - **memory-strategies** (crates/memory-strategies): Context building strategies (`RecentMessagesStrategy`, `SemanticSearchStrategy`, `UserPreferencesStrategy`), `ContextStrategy` trait. Depends on `memory-core` and `embedding`. Unit tests in `src/strategies_test.rs`.
