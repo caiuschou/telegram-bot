@@ -50,3 +50,6 @@ lcov.info
 *.db-shm
 *.db-wal
 sqlite::memory:
+
+# Lance / local data
+/data/
