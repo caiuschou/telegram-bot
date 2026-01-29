@@ -202,10 +202,14 @@ impl MemoryStore for InMemoryVectorStore {
         &self,
         query_embedding: &[f32],
         limit: usize,
+        user_id: Option<&str>,
+        conversation_id: Option<&str>,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         info!(
             dimension = query_embedding.len(),
             limit = limit,
+            user_id = ?user_id,
+            conversation_id = ?conversation_id,
             "step: 词向量 InMemory 向量检索"
         );
         info!(
@@ -217,6 +221,15 @@ impl MemoryStore for InMemoryVectorStore {
 
         let mut similarities: Vec<(f32, MemoryEntry)> = entries
             .values()
+            .filter(|entry| {
+                let match_user = user_id
+                    .map(|u| entry.metadata.user_id.as_deref() == Some(u))
+                    .unwrap_or(true);
+                let match_conv = conversation_id
+                    .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
+                    .unwrap_or(true);
+                match_user && match_conv
+            })
             .filter_map(|entry| {
                 entry.embedding.as_ref().map(|embedding| {
                     let similarity = Self::cosine_similarity(query_embedding, embedding);
@@ -375,7 +388,7 @@ mod tests {
         store.add(entry3).await.unwrap();
 
         let query = vec![1.0, 0.0, 0.0];
-        let results = store.semantic_search(&query, 2).await.unwrap();
+        let results = store.semantic_search(&query, 2, None, None).await.unwrap();
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].content, "Hello world");

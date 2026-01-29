@@ -116,11 +116,25 @@ impl MemoryStore for MockMemoryStore {
         &self,
         _query_embedding: &[f32],
         limit: usize,
+        user_id: Option<&str>,
+        conversation_id: Option<&str>,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         self.query_call_count.fetch_add(1, Ordering::SeqCst);
         self.semantic_search_call_count.fetch_add(1, Ordering::SeqCst);
         let map = self.inner.lock().unwrap();
-        let mut all: Vec<MemoryEntry> = map.values().cloned().collect();
+        let mut all: Vec<MemoryEntry> = map
+            .values()
+            .cloned()
+            .filter(|e| {
+                let match_user = user_id
+                    .map(|u| e.metadata.user_id.as_deref() == Some(u))
+                    .unwrap_or(true);
+                let match_conv = conversation_id
+                    .map(|c| e.metadata.conversation_id.as_deref() == Some(c))
+                    .unwrap_or(true);
+                match_user && match_conv
+            })
+            .collect();
         all.truncate(limit);
         Ok(all)
     }
@@ -160,7 +174,7 @@ mod tests {
         assert_eq!(store.get_query_call_count(), 2);
         assert_eq!(by_conv.len(), 1);
 
-        let sem = store.semantic_search(&[], 10).await.unwrap();
+        let sem = store.semantic_search(&[], 10, None, None).await.unwrap();
         assert_eq!(store.get_query_call_count(), 3);
         assert_eq!(store.get_semantic_search_call_count(), 1);
         assert_eq!(sem.len(), 1);

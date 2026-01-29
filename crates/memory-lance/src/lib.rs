@@ -34,7 +34,7 @@
 //!
 //! // Semantic search
 //! let query_embedding = vec![0.1; 1536]; // OpenAI embedding dimension
-//! let results = store.semantic_search(&query_embedding, 10).await?;
+//! let results = store.semantic_search(&query_embedding, 10, None, None).await?;
 //! # Ok(())
 //! # }
 //! ```

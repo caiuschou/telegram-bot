@@ -91,6 +91,8 @@ impl MemoryStore for MockStore {
         &self,
         _query_embedding: &[f32],
         limit: usize,
+        _user_id: Option<&str>,
+        _conversation_id: Option<&str>,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         let entries = self.entries.read().await;
         Ok(entries.values().take(limit).cloned().collect())

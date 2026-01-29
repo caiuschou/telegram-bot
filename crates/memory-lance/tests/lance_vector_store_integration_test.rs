@@ -145,7 +145,7 @@ async fn test_lance_vector_store_verification() {
     // 11. 验证语义搜索功能
     let query_embedding: Vec<f32> = (0..1536).map(|i| i as f32 / 1536.0).collect();
     let search_results: Vec<MemoryEntry> = store
-        .semantic_search(&query_embedding, 10)
+        .semantic_search(&query_embedding, 10, None, None)
         .await
         .expect("Failed to perform semantic search");
 
@@ -233,7 +233,7 @@ async fn test_lance_vector_query_verification() {
     // 用与 A 相同的向量查询，最近邻应为 A
     let query_near_a: Vec<f32> = make_embedding(0);
     let results = store
-        .semantic_search(&query_near_a, 3)
+        .semantic_search(&query_near_a, 3, None, None)
         .await
         .expect("semantic_search");
 
@@ -251,7 +251,7 @@ async fn test_lance_vector_query_verification() {
     // 用与 B 相同的向量查询，最近邻应为 B
     let query_near_b: Vec<f32> = make_embedding(1);
     let results_b = store
-        .semantic_search(&query_near_b, 3)
+        .semantic_search(&query_near_b, 3, None, None)
         .await
         .expect("semantic_search");
     assert_eq!(

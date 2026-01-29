@@ -57,8 +57,8 @@ impl ContextStrategy for SemanticSearchStrategy {
     async fn build_context(
         &self,
         store: &dyn MemoryStore,
-        _user_id: &Option<String>,
-        _conversation_id: &Option<String>,
+        user_id: &Option<String>,
+        conversation_id: &Option<String>,
         query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
         let query_text = match query {
@@ -98,7 +98,12 @@ impl ContextStrategy for SemanticSearchStrategy {
             "step: 词向量 向量检索 (semantic_search)"
         );
         let entries = match store
-            .semantic_search(&query_embedding, self.limit)
+            .semantic_search(
+                &query_embedding,
+                self.limit,
+                user_id.as_deref(),
+                conversation_id.as_deref(),
+            )
             .await
         {
             Ok(ent) => ent,

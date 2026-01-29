@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **写入记忆时算 embedding**：MemoryMiddleware 保存用户消息与 AI 回复时若配置了 embedding_service，则先对 content 做 embed，再写入 entry.embedding，使新消息参与语义检索。
+  - **middleware**：MemoryConfig 新增 `embedding_service: Option<Arc<dyn EmbeddingService>>`；新增 `MemoryMiddleware::with_store_and_embedding(store, embedding_service)`；before()/after() 中若 embedding_service 为 Some 则调用 `embed(&content).await` 并设置 `entry.embedding`，失败时仍保存但不带 embedding。
+  - **telegram-bot runner**：BotComponents 新增 `embedding_service`；创建 MemoryMiddleware 改为 `with_store_and_embedding(components.memory_store, components.embedding_service)`。
+- **语义检索按用户/会话限定**：semantic_search 支持按 user_id、conversation_id 过滤，只返回当前用户/会话内的相似结果。
+  - **memory-core**：`MemoryStore::semantic_search` 增加参数 `user_id: Option<&str>`, `conversation_id: Option<&str>`。
+  - **memory-lance**：先取更多候选（limit*10 或 50），再按 user_id/conversation_id 过滤后取前 limit 条。
+  - **memory-sqlite / memory-inmemory**：在计算相似度前按 user_id/conversation_id 过滤。
+  - **memory-strategies (SemanticSearchStrategy)**：调用 store.semantic_search 时传入 `user_id.as_deref()`, `conversation_id.as_deref()`。
+  - **telegram-bot tests (MockMemoryStore)**：semantic_search 实现过滤逻辑；调用处补全新参数。
+
 ### Fixed
 - **最近消息查询顺序**：RecentMessagesStrategy 与 Lance 存储的「最近消息」顺序修正
   - **memory-lance**：`search_by_conversation`、`search_by_user` 返回前按 `metadata.timestamp` 升序排序，保证顺序确定。

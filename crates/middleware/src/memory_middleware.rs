@@ -9,6 +9,7 @@
 
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, Middleware, Result};
+use embedding::EmbeddingService;
 use memory::{
     ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore,
     RecentMessagesStrategy, UserPreferencesStrategy,
@@ -23,6 +24,8 @@ use chrono::Utc;
 pub struct MemoryConfig {
     /// Memory store instance (used by middleware and by tests for assertions).
     pub store: Arc<dyn MemoryStore>,
+    /// Optional embedding service: when set, user messages and AI replies are embedded before saving so they participate in semantic search.
+    pub embedding_service: Option<Arc<dyn EmbeddingService>>,
     /// Maximum number of recent messages to include in context
     pub max_recent_messages: usize,
     /// Maximum context tokens
@@ -37,6 +40,7 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             store: Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>,
+            embedding_service: None,
             max_recent_messages: 10,
             max_context_tokens: 4096,
             save_user_messages: true,
@@ -61,6 +65,18 @@ impl MemoryMiddleware {
     pub fn with_store(store: Arc<dyn MemoryStore>) -> Self {
         Self::new(MemoryConfig {
             store,
+            ..Default::default()
+        })
+    }
+
+    /// Creates a new MemoryMiddleware with store and embedding service so saved messages get embeddings and participate in semantic search.
+    pub fn with_store_and_embedding(
+        store: Arc<dyn MemoryStore>,
+        embedding_service: Arc<dyn EmbeddingService>,
+    ) -> Self {
+        Self::new(MemoryConfig {
+            store,
+            embedding_service: Some(embedding_service),
             ..Default::default()
         })
     }
@@ -146,7 +162,15 @@ impl Middleware for MemoryMiddleware {
 
         // Save user message to memory
         if self.config.save_user_messages {
-            let entry = self.message_to_memory_entry(message);
+            let mut entry = self.message_to_memory_entry(message);
+            if let Some(ref svc) = self.config.embedding_service {
+                match svc.embed(&entry.content).await {
+                    Ok(emb) => entry.embedding = Some(emb),
+                    Err(e) => {
+                        error!(error = %e, "Failed to embed user message, saving without embedding");
+                    }
+                }
+            }
 
             if let Err(e) = self.config.store.add(entry.clone()).await {
                 error!(error = %e, "Failed to save user message to memory");
@@ -187,7 +211,15 @@ impl Middleware for MemoryMiddleware {
         // Save AI response to memory when handler returns Reply(text) and config allows.
         if self.config.save_ai_responses {
             if let HandlerResponse::Reply(text) = response {
-                let entry = self.reply_to_memory_entry(message, text);
+                let mut entry = self.reply_to_memory_entry(message, text);
+                if let Some(ref svc) = self.config.embedding_service {
+                    match svc.embed(&entry.content).await {
+                        Ok(emb) => entry.embedding = Some(emb),
+                        Err(e) => {
+                            error!(error = %e, "Failed to embed AI reply, saving without embedding");
+                        }
+                    }
+                }
                 if let Err(e) = self.config.store.add(entry.clone()).await {
                     error!(error = %e, "Failed to save AI response to memory");
                 } else {

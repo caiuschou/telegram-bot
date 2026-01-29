@@ -60,7 +60,7 @@ async fn main() -> Result<(), anyhow::Error> {
     inmemory_store.add(entry2.clone()).await?;
 
     let query_embedding = vec![1.0, 0.0, 0.0];
-    let similar = inmemory_store.semantic_search(&query_embedding, 2).await?;
+    let similar = inmemory_store.semantic_search(&query_embedding, 2, None, None).await?;
     assert!(similar.len() >= 1);
     println!("  ✓ Performed semantic search with embeddings");
 
@@ -83,7 +83,7 @@ async fn main() -> Result<(), anyhow::Error> {
     sqlite_store.add(entry_with_embedding.clone()).await?;
     sqlite_store.add(entry2.clone()).await?;
 
-    let similar = sqlite_store.semantic_search(&query_embedding, 2).await?;
+    let similar = sqlite_store.semantic_search(&query_embedding, 2, None, None).await?;
     assert!(similar.len() >= 1);
     println!("  ✓ Performed semantic search with embeddings in SQLite");
 

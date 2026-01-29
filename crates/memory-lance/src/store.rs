@@ -535,10 +535,18 @@ impl MemoryStore for LanceVectorStore {
         Ok(entries)
     }
 
-    async fn semantic_search(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<MemoryEntry>> {
+    async fn semantic_search(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+        user_id: Option<&str>,
+        conversation_id: Option<&str>,
+    ) -> Result<Vec<MemoryEntry>> {
         info!(
             dimension = query_embedding.len(),
             limit = limit,
+            user_id = ?user_id,
+            conversation_id = ?conversation_id,
             "step: 词向量 Lance 向量检索"
         );
         info!(
@@ -557,6 +565,13 @@ impl MemoryStore for LanceVectorStore {
                 anyhow!("Failed to open table: {}", e)
             })?;
 
+        // Fetch more candidates when filtering so we have enough after filter
+        let fetch_limit = if user_id.is_some() || conversation_id.is_some() {
+            limit.saturating_mul(10).max(50)
+        } else {
+            limit
+        };
+
         let results = table
             .query()
             .nearest_to(query_embedding)
@@ -574,7 +589,7 @@ impl MemoryStore for LanceVectorStore {
                     e
                 )
             })?
-            .limit(limit)
+            .limit(fetch_limit)
             .execute()
             .await
             .map_err(|e| {
@@ -604,9 +619,18 @@ impl MemoryStore for LanceVectorStore {
         for batch in results {
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
-                entries.push(entry);
+                let match_user = user_id
+                    .map(|u| entry.metadata.user_id.as_deref() == Some(u))
+                    .unwrap_or(true);
+                let match_conv = conversation_id
+                    .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
+                    .unwrap_or(true);
+                if match_user && match_conv {
+                    entries.push(entry);
+                }
             }
         }
+        entries.truncate(limit);
 
         info!(
             limit = limit,

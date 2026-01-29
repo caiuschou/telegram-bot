@@ -31,6 +31,8 @@ pub struct BotComponents {
     pub sync_ai_handler: Arc<SyncAIHandler>,
     /// 向量记忆存储
     pub memory_store: Arc<dyn MemoryStore>,
+    /// Embedding 服务（用于语义检索与写入记忆时生成向量）
+    pub embedding_service: Arc<dyn embedding::EmbeddingService>,
 }
 
 /// 可测试的 TelegramBot 结构，封装 Bot 配置与依赖。
@@ -118,7 +120,7 @@ async fn build_bot_components(
         teloxide_bot.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
-        embedding_service,
+        embedding_service.clone(),
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
     ));
@@ -129,6 +131,7 @@ async fn build_bot_components(
         bot_username,
         sync_ai_handler,
         memory_store,
+        embedding_service,
     })
 }
 
@@ -213,9 +216,10 @@ impl TelegramBot {
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
-        // 初始化记忆中间件
-        let memory_middleware = Arc::new(MemoryMiddleware::with_store(
+        // 初始化记忆中间件（带 embedding 服务，写入时算向量以参与语义检索）
+        let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
+            components.embedding_service.clone(),
         ));
 
         // 构建处理器链（SyncAIHandler 在链内同步执行 AI，返回 Reply 供 memory_middleware 在 after() 中存 AI 回复）
@@ -242,9 +246,10 @@ impl TelegramBot {
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
-        // 初始化记忆中间件
-        let memory_middleware = Arc::new(MemoryMiddleware::with_store(
+        // 初始化记忆中间件（带 embedding 服务，写入时算向量以参与语义检索）
+        let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
+            components.embedding_service.clone(),
         ));
 
         // 构建处理器链
