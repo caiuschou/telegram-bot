@@ -8,15 +8,16 @@
 
 use std::env;
 use std::sync::Once;
+use std::time::Duration;
 
+use dbot_core::{Chat, Message, MessageDirection, User};
+use telegram_bot::runner::TelegramBot;
 use telegram_bot::BotConfig;
 use tempfile::TempDir;
 use tracing_subscriber::{fmt, EnvFilter};
 
 mod mock_memory_store;
 use mock_memory_store::MockMemoryStore;
-
-use memory::MemoryStore;
 
 /// 设置测试配置，使用 `.env.test` / `.env` 与临时目录
 ///
@@ -66,6 +67,9 @@ fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
         env::set_var("MEMORY_STORE_TYPE", "memory");
     }
 
+    // 集成测试使用 OpenAI embedding，避免依赖 BIGMODEL_API_KEY
+    env::set_var("EMBEDDING_PROVIDER", "openai");
+
     // 始终为测试覆盖路径型配置
     env::set_var(
         "DATABASE_URL",
@@ -107,6 +111,7 @@ fn init_tracing() {
 /// 外部交互：
 /// - 不会真正访问 Telegram，只在本地 HTTP 服务器上响应请求。
 /// - 后续可以通过将 Telegram API 基础地址指向该服务器来复用此 Mock。
+#[allow(dead_code)]
 fn mock_telegram_get_me() -> mockito::ServerGuard {
     let mut server = mockito::Server::new();
     let _mock_get_me = server
@@ -138,6 +143,7 @@ fn mock_telegram_get_me() -> mockito::ServerGuard {
 /// 外部交互：
 /// - 不会真正访问 Telegram，只在本地 HTTP 服务器上响应请求。
 /// - 可用于验证 Bot 是否向 `/sendMessage` 发送了请求（通过 `mock.assert()`）。
+#[allow(dead_code)]
 fn mock_telegram_send_message(server: &mut mockito::ServerGuard) -> mockito::Mock {
     server
         .mock("POST", "/sendMessage")
@@ -156,27 +162,129 @@ fn mock_telegram_send_message(server: &mut mockito::ServerGuard) -> mockito::Moc
         .create()
 }
 
-/// 主流程集成测试占位：AI 回复完整流程
-///
-/// 后续将根据 `docs/TELEGRAM_BOT_TEST_PLAN.md` 中的
-/// "AI 回复完整流程" 场景，补充：
-/// - Mock Telegram getMe / sendMessage
-/// - Mock OpenAI ChatCompletion
-/// - 启动 `run_bot` 并模拟用户消息
-/// - 验证消息持久化、记忆写入与查询、AI 回复发送等关键步骤
+/// 主流程集成测试占位：AI 回复完整流程（仅环境与组件初始化）
 #[tokio::test]
 async fn test_ai_reply_complete_flow_smoke() {
     init_tracing();
 
-    // 当前版本仅验证测试环境和基础组件可以正常初始化，
-    // 避免主流程测试在未完全实现前导致编译失败。
     let temp_dir = TempDir::new().expect("TempDir::new must succeed");
     env::set_var("OPENAI_API_KEY", "test_key_for_integration_flow");
 
     let _config = setup_test_config(&temp_dir);
     let _memory_store = MockMemoryStore::new();
+}
 
-    // TODO:
-    // - 使用 `mock_telegram_get_me` / `mock_telegram_send_message` 与 Telegram 通讯逻辑打通。
-    // - 使用可注入 MemoryStore 的 TelegramBot 构造函数与 MockMemoryStore 计数器，驱动并验证完整 AI 流程（3.x / 3.4）。
+/// AI 回复流程端到端测试（需真实 OPENAI_API_KEY）
+///
+/// 验证点：
+/// - TelegramBot 使用 MockMemoryStore 初始化
+/// - 用户“回复机器人”消息触发 AI 队列
+/// - handle_core_message 后持久化、记忆写入、查询被调用
+/// - AI 处理器运行后：store 至少 2 次（用户消息 + AI 回复），query 至少 1 次，
+///   semantic_search 至少 1 次（确保 embed 完成并执行向量检索后再断言，避免过早退出看不到 "OpenAI embed request completed"）
+///
+/// 外部交互：依赖 OPENAI_API_KEY 调用真实 OpenAI API，未设置时跳过。
+#[tokio::test]
+async fn test_ai_reply_complete_flow() {
+    init_tracing();
+
+    // 先加载 .env.test / .env，再检查 OPENAI_API_KEY，否则文件中的 key 不会被读到
+    let _ = dotenvy::from_filename(".env.test").or_else(|_| dotenvy::dotenv());
+
+    if env::var("OPENAI_API_KEY").is_err() {
+        eprintln!("SKIP: OPENAI_API_KEY not set, skipping AI reply E2E test");
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("TempDir::new must succeed");
+    let config = setup_test_config(&temp_dir);
+    let mock_store = MockMemoryStore::new();
+    let mock_store = std::sync::Arc::new(mock_store);
+
+    let bot = TelegramBot::new_with_memory_store(config, mock_store.clone())
+        .await
+        .expect("TelegramBot::new_with_memory_store");
+
+    let msg = Message {
+        id: "test_msg_1".to_string(),
+        user: User {
+            id: 123456,
+            username: Some("testuser".to_string()),
+            first_name: Some("Test".to_string()),
+            last_name: None,
+        },
+        chat: Chat {
+            id: 123456,
+            chat_type: "private".to_string(),
+        },
+        content: "Hello, can you help me?".to_string(),
+        message_type: "text".to_string(),
+        direction: MessageDirection::Incoming,
+        created_at: chrono::Utc::now(),
+        reply_to_message_id: Some("bot_msg_123".to_string()),
+    };
+
+    bot.handle_core_message(&msg).await.expect("handle_core_message");
+    bot.start_ai_handler();
+
+    // 轮询等待：必须等到 semantic_search 被调用（embed 完成后才会调用），再退出，确保能看到 "OpenAI embed request completed" 等日志
+    const POLL_INTERVAL: Duration = Duration::from_millis(200);
+    const MAX_WAIT: Duration = Duration::from_secs(25);
+    let deadline = std::time::Instant::now() + MAX_WAIT;
+    while std::time::Instant::now() < deadline {
+        if mock_store.get_store_call_count() >= 2
+            && mock_store.get_query_call_count() >= 1
+            && mock_store.get_semantic_search_call_count() >= 1
+        {
+            break;
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+
+    assert!(
+        mock_store.get_store_call_count() >= 2,
+        "Memory store should be called at least twice (user message + AI response), got {}",
+        mock_store.get_store_call_count()
+    );
+    assert!(
+        mock_store.get_query_call_count() >= 1,
+        "Vector query should be executed at least once, got {}",
+        mock_store.get_query_call_count()
+    );
+    assert!(
+        mock_store.get_semantic_search_call_count() >= 1,
+        "Semantic search (embed + vector query) should run at least once, got {}",
+        mock_store.get_semantic_search_call_count()
+    );
+}
+
+/// 当 EMBEDDING_PROVIDER=zhipuai 且未设置 BIGMODEL_API_KEY / ZHIPUAI_API_KEY 时，初始化应失败。
+#[tokio::test]
+async fn test_embedding_provider_zhipuai_requires_api_key() {
+    init_tracing();
+
+    let temp_dir = TempDir::new().expect("TempDir::new must succeed");
+    env::set_var("OPENAI_API_KEY", "test_key");
+    setup_test_config(&temp_dir);
+
+    env::set_var("EMBEDDING_PROVIDER", "zhipuai");
+    env::remove_var("BIGMODEL_API_KEY");
+    env::remove_var("ZHIPUAI_API_KEY");
+    let config = BotConfig::load(None).expect("config load");
+    assert_eq!(config.embedding_provider, "zhipuai");
+    assert!(config.bigmodel_api_key.is_empty());
+
+    let mock_store = std::sync::Arc::new(MockMemoryStore::new());
+    let result = TelegramBot::new_with_memory_store(config, mock_store).await;
+
+    let err = match result {
+        Ok(_) => panic!("expected Err when zhipuai but no API key"),
+        Err(e) => e,
+    };
+    let msg = err.to_string();
+    assert!(
+        msg.contains("BIGMODEL_API_KEY") || msg.contains("ZHIPUAI_API_KEY"),
+        "error should mention API key: {}",
+        msg
+    );
 }

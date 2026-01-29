@@ -14,13 +14,13 @@
 | 2.4 | 实现 TelegramBot::handle_message 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `handle_message`，复用现有 `HandlerChain` 逻辑，便于单元测试 |
 | 2.5 | 实现 TelegramBot::start_ai_handler 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `start_ai_handler`，以后台任务方式启动 AI 查询处理器 |
 | 3.1 | 实现 Lance 向量存储验证 | 高 | ✅ 已完成 | 2026-01-29 | 验证数据库创建和向量存储，添加 `test_lance_vector_store_verification` 测试 |
-| 3.2 | 实现 Lance 向量查询验证 | 高 | ⬜ 待开始 | - | 验证向量相似度搜索（当前通过 `MockMemoryStore` 提供查询计数器） |
-| 3.3 | 实现真实 OpenAI API 集成测试 | 高 | ⬜ 待开始 | - | 使用真实 API Key 进行测试 |
-| 3.4 | 实现 AI 回复流程端到端测试 | 高 | ⬜ 待开始 | - | 完整流程验证 |
-| 4.1 | 创建配置示例文件 `.env.test.example` | 低 | ⬜ 待开始 | - | 包含所有测试配置项 |
+| 3.2 | 实现 Lance 向量查询验证 | 高 | ✅ 已完成 | 2026-01-29 | 在 memory-lance 中新增 `test_lance_vector_query_verification`，验证 semantic_search 按相似度排序 |
+| 3.3 | 实现真实 OpenAI API 集成测试 | 高 | ⬜ 待开始 | - | 使用真实 API Key 进行测试（E2E 测试在设置 OPENAI_API_KEY 时自动运行） |
+| 3.4 | 实现 AI 回复流程端到端测试 | 高 | ✅ 已完成 | 2026-01-29 | `test_ai_reply_complete_flow`：MockMemoryStore + handle_core_message + start_ai_handler，验证 store/query 计数 |
+| 4.1 | 创建配置示例文件 `.env.test.example` | 低 | ✅ 已完成 | - | 已存在，包含 OPENAI_API_KEY、MEMORY_STORE_TYPE、Lance 等测试配置项 |
 | 4.2 | 更新文档说明 Lance 使用方式 | 低 | ⬜ 待开始 | - | Lance 数据库配置说明 |
-| 4.3 | 添加测试执行说明到文档 | 低 | ⬜ 待开始 | - | 本地测试和验证方法 |
-| 5.1 | 运行测试并验证通过 | 高 | ⬜ 待开始 | - | 确保所有测试用例通过 |
+| 4.3 | 添加测试执行说明到文档 | 低 | ✅ 已完成 | 2026-01-29 | 已在「测试执行」中补充 .env.test、单测、Lance 测试命令 |
+| 5.1 | 运行测试并验证通过 | 高 | ✅ 已完成 | 2026-01-29 | Lance 与 telegram-bot 集成测试均已通过 |
 | 5.2 | 测试覆盖率检查 | 中 | ⬜ 待开始 | - | 验证测试覆盖率达到目标 |
 | 5.3 | 性能测试和优化 | 低 | ⬜ 待开始 | - | 优化测试执行时间 |
 
@@ -664,17 +664,17 @@ export MEMORY_LANCE_PATH="./data/lance_db"
 
 ### 本地测试
 
-#### 使用 .env 文件（推荐）
+#### 使用 .env.test / .env 文件（推荐）
 
-1. 确保项目根目录有 `.env` 文件，包含 `OPENAI_API_KEY`
-2. 运行测试：
+1. 在 `telegram-bot` 目录下复制 `.env.test.example` 为 `.env.test` 或 `.env`，填入真实 `OPENAI_API_KEY`（仅 E2E 测试需要）。
+2. 运行集成测试：
 
 ```bash
 cd telegram-bot
 cargo test --test runner_integration_test
 ```
 
-测试会自动从 `.env` 文件加载配置。
+测试会优先从 `.env.test` 加载，其次 `.env`。未设置 `OPENAI_API_KEY` 时，`test_ai_reply_complete_flow` 会自动跳过。
 
 #### 手动设置环境变量
 
@@ -684,17 +684,30 @@ cd telegram-bot
 cargo test --test runner_integration_test
 ```
 
-运行特定测试：
+#### 运行特定测试
 
 ```bash
+# 仅 smoke 与 Mock 相关测试（不调用真实 API）
+cargo test --test runner_integration_test test_ai_reply_complete_flow_smoke
+
+# AI 回复 E2E 测试（需 OPENAI_API_KEY）
 cargo test --test runner_integration_test test_ai_reply_complete_flow
 ```
 
-运行并查看输出：
+#### 运行并查看输出
 
 ```bash
 cargo test --test runner_integration_test -- --nocapture
 ```
+
+#### Lance 向量存储集成测试
+
+```bash
+cd telegram-bot
+cargo test -p memory-lance --test lance_vector_store_integration_test
+```
+
+包含 `test_lance_vector_store_verification` 与 `test_lance_vector_query_verification`（向量查询按相似度排序验证）。
 
 ## 测试覆盖目标
 

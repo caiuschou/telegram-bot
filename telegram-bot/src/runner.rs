@@ -1,6 +1,6 @@
 use ai_handlers::{AIDetectionHandler, AIQuery, AIQueryHandler};
 use anyhow::Result;
-use dbot_core::{init_tracing, ToCoreMessage};
+use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
 use handler_chain::HandlerChain;
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
@@ -8,6 +8,8 @@ use memory_lance::LanceVectorStore;
 use memory_sqlite::SQLiteVectorStore;
 use middleware::{MemoryMiddleware, PersistenceMiddleware};
 use openai_client::OpenAIClient;
+use bigmodel_embedding::BigModelEmbedding;
+use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
 use storage::MessageRepository;
 use telegram_bot_ai::TelegramBotAI;
@@ -83,12 +85,31 @@ async fn build_bot_components(
     let ai_bot =
         TelegramBotAI::new("bot".to_string(), openai_client).with_model(config.ai_model.clone());
 
+    // 初始化 Embedding 服务（用于用户提问在向量库中的语义搜索）
+    let embedding_service: Arc<dyn embedding::EmbeddingService> = match config.embedding_provider.as_str() {
+        "zhipuai" => {
+            if config.bigmodel_api_key.is_empty() {
+                error!("EMBEDDING_PROVIDER=zhipuai but BIGMODEL_API_KEY / ZHIPUAI_API_KEY not set");
+                return Err(anyhow::anyhow!(
+                    "BIGMODEL_API_KEY or ZHIPUAI_API_KEY required when EMBEDDING_PROVIDER=zhipuai"
+                ));
+            }
+            info!("Using BigModel (Zhipu AI) embedding for RAG semantic search");
+            Arc::new(BigModelEmbedding::with_api_key(config.bigmodel_api_key.clone()))
+        }
+        _ => {
+            info!("Using OpenAI embedding for RAG semantic search");
+            Arc::new(OpenAIEmbedding::with_api_key(config.openai_api_key.clone()))
+        }
+    };
+
     // 初始化 AI 查询处理器
     let ai_query_handler = AIQueryHandler::new(
         ai_bot,
         teloxide_bot.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
+        embedding_service,
         query_receiver,
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
@@ -246,6 +267,22 @@ impl TelegramBot {
             }
         }
 
+        Ok(())
+    }
+
+    /// 使用 core 层消息直接驱动处理器链（仅用于集成测试，避免构造 teloxide Message）。
+    ///
+    /// 行为：与 handle_message 一致，但入参为 dbot_core::Message，便于测试中构造“回复机器人”等场景。
+    #[doc(hidden)]
+    pub async fn handle_core_message(&self, message: &CoreMessage) -> Result<()> {
+        info!(
+            user_id = message.user.id,
+            message_content = %message.content,
+            "Handling core message (test)"
+        );
+        if let Err(e) = self.handler_chain.handle(message).await {
+            error!(error = %e, user_id = message.user.id, "Handler chain failed");
+        }
         Ok(())
     }
 

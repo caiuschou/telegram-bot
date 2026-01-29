@@ -53,6 +53,7 @@
 use async_trait::async_trait;
 use async_openai::{types::CreateEmbeddingRequestArgs, Client};
 use embedding::EmbeddingService;
+use tracing::{debug, info, instrument, warn};
 
 /// OpenAI embedding service implementation.
 #[derive(Debug, Clone)]
@@ -94,6 +95,11 @@ impl OpenAIEmbedding {
         self.model = model;
         self
     }
+
+    /// Returns the embedding model name (for tests and diagnostics).
+    pub fn model(&self) -> &str {
+        &self.model
+    }
 }
 
 #[async_trait]
@@ -134,21 +140,50 @@ impl EmbeddingService for OpenAIEmbedding {
     /// - The API request fails (network error, timeout, rate limit, etc.)
     /// - The response is malformed or missing embeddings
     /// - Insufficient API quota
+    #[instrument(skip(self, text), fields(model = %self.model, text_len = text.len()))]
     async fn embed(&self, text: &str) -> Result<Vec<f32>, anyhow::Error> {
+        // Default timeout for a single embed request (connect + request + response).
+        const EMBED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+        debug!("OpenAI embed request started");
+
         let request = CreateEmbeddingRequestArgs::default()
             .model(self.model.clone())
             .input(vec![text])
             .build()?;
 
-        let response = self.client.embeddings().create(request).await?;
+        let embeddings = self.client.embeddings();
+        let create_future = embeddings.create(request);
+        let response = match tokio::time::timeout(EMBED_TIMEOUT, create_future).await {
+            Ok(Ok(r)) => {
+                debug!("OpenAI embed response received");
+                r
+            }
+            Ok(Err(e)) => {
+                warn!(error = %e, "OpenAI embed request failed");
+                return Err(e.into());
+            }
+            Err(_) => {
+                warn!(
+                    timeout_secs = EMBED_TIMEOUT.as_secs(),
+                    "OpenAI embed request timed out"
+                );
+                return Err(anyhow::anyhow!(
+                    "OpenAI embed request timed out after {} seconds",
+                    EMBED_TIMEOUT.as_secs()
+                ));
+            }
+        };
 
-        let embedding = response
-            .data
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("No embedding in response"))?
-            .embedding
-            .clone();
+        let embedding = match response.data.first() {
+            Some(item) => item.embedding.clone(),
+            None => {
+                warn!("OpenAI embed response has no embedding data");
+                return Err(anyhow::anyhow!("No embedding in response"));
+            }
+        };
 
+        info!(dimension = embedding.len(), "OpenAI embed request completed");
         Ok(embedding)
     }
 
@@ -195,10 +230,17 @@ impl EmbeddingService for OpenAIEmbedding {
     /// - The API request fails (network error, timeout, rate limit, etc.)
     /// - The response is malformed or has fewer embeddings than inputs
     /// - Batch size exceeds OpenAI's limits
+    #[instrument(skip(self, texts), fields(model = %self.model, batch_size = texts.len()))]
     async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error> {
         if texts.is_empty() {
+            debug!("OpenAI embed_batch empty input, skipping");
             return Ok(vec![]);
         }
+
+        debug!("OpenAI embed_batch request started");
+
+        // Timeout for batch request (longer than single embed due to larger payload).
+        const EMBED_BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
         let inputs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
 
@@ -207,7 +249,28 @@ impl EmbeddingService for OpenAIEmbedding {
             .input(inputs)
             .build()?;
 
-        let response = self.client.embeddings().create(request).await?;
+        let embeddings = self.client.embeddings();
+        let create_future = embeddings.create(request);
+        let response = match tokio::time::timeout(EMBED_BATCH_TIMEOUT, create_future).await {
+            Ok(Ok(r)) => {
+                debug!("OpenAI embed_batch response received");
+                r
+            }
+            Ok(Err(e)) => {
+                warn!(error = %e, "OpenAI embed_batch request failed");
+                return Err(e.into());
+            }
+            Err(_) => {
+                warn!(
+                    timeout_secs = EMBED_BATCH_TIMEOUT.as_secs(),
+                    "OpenAI embed_batch request timed out"
+                );
+                return Err(anyhow::anyhow!(
+                    "OpenAI embed_batch request timed out after {} seconds",
+                    EMBED_BATCH_TIMEOUT.as_secs()
+                ));
+            }
+        };
 
         let embeddings: Vec<Vec<f32>> = response
             .data
@@ -216,6 +279,11 @@ impl EmbeddingService for OpenAIEmbedding {
             .collect();
 
         if embeddings.len() != texts.len() {
+            warn!(
+                expected = texts.len(),
+                got = embeddings.len(),
+                "OpenAI embed_batch response count mismatch"
+            );
             return Err(anyhow::anyhow!(
                 "Expected {} embeddings, got {}",
                 texts.len(),
@@ -223,53 +291,15 @@ impl EmbeddingService for OpenAIEmbedding {
             ));
         }
 
+        let dimension = embeddings.first().map(|v| v.len()).unwrap_or(0);
+        info!(
+            count = embeddings.len(),
+            dimension = dimension,
+            "OpenAI embed_batch request completed"
+        );
         Ok(embeddings)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    #[ignore] // Requires API key, run with: cargo test -p openai-embedding -- --ignored
-    async fn test_openai_embedding() {
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .expect("OPENAI_API_KEY environment variable must be set for this test");
-
-        let service = OpenAIEmbedding::new(api_key, "text-embedding-3-small".to_string());
-
-        let embedding = service.embed("Hello world").await.unwrap();
-        assert!(!embedding.is_empty());
-        assert_eq!(embedding.len(), 1536); // text-embedding-3-small produces 1536 dimensions
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn test_openai_embedding_batch() {
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .expect("OPENAI_API_KEY environment variable must be set for this test");
-
-        let service = OpenAIEmbedding::new(api_key, "text-embedding-3-small".to_string());
-
-        let texts = vec![
-            "Hello".to_string(),
-            "World".to_string(),
-            "Goodbye".to_string(),
-        ];
-
-        let embeddings = service.embed_batch(&texts).await.unwrap();
-        assert_eq!(embeddings.len(), 3);
-        for embedding in embeddings {
-            assert!(!embedding.is_empty());
-            assert_eq!(embedding.len(), 1536);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_openai_embedding_from_env() {
-        // Should not panic even without API key (will fail on actual API call)
-        let service = OpenAIEmbedding::with_api_key(String::new());
-        assert_eq!(service.model, "text-embedding-3-small");
-    }
-}
+mod openai_embedding_test;

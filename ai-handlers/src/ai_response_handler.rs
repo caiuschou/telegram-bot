@@ -1,29 +1,50 @@
 use dbot_core::Result;
-use memory::{ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, RecentMessagesStrategy, UserPreferencesStrategy};
+use embedding::EmbeddingService;
+use memory::{
+    ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, RecentMessagesStrategy,
+    SemanticSearchStrategy, UserPreferencesStrategy,
+};
 use std::sync::Arc;
 use storage::MessageRepository;
 use telegram_bot_ai::TelegramBotAI;
 use teloxide::{prelude::*, Bot};
 use tokio::sync::mpsc::UnboundedReceiver;
-use tracing::{error, info, debug};
+use tracing::{debug, error, info};
 use chrono::Utc;
 
+/// Handler for AI queries: receives `AIQuery` messages, builds context, calls the AI, sends replies, and persists to memory.
+///
+/// **External interactions:**
+/// - **Telegram Bot API** (via `bot`): send and edit messages in the chat.
+/// - **MessageRepository** (via `repo`): read messages (reply target, recent by chat) and write AI response logs.
+/// - **MemoryStore** (via `memory_store`): add user/assistant turns and read history for context building.
+/// - **EmbeddingService** (via `embedding_service`): embed the user question for semantic search over the vector store.
+/// - **TelegramBotAI** (via `ai_bot`): call the LLM for one-shot or streaming responses.
 pub struct AIQueryHandler {
     ai_bot: TelegramBotAI,
     bot: Arc<Bot>,
     repo: MessageRepository,
     memory_store: Arc<dyn MemoryStore>,
+    /// Used by `build_memory_context` to embed the user question and run semantic search over the vector store.
+    embedding_service: Arc<dyn EmbeddingService>,
     receiver: UnboundedReceiver<crate::ai_mention_detector::AIQuery>,
     use_streaming: bool,
     thinking_message: String,
 }
 
 impl AIQueryHandler {
+    /// Constructs an `AIQueryHandler`. Does not perform network or I/O; only stores dependencies.
+    ///
+    /// **Parameters:**
+    /// - `receiver`: channel receiver for `AIQuery` messages produced by `AIDetectionHandler`.
+    /// - `use_streaming`: when `true`, replies are streamed (one message is sent and then edited as chunks arrive).
+    /// - `thinking_message`: placeholder text sent at the start of streaming (e.g. "Thinking...").
     pub fn new(
         ai_bot: TelegramBotAI,
         bot: Bot,
         repo: MessageRepository,
         memory_store: Arc<dyn MemoryStore>,
+        embedding_service: Arc<dyn EmbeddingService>,
         receiver: UnboundedReceiver<crate::ai_mention_detector::AIQuery>,
         use_streaming: bool,
         thinking_message: String,
@@ -33,18 +54,22 @@ impl AIQueryHandler {
             bot: Arc::new(bot),
             repo,
             memory_store,
+            embedding_service,
             receiver,
             use_streaming,
             thinking_message,
         }
     }
 
+    /// Main loop: continuously receives `AIQuery` from `receiver` and processes each with `handle_query`.
+    /// Only interacts with `AIDetectionHandler` via the `UnboundedReceiver`; no other external calls in this method.
     pub async fn run(&mut self) {
         while let Some(query) = self.receiver.recv().await {
             self.handle_query(query).await;
         }
     }
 
+    /// Processes a single AI query: saves the user message to memory, then dispatches to `handle_query_normal` or `handle_query_streaming` based on runtime `use_streaming`.
     async fn handle_query(&self, query: crate::ai_mention_detector::AIQuery) {
         info!(
             user_id = query.user_id,
@@ -62,6 +87,8 @@ impl AIQueryHandler {
         }
     }
 
+    /// Non-streaming path: builds memory context, formats question with context, calls the AI once, sends the reply, and saves the assistant turn to memory.
+    /// **External calls:** `build_memory_context` (MemoryStore, EmbeddingService), `TelegramBotAI::get_ai_response`, `send_response` (Bot, MessageRepository), `save_to_memory` (MemoryStore).
     async fn handle_query_normal(&self, query: crate::ai_mention_detector::AIQuery) {
         let user_id_str = query.user_id.to_string();
         let conversation_id_str = query.chat_id.to_string();
@@ -73,7 +100,9 @@ impl AIQueryHandler {
             "Processing AI query"
         );
 
-        let context = self.build_memory_context(&user_id_str, &conversation_id_str).await;
+        let context = self
+            .build_memory_context(&user_id_str, &conversation_id_str, &query.question)
+            .await;
         let question_with_context = self.format_question_with_context(&query.question, &context);
 
         match self.ai_bot.get_ai_response(&question_with_context).await {
@@ -92,13 +121,17 @@ impl AIQueryHandler {
         }
     }
 
+    /// Streaming path: sends a "thinking" placeholder message, then streams AI chunks into the same message via edit, and finally saves the full assistant reply to memory.
+    /// **External calls:** `bot.send_message` (placeholder), `bot.edit_message_text` (per chunk), `TelegramBotAI::get_ai_response_stream`, `save_to_memory` (MemoryStore).
     async fn handle_query_streaming(&self, query: crate::ai_mention_detector::AIQuery) {
         let user_id_str = query.user_id.to_string();
         let conversation_id_str = query.chat_id.to_string();
 
         info!(user_id = %user_id_str, question = %query.question, "Processing AI query (streaming mode)");
 
-        let context = self.build_memory_context(&user_id_str, &conversation_id_str).await;
+        let context = self
+            .build_memory_context(&user_id_str, &conversation_id_str, &query.question)
+            .await;
         let question_with_context = self.format_question_with_context(&query.question, &context);
 
         let chat_id = ChatId(query.chat_id);
@@ -142,6 +175,8 @@ impl AIQueryHandler {
         }
     }
 
+    /// Sends the AI reply to the chat identified by `query.chat_id` and logs it in the repository as an `ai_response` record.
+    /// **External calls:** `bot.send_message`, then `log_ai_response` (MessageRepository::save).
     async fn send_response(
         &self,
         query: &crate::ai_mention_detector::AIQuery,
@@ -163,6 +198,7 @@ impl AIQueryHandler {
         Ok(())
     }
 
+    /// Persists the AI reply as a single MessageRepository record with `kind = "ai_response"` and `status = "sent"` for audit and tracing. Does not send to Telegram; only writes to the repository.
     async fn log_ai_response(
         &self,
         query: &crate::ai_mention_detector::AIQuery,
@@ -190,6 +226,7 @@ impl AIQueryHandler {
         Ok(())
     }
 
+    /// Builds a context string from "replied-to message" and "recent messages in the chat" for display or legacy behaviour. If `query.reply_to_message_id` is set, fetches that message and formats it as a "[回复消息]" block; then fetches up to 10 recent messages for the chat and appends a "[最近的消息]" block. **External calls:** MessageRepository::get_message_by_id, MessageRepository::get_recent_messages_by_chat.
     pub async fn build_context(&self, query: &crate::ai_mention_detector::AIQuery) -> String {
         let mut context_parts = Vec::new();
 
@@ -217,6 +254,7 @@ impl AIQueryHandler {
         context_parts.join("\n")
     }
 
+    /// Formats the prompt sent to the model: if `context` is empty returns `question` as-is; otherwise returns `context` followed by `"\n\n用户提问: "` and `question`. No external calls; pure string concatenation.
     pub fn format_question_with_context(&self, question: &str, context: &str) -> String {
         if context.is_empty() {
             question.to_string()
@@ -225,13 +263,24 @@ impl AIQueryHandler {
         }
     }
 
-    async fn build_memory_context(&self, user_id: &str, conversation_id: &str) -> String {
+    /// Builds context from memory: recent messages, user preferences, and semantic search over the vector store using `question`, then merged and truncated to the token limit. Uses ContextBuilder with RecentMessagesStrategy, SemanticSearchStrategy (which calls EmbeddingService to embed `question`), and UserPreferencesStrategy. **External calls:** MemoryStore (recent + semantic search), EmbeddingService::embed / EmbeddingService::embed_batch.
+    pub(crate) async fn build_memory_context(
+        &self,
+        user_id: &str,
+        conversation_id: &str,
+        question: &str,
+    ) -> String {
         let builder = ContextBuilder::new(self.memory_store.clone())
             .with_strategy(Box::new(RecentMessagesStrategy::new(10)))
+            .with_strategy(Box::new(SemanticSearchStrategy::new(
+                5,
+                self.embedding_service.clone(),
+            )))
             .with_strategy(Box::new(UserPreferencesStrategy::new()))
             .with_token_limit(4096)
             .for_user(user_id)
-            .for_conversation(conversation_id);
+            .for_conversation(conversation_id)
+            .with_query(question);
 
         match builder.build().await {
             Ok(context) => {
@@ -248,7 +297,8 @@ impl AIQueryHandler {
         }
     }
 
-    async fn save_to_memory(&self, query: &crate::ai_mention_detector::AIQuery, content: &str, role: MemoryRole) {
+    /// Writes one turn (user or assistant) to the MemoryStore. Metadata includes `user_id`, `conversation_id`, `role`, and `timestamp` from the current query. **Only interacts with MemoryStore** (MemoryStore::add). On failure logs the error and does not propagate it.
+    pub(crate) async fn save_to_memory(&self, query: &crate::ai_mention_detector::AIQuery, content: &str, role: MemoryRole) {
         let metadata = MemoryMetadata {
             user_id: Some(query.user_id.to_string()),
             conversation_id: Some(query.chat_id.to_string()),
@@ -270,345 +320,5 @@ impl AIQueryHandler {
                 "Saved to memory"
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use memory_inmemory::InMemoryVectorStore;
-    use openai_client::OpenAIClient;
-    use storage::MessageRecord;
-    use std::sync::Arc;
-
-    #[tokio::test]
-    async fn test_build_context_with_reply_to() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let replied_message = MessageRecord::new(
-            123,
-            456,
-            Some("original_user".to_string()),
-            Some("Original".to_string()),
-            None,
-            "text".to_string(),
-            "This is the original message".to_string(),
-            "received".to_string(),
-        );
-
-        repo.save(&replied_message)
-            .await
-            .expect("Failed to save replied message");
-
-        let (_tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo.clone(),
-            memory_store,
-            _rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id: 456,
-            user_id: 123,
-            question: "Can you explain more?".to_string(),
-            reply_to_message_id: Some(replied_message.id.clone()),
-        };
-
-        let context = handler.build_context(&query).await;
-
-        assert!(context.contains("[回复消息]"));
-        assert!(context.contains("original_user"));
-        assert!(context.contains("This is the original message"));
-    }
-
-    #[tokio::test]
-    async fn test_build_context_with_recent_messages() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let chat_id = 789;
-
-        for i in 0..5 {
-            let message = MessageRecord::new(
-                100 + i,
-                chat_id,
-                Some(format!("user{}", i)),
-                Some(format!("User{}", i)),
-                None,
-                "text".to_string(),
-                format!("Message {}", i),
-                "received".to_string(),
-            );
-            repo.save(&message)
-                .await
-                .expect("Failed to save message");
-        }
-
-        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store,
-            rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id,
-            user_id: 100,
-            question: "What was discussed?".to_string(),
-            reply_to_message_id: None,
-        };
-
-        let context = handler.build_context(&query).await;
-
-        assert!(context.contains("[最近的消息]"));
-        assert!(context.contains("user0"));
-        assert!(context.contains("Message 0"));
-        assert!(context.contains("Message 4"));
-    }
-
-    #[tokio::test]
-    async fn test_build_context_empty() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store,
-            rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id: 999,
-            user_id: 123,
-            question: "Hello".to_string(),
-            reply_to_message_id: None,
-        };
-
-        let context = handler.build_context(&query).await;
-
-        assert!(context.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_format_question_with_context_empty() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store,
-            rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let question = "What is AI?";
-        let context = "";
-        let result = handler.format_question_with_context(question, context);
-
-        assert_eq!(result, question);
-    }
-
-    #[tokio::test]
-    async fn test_format_question_with_context_with_data() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store,
-            rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let question = "What is AI?";
-        let context = "[回复消息]\n用户: test\n内容: Hello";
-        let result = handler.format_question_with_context(question, context);
-
-        assert!(result.contains(context));
-        assert!(result.contains("用户提问:"));
-        assert!(result.contains(question));
-    }
-
-    #[tokio::test]
-    async fn test_save_to_memory_user_query() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-
-        let (_tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store.clone(),
-            _rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id: 123,
-            user_id: 456,
-            question: "What is AI?".to_string(),
-            reply_to_message_id: None,
-        };
-
-        handler.save_to_memory(&query, "What is AI?", MemoryRole::User).await;
-
-        let entries = memory_store.search_by_user("456").await.unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].content, "What is AI?");
-        assert_eq!(entries[0].metadata.role, MemoryRole::User);
-    }
-
-    #[tokio::test]
-    async fn test_save_to_memory_ai_response() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-
-        let (_tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store.clone(),
-            _rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id: 123,
-            user_id: 456,
-            question: "What is AI?".to_string(),
-            reply_to_message_id: None,
-        };
-
-        handler.save_to_memory(&query, "AI is artificial intelligence.", MemoryRole::Assistant).await;
-
-        let entries = memory_store.search_by_user("456").await.unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].content, "AI is artificial intelligence.");
-        assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
-    }
-
-    #[tokio::test]
-    async fn test_build_memory_context_empty() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-
-        let (_tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store,
-            _rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        let context = handler.build_memory_context("123", "456").await;
-        assert!(context.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_build_memory_context_with_history() {
-        let database_url = "sqlite::memory:";
-        let repo = MessageRepository::new(database_url)
-            .await
-            .expect("Failed to create repository");
-
-        let memory_store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-
-        let query = crate::ai_mention_detector::AIQuery {
-            chat_id: 456,
-            user_id: 123,
-            question: "Hello".to_string(),
-            reply_to_message_id: None,
-        };
-
-        let (_tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let openai_client = OpenAIClient::new("test_key".to_string());
-        let ai_bot = telegram_bot_ai::TelegramBotAI::new("test_bot".to_string(), openai_client);
-        let handler = AIQueryHandler::new(
-            ai_bot,
-            teloxide::Bot::new("test_token"),
-            repo,
-            memory_store.clone(),
-            _rx,
-            false,
-            "Thinking...".to_string(),
-        );
-
-        handler.save_to_memory(&query, "What is AI?", MemoryRole::User).await;
-
-        let context = handler.build_memory_context("123", "456").await;
-        assert!(!context.is_empty());
-        assert!(context.contains("What is AI?"));
     }
 }

@@ -14,6 +14,10 @@ pub struct BotConfig {
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
     pub memory_lance_path: Option<String>,
+    /// Embedding 服务提供商：`openai` | `zhipuai`。用于 RAG 语义检索的向量化。
+    pub embedding_provider: String,
+    /// 智谱 / BigModel API Key。当 `embedding_provider == "zhipuai"` 时必填。
+    pub bigmodel_api_key: String,
 }
 
 impl BotConfig {
@@ -39,6 +43,11 @@ impl BotConfig {
         let memory_sqlite_path =
             env::var("MEMORY_SQLITE_PATH").unwrap_or_else(|_| "./data/memory.db".to_string());
         let memory_lance_path = env::var("MEMORY_LANCE_PATH").ok();
+        let embedding_provider =
+            env::var("EMBEDDING_PROVIDER").unwrap_or_else(|_| "openai".to_string());
+        let bigmodel_api_key = env::var("BIGMODEL_API_KEY")
+            .or_else(|_| env::var("ZHIPUAI_API_KEY"))
+            .unwrap_or_default();
 
         Ok(Self {
             bot_token,
@@ -52,6 +61,8 @@ impl BotConfig {
             memory_store_type,
             memory_sqlite_path,
             memory_lance_path,
+            embedding_provider,
+            bigmodel_api_key,
         })
     }
 }
@@ -77,6 +88,9 @@ mod tests {
         env::remove_var("MEMORY_STORE_TYPE");
         env::remove_var("MEMORY_SQLITE_PATH");
         env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::remove_var("ZHIPUAI_API_KEY");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -90,6 +104,8 @@ mod tests {
         assert_eq!(config.ai_thinking_message, "正在思考...");
         assert_eq!(config.memory_store_type, "memory");
         assert_eq!(config.memory_sqlite_path, "./data/memory.db");
+        assert_eq!(config.embedding_provider, "openai");
+        assert!(config.bigmodel_api_key.is_empty());
     }
 
     #[test]
@@ -114,6 +130,9 @@ mod tests {
         env::remove_var("MEMORY_SQLITE_PATH");
         env::set_var("MEMORY_SQLITE_PATH", "/tmp/memory.db");
         env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::remove_var("ZHIPUAI_API_KEY");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -126,6 +145,7 @@ mod tests {
         assert_eq!(config.ai_thinking_message, "Thinking...");
         assert_eq!(config.memory_store_type, "sqlite");
         assert_eq!(config.memory_sqlite_path, "/tmp/memory.db");
+        assert_eq!(config.embedding_provider, "openai");
     }
 
     #[test]
@@ -135,9 +155,48 @@ mod tests {
         env::set_var("BOT_TOKEN", "env_token");
         env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::remove_var("ZHIPUAI_API_KEY");
 
         let config = BotConfig::load(Some("override_token".to_string())).unwrap();
 
         assert_eq!(config.bot_token, "override_token");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_embedding_provider_zhipuai() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::set_var("EMBEDDING_PROVIDER", "zhipuai");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::set_var("BIGMODEL_API_KEY", "bigmodel-key");
+        env::remove_var("ZHIPUAI_API_KEY");
+
+        let config = BotConfig::load(None).unwrap();
+
+        assert_eq!(config.embedding_provider, "zhipuai");
+        assert_eq!(config.bigmodel_api_key, "bigmodel-key");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_bigmodel_key_from_zhipuai() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::remove_var("ZHIPUAI_API_KEY");
+        env::set_var("ZHIPUAI_API_KEY", "zhipu-key");
+
+        let config = BotConfig::load(None).unwrap();
+
+        assert_eq!(config.bigmodel_api_key, "zhipu-key");
     }
 }

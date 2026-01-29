@@ -15,11 +15,15 @@
 //! - Number of entries/messages returned
 //! - Whether user preferences were detected
 //!
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use embedding::EmbeddingService;
+
 use crate::context::StrategyResult;
 use crate::store::MemoryStore;
 use crate::types::{MemoryEntry, MemoryRole};
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Trait for context building strategies.
 #[async_trait]
@@ -127,10 +131,15 @@ impl ContextStrategy for RecentMessagesStrategy {
 }
 
 /// Strategy for performing semantic search on conversation history.
-#[derive(Debug, Clone)]
+///
+/// Uses the user's question text to generate an embedding, then searches the vector store
+/// for the most semantically similar memory entries to include as context.
 pub struct SemanticSearchStrategy {
-    #[allow(dead_code)]
+    /// Maximum number of relevant messages to retrieve.
     limit: usize,
+    /// Embedding service used to embed the user's query text (e.g. OpenAI).
+    /// External: calls embedding API to obtain query vector.
+    embedding_service: Arc<dyn EmbeddingService>,
 }
 
 impl SemanticSearchStrategy {
@@ -139,8 +148,12 @@ impl SemanticSearchStrategy {
     /// # Arguments
     ///
     /// * `limit` - Maximum number of relevant messages to retrieve.
-    pub fn new(limit: usize) -> Self {
-        Self { limit }
+    /// * `embedding_service` - Service to generate query embedding (e.g. OpenAI).
+    pub fn new(limit: usize, embedding_service: Arc<dyn EmbeddingService>) -> Self {
+        Self {
+            limit,
+            embedding_service,
+        }
     }
 }
 
@@ -148,40 +161,55 @@ impl SemanticSearchStrategy {
 impl ContextStrategy for SemanticSearchStrategy {
     /// Builds context by performing semantic search for relevant messages.
     ///
-    /// Currently returns Empty result as semantic search requires integration
-    /// with embedding service to generate embeddings for query text.
-    ///
-    /// # Planned Implementation
-    ///
-    /// 1. Generate embedding for query text using EmbeddingService
-    /// 2. Call store.semantic_search() with query embedding
-    /// 3. Format returned entries as messages
+    /// 1. If query text is present, generates embedding via EmbeddingService.
+    /// 2. Calls store.semantic_search() with query embedding.
+    /// 3. Formats returned entries as messages and returns them.
     ///
     /// # External Interactions
     ///
-    /// - **Embedding Service**: Will call OpenAI API to generate query embedding
-    /// - **MemoryStore**: Will perform vector similarity search
-    /// - **AI Context**: Results provide semantically relevant context for current query
-    ///
-    /// # Current State
-    ///
-    /// Placeholder implementation - returns Empty result.
-    /// TODO: Integrate with embedding service and complete implementation.
+    /// - **Embedding Service**: Calls embedding API to generate query vector.
+    /// - **MemoryStore**: Performs vector similarity search (e.g. Lance/SQLite).
+    /// - **AI Context**: Results provide semantically relevant context for the current query.
     async fn build_context(
         &self,
-        _store: &dyn MemoryStore,
+        store: &dyn MemoryStore,
         _user_id: &Option<String>,
         _conversation_id: &Option<String>,
-        _query: &Option<String>,
+        query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
-        // Note: This requires embedding service to be integrated
-        // For now, we'll return empty result as semantic search
-        // needs embedding generation for the query
+        let query_text = match query {
+            Some(q) if !q.trim().is_empty() => q.trim(),
+            _ => {
+                debug!(
+                    "SemanticSearchStrategy: no query text, skipping semantic search"
+                );
+                return Ok(StrategyResult::Empty);
+            }
+        };
+
+        let query_embedding = match self.embedding_service.embed(query_text).await {
+            Ok(emb) => emb,
+            Err(e) => {
+                warn!(error = %e, "SemanticSearchStrategy: embedding failed, skipping semantic search");
+                return Ok(StrategyResult::Empty);
+            }
+        };
+
+        let entries = store
+            .semantic_search(&query_embedding, self.limit)
+            .await?;
+
+        let messages: Vec<String> = entries
+            .into_iter()
+            .map(|entry| format_message(&entry))
+            .collect();
+
         debug!(
-            limit = self.limit,
-            "SemanticSearchStrategy: semantic search not yet implemented, returning Empty"
+            message_count = messages.len(),
+            "SemanticSearchStrategy: semantic search returned messages"
         );
-        Ok(StrategyResult::Empty)
+
+        Ok(StrategyResult::Messages(messages))
     }
 }
 
@@ -366,6 +394,21 @@ mod tests {
     use tokio::sync::RwLock;
     use uuid::Uuid;
     use async_trait::async_trait;
+    use embedding::EmbeddingService;
+
+    /// Mock embedding service for tests: returns a fixed-dimension vector.
+    struct MockEmbeddingService;
+
+    #[async_trait]
+    impl EmbeddingService for MockEmbeddingService {
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>, anyhow::Error> {
+            Ok(vec![0.0; 1536])
+        }
+
+        async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error> {
+            Ok(texts.iter().map(|_| vec![0.0; 1536]).collect())
+        }
+    }
 
     struct MockStore {
         entries: Arc<RwLock<HashMap<Uuid, MemoryEntry>>>,
@@ -500,14 +543,13 @@ mod tests {
 
     #[test]
     fn test_semantic_search_strategy_creation() {
-        let strategy = SemanticSearchStrategy::new(5);
-        assert_eq!(strategy.limit, 5);
+        let _ = SemanticSearchStrategy::new(5, Arc::new(MockEmbeddingService));
     }
 
     #[tokio::test]
     async fn test_semantic_search_no_query() {
         let store: Arc<dyn MemoryStore> = Arc::new(MockStore::new());
-        let strategy = SemanticSearchStrategy::new(5);
+        let strategy = SemanticSearchStrategy::new(5, Arc::new(MockEmbeddingService));
 
         let result = strategy
             .build_context(&*store, &None, &None, &None)

@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+use embedding::EmbeddingService;
 use memory::{
     ContextBuilder, RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
     MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole,
@@ -5,6 +7,20 @@ use memory::{
 use memory_inmemory::InMemoryVectorStore;
 use chrono::Utc;
 use std::sync::Arc;
+
+/// Mock embedding service for the example: returns a fixed vector (no API call).
+struct MockEmbeddingService;
+
+#[async_trait]
+impl EmbeddingService for MockEmbeddingService {
+    async fn embed(&self, _text: &str) -> Result<Vec<f32>, anyhow::Error> {
+        Ok(vec![0.0; 1536])
+    }
+
+    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error> {
+        Ok(texts.iter().map(|_| vec![0.0; 1536]).collect())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -116,10 +132,13 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("  ✓ Context exceeds 10 tokens: {}", exceeds);
     println!("  ✓ Expected: false (context has {} tokens)", context.metadata.total_tokens);
 
-    // Test 8: Empty Strategies
-    println!("\nTest 8: Empty Strategies");
+    // Test 8: Semantic search strategy (without query returns empty)
+    println!("\nTest 8: Semantic Search Strategy");
     let builder = ContextBuilder::new(store.clone())
-        .with_strategy(Box::new(SemanticSearchStrategy::new(5)))
+        .with_strategy(Box::new(SemanticSearchStrategy::new(
+            5,
+            Arc::new(MockEmbeddingService),
+        )))
         .for_user("user123");
 
     let context = builder.build().await?;

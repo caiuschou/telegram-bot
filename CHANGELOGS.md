@@ -8,6 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Embedding provider selection for RAG semantic search (OpenAI vs Zhipu AI)
+  - `BotConfig`: `embedding_provider` (`openai` | `zhipuai`, default `openai`), `bigmodel_api_key` (from `BIGMODEL_API_KEY` or `ZHIPUAI_API_KEY`)
+  - Runner creates `OpenAIEmbedding` or `BigModelEmbedding` per `EMBEDDING_PROVIDER`; errors when `zhipuai` but API key missing
+  - `telegram-bot` depends on `bigmodel-embedding`; `.env.example` documents `EMBEDDING_PROVIDER`, `BIGMODEL_API_KEY`, `ZHIPUAI_API_KEY`
+  - Config tests: `test_load_config_embedding_provider_zhipuai`, `test_load_config_bigmodel_key_from_zhipuai`
+  - Integration tests force `EMBEDDING_PROVIDER=openai` so they do not require `BIGMODEL_API_KEY`
+  - `test_embedding_provider_zhipuai_requires_api_key`: asserts init fails when `zhipuai` but no API key
+- ai-handlers: unit tests moved to separate file and method doc comments
+  - Added `ai-handlers/src/ai_response_handler_test.rs` with all AIQueryHandler unit tests (build_context, format_question_with_context, save_to_memory, build_memory_context); each test has a detailed doc comment describing scenario and assertions
+  - Removed inline `#[cfg(test)] mod tests` from `ai_response_handler.rs`
+  - Added detailed doc comments to `AIQueryHandler` and its methods (run, handle_query, handle_query_normal/streaming, send_response, log_ai_response, build_context, format_question_with_context, build_memory_context, save_to_memory), including purpose and external interactions
+  - Exposed `save_to_memory` and `build_memory_context` as `pub(crate)` for use by the test module; registered `#[cfg(test)] mod ai_response_handler_test` in lib.rs
+- docs/rag/context-retrieval-before-reply.md - Documents where the code queries relevant context before AI reply (entry point, build_memory_context, SemanticSearchStrategy, ContextBuilder.build); index entry in docs/rag/README.md
+- Process logging for OpenAI embedding operations (openai-embedding crate)
+  - Added `tracing` dependency and `#[instrument]` on `embed` and `embed_batch`
+  - `embed`: debug at request start (model, text_len); info on success (dimension); warn on API or parse failure
+  - `embed_batch`: debug for empty input skip; debug at request start (model, batch_size); info on success (count, dimension); warn on API failure or response count mismatch
+- Semantic search over vector store using user question
+  - `SemanticSearchStrategy` now uses `EmbeddingService` to embed the user's question and calls `MemoryStore::semantic_search` to retrieve relevant context from the vector store (Lance/SQLite/in-memory)
+  - AI handler builds context with `RecentMessagesStrategy`, `SemanticSearchStrategy` (user question → vector search), and `UserPreferencesStrategy`; `ContextBuilder::with_query(question)` passes the question to strategies
+  - `AIQueryHandler` accepts `Arc<dyn EmbeddingService>`; telegram-bot runner creates `OpenAIEmbedding` and passes it when building bot components
+- Lance vector query verification test (TELEGRAM_BOT_TEST_PLAN 3.2)
+  - Added `test_lance_vector_query_verification` in `memory-lance/tests/lance_vector_store_integration_test.rs`
+  - Verifies `semantic_search` returns results ordered by similarity; query vector nearest to entry A returns A first
+- AI reply flow E2E test (TELEGRAM_BOT_TEST_PLAN 3.4)
+  - Added `test_ai_reply_complete_flow` in `telegram-bot/tests/runner_integration_test.rs`
+  - Uses `TelegramBot::new_with_memory_store`, `handle_core_message`, and `start_ai_handler` with `MockMemoryStore`
+  - Asserts store call count ≥ 2 and query call count ≥ 1; skips when `OPENAI_API_KEY` is not set
+- Test-only `handle_core_message` on `TelegramBot` (runner)
+  - Accepts `dbot_core::Message` to drive the handler chain without constructing a teloxide `Message`
+  - Documented as `#[doc(hidden)]` for integration tests
+- Test execution instructions in TELEGRAM_BOT_TEST_PLAN
+  - Documented `.env.test` / `.env` usage, single-test commands, and Lance integration test commands
 - Create runner integration test file (TELEGRAM_BOT_TEST_PLAN task 1.2)
   - Added `telegram-bot/tests/runner_integration_test.rs` with basic test structure
   - `setup_test_config(temp_dir)` sets env vars and loads `BotConfig` using a temp directory

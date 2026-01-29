@@ -16,6 +16,7 @@
 - [架构设计](./architecture.md) - 模块结构和核心组件
 - [技术选型](./technical-selection.md) - 向量数据库方案对比和选择
 - [数据流](./data-flow.md) - 消息处理流程和上下文构建
+- [回答前上下文检索](./context-retrieval-before-reply.md) - AI 回答前查询相关上下文的代码位置与流程
 - [配置](./configuration.md) - 环境变量和配置文件
 - [实现计划](./implementation.md) - 分阶段开发路线图
 - [使用示例](./usage.md) - 代码示例和最佳实践

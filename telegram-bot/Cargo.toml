@@ -14,6 +14,9 @@ ai-handlers = { path = "../ai-handlers" }
 storage = { path = "../storage" }
 telegram-bot-ai = { path = "../telegram-bot-ai" }
 openai-client = { path = "../openai-client" }
+embedding = { path = "../crates/embedding" }
+openai-embedding = { path = "../crates/openai-embedding" }
+bigmodel-embedding = { path = "../crates/bigmodel-embedding" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory-sqlite" }
@@ -34,3 +37,4 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 chrono = "0.4"
 serial_test = "3.0"
+dbot-core = { path = "../dbot-core" }

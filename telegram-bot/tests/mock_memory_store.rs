@@ -20,12 +20,25 @@ use uuid::Uuid;
 /// - 使用 `HashMap<Uuid, MemoryEntry>` 存储数据。
 /// - 提供按用户、会话 ID 的查询能力。
 /// - `semantic_search` 目前实现为简单返回全部数据（按插入顺序）。
-/// - 通过计数器跟踪 `add` 与查询调用次数，便于在测试中进行断言。
-#[derive(Debug, Clone, Default)]
+/// - 通过计数器跟踪 `add`、各类查询及 `semantic_search` 调用次数，便于在测试中进行断言。
+#[derive(Debug, Clone)]
 pub struct MockMemoryStore {
     inner: Arc<Mutex<HashMap<Uuid, MemoryEntry>>>,
     store_call_count: Arc<AtomicUsize>,
     query_call_count: Arc<AtomicUsize>,
+    /// 仅当调用 `semantic_search` 时递增；用于断言「embed + 向量检索」完整执行。
+    semantic_search_call_count: Arc<AtomicUsize>,
+}
+
+impl Default for MockMemoryStore {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(HashMap::new())),
+            store_call_count: Arc::new(AtomicUsize::new(0)),
+            query_call_count: Arc::new(AtomicUsize::new(0)),
+            semantic_search_call_count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
 }
 
 impl MockMemoryStore {
@@ -39,9 +52,14 @@ impl MockMemoryStore {
         self.store_call_count.load(Ordering::SeqCst)
     }
 
-    /// 获取查询调用次数（例如语义检索被触发的次数）。
+    /// 获取查询调用次数（search_by_user / search_by_conversation / semantic_search 任一调用都会递增）。
     pub fn get_query_call_count(&self) -> usize {
         self.query_call_count.load(Ordering::SeqCst)
+    }
+
+    /// 获取语义检索调用次数（仅 `semantic_search` 调用时递增；embed 完成后才会调用）。
+    pub fn get_semantic_search_call_count(&self) -> usize {
+        self.semantic_search_call_count.load(Ordering::SeqCst)
     }
 }
 
@@ -100,6 +118,7 @@ impl MemoryStore for MockMemoryStore {
         limit: usize,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         self.query_call_count.fetch_add(1, Ordering::SeqCst);
+        self.semantic_search_call_count.fetch_add(1, Ordering::SeqCst);
         let map = self.inner.lock().unwrap();
         let mut all: Vec<MemoryEntry> = map.values().cloned().collect();
         all.truncate(limit);
@@ -143,6 +162,7 @@ mod tests {
 
         let sem = store.semantic_search(&[], 10).await.unwrap();
         assert_eq!(store.get_query_call_count(), 3);
+        assert_eq!(store.get_semantic_search_call_count(), 1);
         assert_eq!(sem.len(), 1);
     }
 }
