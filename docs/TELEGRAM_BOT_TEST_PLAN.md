@@ -13,7 +13,7 @@
 | 2.3 | 实现 TelegramBot::new 和 new_with_memory_store 方法 | 高 | ✅ 已完成 | 2026-01-28 | 在 `runner.rs` 中实现 `TelegramBot::new` 和 `new_with_memory_store`，并通过自定义 MemoryStore 注入支持测试 |
 | 2.4 | 实现 TelegramBot::handle_message 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `handle_message`，复用现有 `HandlerChain` 逻辑，便于单元测试 |
 | 2.5 | 实现 TelegramBot::start_ai_handler 方法 | 高 | ✅ 已完成 | 2026-01-28 | 新增 `start_ai_handler`，以后台任务方式启动 AI 查询处理器 |
-| 3.1 | 实现 Lance 向量存储验证 | 高 | ⬜ 待开始 | - | 验证数据库创建和向量存储（当前通过 `MockMemoryStore` 提供计数器基础设施） |
+| 3.1 | 实现 Lance 向量存储验证 | 高 | ✅ 已完成 | 2026-01-29 | 验证数据库创建和向量存储，添加 `test_lance_vector_store_verification` 测试 |
 | 3.2 | 实现 Lance 向量查询验证 | 高 | ⬜ 待开始 | - | 验证向量相似度搜索（当前通过 `MockMemoryStore` 提供查询计数器） |
 | 3.3 | 实现真实 OpenAI API 集成测试 | 高 | ⬜ 待开始 | - | 使用真实 API Key 进行测试 |
 | 3.4 | 实现 AI 回复流程端到端测试 | 高 | ⬜ 待开始 | - | 完整流程验证 |

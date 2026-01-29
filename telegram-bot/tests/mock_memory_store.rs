@@ -71,10 +71,7 @@ impl MemoryStore for MockMemoryStore {
         Ok(())
     }
 
-    async fn search_by_user(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+    async fn search_by_user(&self, user_id: &str) -> Result<Vec<MemoryEntry>, anyhow::Error> {
         self.query_call_count.fetch_add(1, Ordering::SeqCst);
         let map = self.inner.lock().unwrap();
         Ok(map
@@ -149,4 +146,3 @@ mod tests {
         assert_eq!(sem.len(), 1);
     }
 }
-

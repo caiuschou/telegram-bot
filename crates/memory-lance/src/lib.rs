@@ -40,7 +40,7 @@
 //! ```
 
 use async_trait::async_trait;
-use arrow_array::{Array, Float32Array, RecordBatch, RecordBatchIterator, StringArray, UInt64Array};
+use arrow_array::{Array, Float32Array, RecordBatch, RecordBatchIterator, StringArray};
 use arrow_array::types::Float32Type;
 use arrow_schema::{DataType, Field, Schema};
 use std::path::Path;
@@ -276,9 +276,9 @@ impl LanceVectorStore {
         };
 
         let tokens_array = if let Some(t) = tokens {
-            UInt64Array::from(vec![Some(t as u64)])
+            arrow_array::UInt32Array::from(vec![Some(t)])
         } else {
-            UInt64Array::from(vec![None as Option<u64>])
+            arrow_array::UInt32Array::from(vec![None as Option<u32>])
         };
 
         let importance_array = if let Some(imp) = importance {
@@ -384,8 +384,8 @@ impl LanceVectorStore {
         let tokens_col = batch
             .column(7)
             .as_any()
-            .downcast_ref::<UInt64Array>()
-            .ok_or_else(|| anyhow!("Tokens column is not UInt64Array"))?;
+            .downcast_ref::<arrow_array::UInt32Array>()
+            .ok_or_else(|| anyhow!("Tokens column is not UInt32Array"))?;
         let tokens = if tokens_col.is_null(row) {
             None
         } else {

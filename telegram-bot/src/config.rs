@@ -13,6 +13,7 @@ pub struct BotConfig {
     pub ai_thinking_message: String,
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
+    pub memory_lance_path: Option<String>,
 }
 
 impl BotConfig {
@@ -37,6 +38,7 @@ impl BotConfig {
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
         let memory_sqlite_path =
             env::var("MEMORY_SQLITE_PATH").unwrap_or_else(|_| "./data/memory.db".to_string());
+        let memory_lance_path = env::var("MEMORY_LANCE_PATH").ok();
 
         Ok(Self {
             bot_token,
@@ -49,6 +51,7 @@ impl BotConfig {
             ai_thinking_message,
             memory_store_type,
             memory_sqlite_path,
+            memory_lance_path,
         })
     }
 }
@@ -56,11 +59,15 @@ impl BotConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_load_config_with_defaults() {
         // 设置必要的环境变量
+        env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("DATABASE_URL");
         env::remove_var("OPENAI_BASE_URL");
@@ -69,6 +76,7 @@ mod tests {
         env::remove_var("AI_THINKING_MESSAGE");
         env::remove_var("MEMORY_STORE_TYPE");
         env::remove_var("MEMORY_SQLITE_PATH");
+        env::remove_var("MEMORY_LANCE_PATH");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -85,16 +93,27 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_config_with_custom_values() {
+        env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "custom_token");
+        env::remove_var("DATABASE_URL");
         env::set_var("DATABASE_URL", "custom.db");
+        env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "custom_key");
+        env::remove_var("OPENAI_BASE_URL");
         env::set_var("OPENAI_BASE_URL", "https://custom.api.com");
+        env::remove_var("AI_MODEL");
         env::set_var("AI_MODEL", "gpt-4");
+        env::remove_var("AI_USE_STREAMING");
         env::set_var("AI_USE_STREAMING", "true");
+        env::remove_var("AI_THINKING_MESSAGE");
         env::set_var("AI_THINKING_MESSAGE", "Thinking...");
+        env::remove_var("MEMORY_STORE_TYPE");
         env::set_var("MEMORY_STORE_TYPE", "sqlite");
+        env::remove_var("MEMORY_SQLITE_PATH");
         env::set_var("MEMORY_SQLITE_PATH", "/tmp/memory.db");
+        env::remove_var("MEMORY_LANCE_PATH");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -110,8 +129,11 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_config_with_override_token() {
+        env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "env_token");
+        env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "test_key");
 
         let config = BotConfig::load(Some("override_token".to_string())).unwrap();

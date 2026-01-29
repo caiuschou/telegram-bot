@@ -1,11 +1,12 @@
-use anyhow::Result;
 use ai_handlers::{AIDetectionHandler, AIQuery, AIQueryHandler};
+use anyhow::Result;
 use dbot_core::{init_tracing, ToCoreMessage};
 use handler_chain::HandlerChain;
-use middleware::{MemoryMiddleware, PersistenceMiddleware};
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
+use memory_lance::LanceVectorStore;
 use memory_sqlite::SQLiteVectorStore;
+use middleware::{MemoryMiddleware, PersistenceMiddleware};
 use openai_client::OpenAIClient;
 use std::sync::Arc;
 use storage::MessageRepository;
@@ -75,10 +76,12 @@ async fn build_bot_components(
     let (query_sender, query_receiver) = tokio::sync::mpsc::unbounded_channel();
 
     // 初始化 OpenAI 客户端
-    let openai_client =
-        OpenAIClient::with_base_url(config.openai_api_key.clone(), config.openai_base_url.clone());
-    let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client)
-        .with_model(config.ai_model.clone());
+    let openai_client = OpenAIClient::with_base_url(
+        config.openai_api_key.clone(),
+        config.openai_base_url.clone(),
+    );
+    let ai_bot =
+        TelegramBotAI::new("bot".to_string(), openai_client).with_model(config.ai_model.clone());
 
     // 初始化 AI 查询处理器
     let ai_query_handler = AIQueryHandler::new(
@@ -116,10 +119,15 @@ pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponen
     // 初始化内存存储
     let memory_store: Arc<dyn MemoryStore> = match config.memory_store_type.as_str() {
         "lance" => {
-            // Note: Lance vector store is available when lance feature is enabled
-            // For now, fall back to in-memory store
-            info!("Lance feature not enabled, falling back to in-memory store");
-            Arc::new(InMemoryVectorStore::new())
+            let lance_path = config
+                .memory_lance_path
+                .clone()
+                .unwrap_or_else(|| "./data/lance_db".to_string());
+            info!(db_path = %lance_path, "Using Lance vector store");
+            Arc::new(LanceVectorStore::new(&lance_path).await.map_err(|e| {
+                error!(error = %e, "Failed to initialize Lance store");
+                anyhow::anyhow!("Failed to initialize Lance store: {}", e)
+            })?)
         }
         "sqlite" => {
             info!(db_path = %config.memory_sqlite_path, "Using SQLite vector store");
@@ -169,8 +177,9 @@ impl TelegramBot {
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
         // 初始化记忆中间件
-        let memory_middleware =
-            Arc::new(MemoryMiddleware::with_store(components.memory_store.clone()));
+        let memory_middleware = Arc::new(MemoryMiddleware::with_store(
+            components.memory_store.clone(),
+        ));
 
         // 构建处理器链
         let handler_chain = HandlerChain::new()
@@ -203,8 +212,9 @@ impl TelegramBot {
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
         // 初始化记忆中间件
-        let memory_middleware =
-            Arc::new(MemoryMiddleware::with_store(components.memory_store.clone()));
+        let memory_middleware = Arc::new(MemoryMiddleware::with_store(
+            components.memory_store.clone(),
+        ));
 
         // 构建处理器链
         let handler_chain = HandlerChain::new()
@@ -220,10 +230,7 @@ impl TelegramBot {
     }
 
     /// 处理一条来自 Telegram 的消息（可在单元测试中直接调用）。
-    pub async fn handle_message(
-        &self,
-        msg: &teloxide::types::Message,
-    ) -> Result<()> {
+    pub async fn handle_message(&self, msg: &teloxide::types::Message) -> Result<()> {
         if let Some(text) = msg.text() {
             let wrapper = TelegramMessageWrapper(msg);
             let core_msg = wrapper.to_core();
