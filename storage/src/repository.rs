@@ -1,15 +1,10 @@
-use async_trait::async_trait;
-use thiserror::Error;
+//! Repository trait for generic storage operations.
+//!
+//! Implementations (e.g. MessageRepository) provide concrete persistence.
 
-#[derive(Error, Debug)]
-pub enum StorageError {
-    #[error("Database error: {0}")]
-    Database(String),
-    #[error("Not found: {0}")]
-    NotFound(String),
-    #[error("Already exists: {0}")]
-    AlreadyExists(String),
-}
+use async_trait::async_trait;
+
+use crate::error::StorageError;
 
 #[async_trait]
 pub trait Repository<T> {

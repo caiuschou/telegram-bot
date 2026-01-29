@@ -1,3 +1,7 @@
+//! Message record model for persistence.
+//!
+//! Maps to the `messages` table and is used by MessageRepository.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -40,26 +44,4 @@ impl MessageRecord {
             created_at: Utc::now(),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageQuery {
-    pub user_id: Option<i64>,
-    pub chat_id: Option<i64>,
-    pub message_type: Option<String>,
-    pub direction: Option<String>,
-    pub start_date: Option<DateTime<Utc>>,
-    pub end_date: Option<DateTime<Utc>>,
-    pub limit: Option<i64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageStats {
-    pub total_messages: i64,
-    pub sent_messages: i64,
-    pub received_messages: i64,
-    pub unique_users: i64,
-    pub unique_chats: i64,
-    pub first_message: Option<DateTime<Utc>>,
-    pub last_message: Option<DateTime<Utc>>,
 }

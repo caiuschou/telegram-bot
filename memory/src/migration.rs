@@ -18,7 +18,7 @@
 //! # }
 //! ```
 
-use crate::store::MemoryStore;
+use memory_core::MemoryStore;
 use anyhow::Result;
 
 /// Migrates all data from one store to another.
@@ -91,10 +91,6 @@ pub async fn restore<S: MemoryStore>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::types::{MemoryEntry, MemoryMetadata, MemoryRole};
-    use chrono::Utc;
-
     #[tokio::test]
     async fn test_migration() {
         // This would require actual stores to test

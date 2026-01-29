@@ -10,6 +10,8 @@ members = [
     "telegram-bot-examples",
     "telegram-bot-ai",
     "memory",
+    "crates/memory-core",
+    "crates/memory-strategies",
     "crates/embedding",
     "crates/openai-embedding",
     "crates/bigmodel-embedding",

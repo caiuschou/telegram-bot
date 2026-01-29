@@ -34,14 +34,14 @@
 
 //! - [`sqlite_store`] - SQLite-based persistent storage
 //! - [`context`] - Context building for conversations
-//! - [`strategies`] - Context building strategies
+//! - [`memory_strategies`] - Context building strategies (re-exported from memory-strategies crate)
 //!
 //! ## External Interactions
 //!
 //! The memory crate interacts with external services:
 //! - **Storage backends**: SQLite, Lance, or in-memory storage via `MemoryStore`
 //! - **Bot runtime**: Integrates with bot middleware for conversation memory management
-//! - **Embedding services**: Uses the `embedding` crate trait for semantic search
+//! - **Embedding services**: Strategies use the `embedding` crate trait for semantic search
 //!
 //! ## Embedding Integration
 //!
@@ -50,14 +50,13 @@
 //! - `openai-embedding` - OpenAI implementation
 //! - `bigmodel-embedding` - BigModel (Zhipu AI) implementation
 
-pub mod types;
-pub mod store;
 pub mod context;
-pub mod strategies;
-
 pub mod migration;
 
-pub use types::*;
-pub use store::*;
+// Re-export core types and store trait from memory-core
+pub use memory_core::*;
+// Re-export strategies and ContextStrategy from memory-strategies
+pub use memory_strategies::{
+    ContextStrategy, RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
+};
 pub use context::{Context, ContextBuilder, estimate_tokens};
-pub use strategies::{RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy};

@@ -11,7 +11,7 @@
 //!
 //! ```rust
 //! use memory::context::ContextBuilder;
-//! use memory::strategies::RecentMessagesStrategy;
+//! use memory::RecentMessagesStrategy;
 //! use memory_inmemory::InMemoryVectorStore;
 //! use std::sync::Arc;
 //!
@@ -28,8 +28,8 @@
 //! # }
 //! ```
 
-use crate::store::MemoryStore;
-use crate::strategies::ContextStrategy;
+use memory_core::MemoryStore;
+use memory_strategies::ContextStrategy;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use tracing::{debug, instrument};
@@ -219,15 +219,15 @@ impl ContextBuilder {
                 .await?;
 
             match strategy_result {
-                StrategyResult::Messages(messages) => {
+                memory_core::StrategyResult::Messages(messages) => {
                     debug!(message_count = messages.len(), "Strategy returned messages");
                     history.extend(messages);
                 }
-                StrategyResult::Preferences(prefs) => {
+                memory_core::StrategyResult::Preferences(prefs) => {
                     debug!("Strategy returned user preferences");
                     preferences = Some(prefs);
                 }
-                StrategyResult::Empty => {}
+                memory_core::StrategyResult::Empty => {}
             }
         }
 
@@ -381,13 +381,6 @@ impl Context {
     }
 }
 
-/// Result type for context strategies.
-pub enum StrategyResult {
-    Messages(Vec<String>),
-    Preferences(String),
-    Empty,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -485,8 +478,8 @@ mod tests {
             _user_id: &Option<String>,
             _conversation_id: &Option<String>,
             _query: &Option<String>,
-        ) -> Result<super::StrategyResult, anyhow::Error> {
-            Ok(super::StrategyResult::Messages(vec![
+        ) -> Result<crate::StrategyResult, anyhow::Error> {
+            Ok(crate::StrategyResult::Messages(vec![
                 "User: Hello".to_string(),
                 "Assistant: Hi there!".to_string(),
             ]))

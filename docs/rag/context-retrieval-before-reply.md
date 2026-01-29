@@ -145,7 +145,7 @@ match builder.build().await {
 
 ## 语义检索：SemanticSearchStrategy
 
-**文件**：`memory/src/strategies.rs`（约 133-214 行）
+**文件**：`crates/memory-strategies/src/lib.rs`（SemanticSearchStrategy）
 
 「查询是否有相关上下文」中的**语义检索**在此实现：用用户问题生成向量，再在记忆库中做相似度搜索。
 
@@ -207,7 +207,7 @@ Ok(StrategyResult::Messages(messages))
 |------|------|------------|------|
 | 1. 决定「先查再答」 | `ai-handlers/src/ai_response_handler.rs` | `handle_query_normal` / `handle_query_streaming` | 先 `build_memory_context`，再调用 AI |
 | 2. 组织「查相关」 | 同上 | `build_memory_context`（约 240-271 行） | 使用 ContextBuilder + SemanticSearchStrategy 等 |
-| 3. 真正「查相关」 | `memory/src/strategies.rs` | `SemanticSearchStrategy::build_context`（约 171-213 行） | `embedding_service.embed(query)` + `store.semantic_search(...)` |
+| 3. 真正「查相关」 | `crates/memory-strategies/src/lib.rs` | `SemanticSearchStrategy::build_context` | `embedding_service.embed(query)` + `store.semantic_search(...)` |
 | 4. 执行策略并组装 | `memory/src/context.rs` | `ContextBuilder::build`（约 202-257 行） | 依次执行各策略，得到最终 Context |
 
 ---
@@ -219,7 +219,7 @@ Ok(StrategyResult::Messages(messages))
 | 场景 | 文档依据 | 当前覆盖 | 建议 |
 |------|----------|----------|------|
 | **SemanticSearchStrategy：query 为空或仅空白** | 语义检索流程第 1 步：「若 query 为空或仅空白，直接返回空结果，不做检索」 | `test_build_memory_context_empty` 仅覆盖 `question == ""` | 补充：`build_memory_context(..., "   ")` 或 `question` 为纯空白时断言返回空；或在 memory 层为 SemanticSearchStrategy 单独加单测（空/空白 query 返回 Empty、且不调用 embed/semantic_search） |
-| **SemanticSearchStrategy：正常 query 调用 embed + semantic_search** | 语义检索流程第 2、3 步：embed(query) → store.semantic_search | ai-handlers 的 `test_build_memory_context_with_history` 间接覆盖（未区分最近消息 vs 语义检索） | 建议在 memory 层增加 strategies 单测：Mock EmbeddingService + MemoryStore，断言传入的 query 被 embed、且 store.semantic_search 被调用一次、limit 正确 |
+| **SemanticSearchStrategy：正常 query 调用 embed + semantic_search** | 语义检索流程第 2、3 步：embed(query) → store.semantic_search | ai-handlers 的 `test_build_memory_context_with_history` 间接覆盖（未区分最近消息 vs 语义检索） | memory-strategies 的 `strategies_test.rs` 中有 Mock EmbeddingService + MemoryStore 单测 |
 | **ContextBuilder 策略执行顺序** | 策略执行：RecentMessages → SemanticSearch → UserPreferences | 无 | 可选：在 memory 的 context 单测中，用 Mock 策略记录执行顺序，断言顺序与文档一致 |
 | **先 build_memory_context 再调 AI** | 流程概览：「先查相关上下文，再调用 AI 接口」 | runner 集成测试只断言 store ≥ 2、query ≥ 1，未断言「先 query 再 store」 | 可选：在 MockMemoryStore 中记录 query 与 store 的调用顺序，断言至少一次 semantic_search 发生在第一次 add 之前（表示先检索再写回复） |
 | **流式模式同样先构建上下文** | 流式模式：先 `build_memory_context`，再 `get_ai_response_stream` | 仅普通模式有 E2E（test_ai_reply_complete_flow） | 可选：增加流式路径的单元测试或 E2E，验证 handle_query_streaming 内先调用 build_memory_context 再调用流式 AI |

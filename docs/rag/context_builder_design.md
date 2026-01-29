@@ -208,7 +208,7 @@ pub enum ContextError {
 ```
 memory/src/
 ├── context.rs          # ContextBuilder and Context types
-├── strategies.rs       # Context strategy implementations
+├── crates/memory-strategies/  # Context strategy implementations (independent crate)
 └── token_manager.rs    # Token window management
 ```
 

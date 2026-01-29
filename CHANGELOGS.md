@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Split memory strategies into independent crates
+  - **memory-core** (crates/memory-core): Core types (`MemoryEntry`, `MemoryMetadata`, `MemoryRole`), `MemoryStore` trait, and `StrategyResult` enum. Used by `memory` and `memory-strategies` to avoid circular dependency.
+  - **memory-strategies** (crates/memory-strategies): Context building strategies (`RecentMessagesStrategy`, `SemanticSearchStrategy`, `UserPreferencesStrategy`), `ContextStrategy` trait. Depends on `memory-core` and `embedding`. Unit tests in `src/strategies_test.rs`.
+  - **memory** crate now depends on `memory-core` and `memory-strategies`; re-exports their public API so existing `memory::*` usage is unchanged. Removed `memory/src/types.rs`, `store.rs`, `strategies.rs`; `context` and `migration` remain in memory.
+  - Workspace `Cargo.toml` includes `crates/memory-core` and `crates/memory-strategies`.
 - Embedding provider selection for RAG semantic search (OpenAI vs Zhipu AI)
   - `BotConfig`: `embedding_provider` (`openai` | `zhipuai`, default `openai`), `bigmodel_api_key` (from `BIGMODEL_API_KEY` or `ZHIPUAI_API_KEY`)
   - Runner creates `OpenAIEmbedding` or `BigModelEmbedding` per `EMBEDDING_PROVIDER`; errors when `zhipuai` but API key missing
