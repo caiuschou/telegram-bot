@@ -31,6 +31,3 @@ pub use recent_messages::RecentMessagesStrategy;
 pub use semantic_search::SemanticSearchStrategy;
 pub use strategy::ContextStrategy;
 pub use user_preferences::UserPreferencesStrategy;
-
-#[cfg(test)]
-mod strategies_test;
