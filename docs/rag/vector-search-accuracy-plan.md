@@ -43,11 +43,11 @@
 
 | ID | 任务 | 工时 | 依赖 | 状态 | 验收标准 |
 |----|------|------|------|------|----------|
-| 1.1 | BotConfig 增加 memory_recent_limit、memory_relevant_top_k | 1h | 无 | 待开始 | 从环境变量 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 读取；默认值：recent_limit=10、relevant_top_k=5 |
-| 1.2 | runner 初始化时将上述配置传入 SyncAIHandler | 0.5h | 1.1 | 待开始 | BotConfig 的 memory_recent_limit、memory_relevant_top_k 在 runner 中传入 SyncAIHandler，并用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy |
-| 1.3 | SyncAIHandler 使用配置的 recent_limit、relevant_top_k 构建 ContextBuilder | 1h | 1.2 | 待开始 | RecentMessagesStrategy(recent_limit)、SemanticSearchStrategy(relevant_top_k)，不再写死 10/5 |
-| 1.4 | 更新 .env.example 与 docs/rag/configuration.md | 0.5h | 1.3 | 待开始 | 文档说明 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 含义与推荐范围；默认值、示例与 1.1 一致 |
-| 1.5 | 为配置项编写单元测试（config 加载、默认值） | 1h | 1.4 | 待开始 | 测试放在 telegram-bot 的 tests/ 或现有 test 模块；覆盖默认值与显式设置，测试通过 |
+| 1.1 | BotConfig 增加 memory_recent_limit、memory_relevant_top_k | 1h | 无 | 已完成 | 从环境变量 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 读取；默认值：recent_limit=10、relevant_top_k=5 |
+| 1.2 | runner 初始化时将上述配置传入 SyncAIHandler | 0.5h | 1.1 | 已完成 | BotConfig 的 memory_recent_limit、memory_relevant_top_k 在 runner 中传入 SyncAIHandler，并用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy |
+| 1.3 | SyncAIHandler 使用配置的 recent_limit、relevant_top_k 构建 ContextBuilder | 1h | 1.2 | 已完成 | RecentMessagesStrategy(recent_limit)、SemanticSearchStrategy(relevant_top_k)，不再写死 10/5 |
+| 1.4 | 更新 .env.example 与 docs/rag/configuration.md | 0.5h | 1.3 | 已完成 | 文档说明 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 含义与推荐范围；默认值、示例与 1.1 一致 |
+| 1.5 | 为配置项编写单元测试（config 加载、默认值） | 1h | 1.4 | 已完成 | 测试放在 telegram-bot 的 tests/ 或现有 test 模块；覆盖默认值与显式设置，测试通过 |
 
 **阶段 1 小计**：约 4 工时
 

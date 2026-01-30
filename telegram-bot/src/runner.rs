@@ -114,6 +114,7 @@ async fn build_bot_components(
     };
 
     // 初始化同步 AI 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 在 after() 中存记忆）
+    // memory_recent_limit / memory_relevant_top_k 用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy
     let sync_ai_handler = Arc::new(SyncAIHandler::new(
         bot_username.clone(),
         ai_bot,
@@ -123,6 +124,8 @@ async fn build_bot_components(
         embedding_service.clone(),
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
+        config.memory_recent_limit as usize,
+        config.memory_relevant_top_k as usize,
     ));
 
     Ok(BotComponents {

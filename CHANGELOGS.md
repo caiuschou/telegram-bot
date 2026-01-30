@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **向量搜索准确度优化阶段 1：配置接入（Top-K 与相关项）**
+  - **BotConfig**：新增 `memory_recent_limit`、`memory_relevant_top_k`，从环境变量 `MEMORY_RECENT_LIMIT`、`MEMORY_RELEVANT_TOP_K` 读取，默认值分别为 10、5。
+  - **runner**：初始化 SyncAIHandler 时传入上述配置，用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy。
+  - **SyncAIHandler**：使用配置的 `memory_recent_limit`、`memory_relevant_top_k` 构建 ContextBuilder，不再写死 10/5。
+  - **文档**：`.env.example` 增加 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 注释；`docs/rag/configuration.md` 增加「Telegram Bot 实现的环境变量」表及推荐范围（recent 5–20，top_k 3–10）。
+  - **单元测试**：`telegram-bot/src/config.rs` 新增 `test_load_config_memory_recent_limit_and_top_k`，覆盖默认值与显式设置。
 - **向量搜索准确度优化开发计划**：新增 `docs/rag/vector-search-accuracy-plan.md`，以表格形式列出配置接入（MEMORY_RELEVANT_TOP_K / MEMORY_RECENT_LIMIT）、相似度阈值过滤、Lance 检索精度可选优化及文档与 CHANGELOG 等任务；`docs/rag/README.md` 增加该计划入口链接。
 - **写入记忆时算 embedding**：MemoryMiddleware 保存用户消息与 AI 回复时若配置了 embedding_service，则先对 content 做 embed，再写入 entry.embedding，使新消息参与语义检索。
   - **middleware**：MemoryConfig 新增 `embedding_service: Option<Arc<dyn EmbeddingService>>`；新增 `MemoryMiddleware::with_store_and_embedding(store, embedding_service)`；before()/after() 中若 embedding_service 为 Some 则调用 `embed(&content).await` 并设置 `entry.embedding`，失败时仍保存但不带 embedding。

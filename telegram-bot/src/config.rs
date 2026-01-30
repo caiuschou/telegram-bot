@@ -21,6 +21,10 @@ pub struct BotConfig {
     /// 可选：Telegram Bot API 基础 URL。设置后 Bot 请求将发往该 URL（用于测试时指向 mock 服务器）。
     /// 环境变量：`TELEGRAM_API_URL` 或 `TELOXIDE_API_URL`。
     pub telegram_api_url: Option<String>,
+    /// 近期消息条数上限，用于 RAG 上下文中的 RecentMessagesStrategy。环境变量：`MEMORY_RECENT_LIMIT`，默认 10。
+    pub memory_recent_limit: u32,
+    /// 语义检索返回条数上限（Top-K），用于 RAG 上下文中的 SemanticSearchStrategy。环境变量：`MEMORY_RELEVANT_TOP_K`，默认 5。
+    pub memory_relevant_top_k: u32,
 }
 
 impl BotConfig {
@@ -56,6 +60,15 @@ impl BotConfig {
             .or_else(|_| env::var("TELOXIDE_API_URL"))
             .ok();
 
+        let memory_recent_limit = env::var("MEMORY_RECENT_LIMIT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+        let memory_relevant_top_k = env::var("MEMORY_RELEVANT_TOP_K")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5);
+
         Ok(Self {
             bot_token,
             database_url,
@@ -71,6 +84,8 @@ impl BotConfig {
             embedding_provider,
             bigmodel_api_key,
             telegram_api_url,
+            memory_recent_limit,
+            memory_relevant_top_k,
         })
     }
 }
@@ -101,6 +116,8 @@ mod tests {
         env::remove_var("ZHIPUAI_API_KEY");
         env::remove_var("TELEGRAM_API_URL");
         env::remove_var("TELOXIDE_API_URL");
+        env::remove_var("MEMORY_RECENT_LIMIT");
+        env::remove_var("MEMORY_RELEVANT_TOP_K");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -117,6 +134,8 @@ mod tests {
         assert_eq!(config.memory_sqlite_path, "./data/memory.db");
         assert_eq!(config.embedding_provider, "openai");
         assert!(config.bigmodel_api_key.is_empty());
+        assert_eq!(config.memory_recent_limit, 10);
+        assert_eq!(config.memory_relevant_top_k, 5);
     }
 
     #[test]
@@ -146,6 +165,8 @@ mod tests {
         env::remove_var("ZHIPUAI_API_KEY");
         env::remove_var("TELEGRAM_API_URL");
         env::remove_var("TELOXIDE_API_URL");
+        env::remove_var("MEMORY_RECENT_LIMIT");
+        env::remove_var("MEMORY_RELEVANT_TOP_K");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -159,6 +180,30 @@ mod tests {
         assert_eq!(config.memory_store_type, "sqlite");
         assert_eq!(config.memory_sqlite_path, "/tmp/memory.db");
         assert_eq!(config.embedding_provider, "openai");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_memory_recent_limit_and_top_k() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("MEMORY_RECENT_LIMIT");
+        env::remove_var("MEMORY_RELEVANT_TOP_K");
+
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_recent_limit, 10);
+        assert_eq!(config.memory_relevant_top_k, 5);
+
+        env::set_var("MEMORY_RECENT_LIMIT", "20");
+        env::set_var("MEMORY_RELEVANT_TOP_K", "8");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_recent_limit, 20);
+        assert_eq!(config.memory_relevant_top_k, 8);
+
+        env::remove_var("MEMORY_RECENT_LIMIT");
+        env::remove_var("MEMORY_RELEVANT_TOP_K");
     }
 
     #[test]

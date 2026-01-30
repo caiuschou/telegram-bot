@@ -45,6 +45,10 @@ pub struct SyncAIHandler {
     pub(crate) embedding_service: Arc<dyn EmbeddingService>,
     pub(crate) use_streaming: bool,
     pub(crate) thinking_message: String,
+    /// 近期消息条数上限，用于 ContextBuilder 的 RecentMessagesStrategy（对应配置 MEMORY_RECENT_LIMIT）。
+    pub(crate) memory_recent_limit: usize,
+    /// 语义检索 Top-K，用于 ContextBuilder 的 SemanticSearchStrategy（对应配置 MEMORY_RELEVANT_TOP_K）。
+    pub(crate) memory_relevant_top_k: usize,
 }
 
 impl SyncAIHandler {
@@ -59,6 +63,8 @@ impl SyncAIHandler {
         embedding_service: Arc<dyn EmbeddingService>,
         use_streaming: bool,
         thinking_message: String,
+        memory_recent_limit: usize,
+        memory_relevant_top_k: usize,
     ) -> Self {
         Self {
             bot_username,
@@ -69,6 +75,8 @@ impl SyncAIHandler {
             embedding_service,
             use_streaming,
             thinking_message,
+            memory_recent_limit,
+            memory_relevant_top_k,
         }
     }
 
@@ -129,9 +137,9 @@ impl SyncAIHandler {
         question: &str,
     ) -> Option<Context> {
         let builder = ContextBuilder::new(self.memory_store.clone())
-            .with_strategy(Box::new(RecentMessagesStrategy::new(10)))
+            .with_strategy(Box::new(RecentMessagesStrategy::new(self.memory_recent_limit)))
             .with_strategy(Box::new(SemanticSearchStrategy::new(
-                5,
+                self.memory_relevant_top_k,
                 self.embedding_service.clone(),
             )))
             .with_strategy(Box::new(UserPreferencesStrategy::new()))

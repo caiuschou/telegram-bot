@@ -56,6 +56,8 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
         embedding_service,
         false,
         "思考中...".to_string(),
+        10,
+        5,
     )
 }
 

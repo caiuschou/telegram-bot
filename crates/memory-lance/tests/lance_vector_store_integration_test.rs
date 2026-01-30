@@ -260,4 +260,3 @@ async fn test_lance_vector_query_verification() {
         "nearest to query (same as B) should be entry B"
     );
 }
-

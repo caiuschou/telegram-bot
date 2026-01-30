@@ -2,6 +2,8 @@
 
 ## 环境变量
 
+以下为设计参考；**当前 Telegram Bot 实际从环境变量读取的 RAG 相关项**见「Telegram Bot 实现的环境变量」小节。
+
 ```env
 # 记忆配置
 MEMORY_ENABLED=true
@@ -9,8 +11,8 @@ MEMORY_STORE=memory           # memory | lance | hnsw
 MEMORY_MAX_CONTEXT_TOKENS=2000
 MEMORY_INCLUDE_RECENT=true
 MEMORY_INCLUDE_RELEVANT=true
-MEMORY_RECENT_LIMIT=5
-MEMORY_RELEVANT_TOP_K=3
+MEMORY_RECENT_LIMIT=10        # 近期消息条数，默认 10（与 BotConfig 一致）
+MEMORY_RELEVANT_TOP_K=5       # 语义检索 Top-K，默认 5（与 BotConfig 一致）
 
 # 嵌入服务配置
 EMBEDDING_PROVIDER=openai     # openai | zhipuai
@@ -75,17 +77,17 @@ base_url = "https://open.bigmodel.cn/api/paas/v4/"
 - **默认值**: true
 - **说明**: 是否检索相关的历史对话
 
-### memory.recent_limit
+### memory.recent_limit / MEMORY_RECENT_LIMIT
 
-- **类型**: usize
-- **默认值**: 5
-- **说明**: 最近对话记录的数量限制
+- **类型**: 正整数（u32）
+- **默认值**: 10（当前 Telegram Bot `BotConfig` 默认）
+- **说明**: 近期对话记录条数上限，用于 RAG 上下文的 `RecentMessagesStrategy`。推荐范围：5–20；过大会增加 token 消耗与延迟。
 
-### memory.relevant_top_k
+### memory.relevant_top_k / MEMORY_RELEVANT_TOP_K
 
-- **类型**: usize
-- **默认值**: 3
-- **说明**: 相关历史对话的数量限制
+- **类型**: 正整数（u32）
+- **默认值**: 5（当前 Telegram Bot `BotConfig` 默认）
+- **说明**: 语义检索返回条数（Top-K），用于 RAG 上下文的 `SemanticSearchStrategy`。推荐范围：3–10；过大会引入更多无关上下文。
 
 ### embedding.provider
 
@@ -137,3 +139,16 @@ base_url = "https://open.bigmodel.cn/api/paas/v4/"
 - **类型**: string
 - **默认值**: "./data/memories.lance"
 - **说明**: Lance数据库文件路径
+
+---
+
+## Telegram Bot 实现的环境变量（BotConfig）
+
+当前 `telegram-bot` 从环境变量读取的 RAG 相关配置如下，与阶段 1「配置接入」一致。
+
+| 环境变量 | 含义 | 默认值 | 推荐范围 |
+|----------|------|--------|----------|
+| `MEMORY_RECENT_LIMIT` | 近期消息条数上限（RecentMessagesStrategy） | 10 | 5–20 |
+| `MEMORY_RELEVANT_TOP_K` | 语义检索 Top-K（SemanticSearchStrategy） | 5 | 3–10 |
+
+未设置时使用默认值；设置无效数字时回退为默认值。详见 `telegram-bot/src/config.rs`。
