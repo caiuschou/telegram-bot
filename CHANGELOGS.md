@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CLI 查询向量数据库最近 N 条记录**
+  - **dbot-cli**：新增子命令 `list-vectors`，按时间倒序输出 LanceDB 中最近 N 条记录（默认 100）；支持 `--limit`、`--lance-db-path`；环境变量 `LANCE_DB_PATH`、`LANCE_EMBEDDING_DIM`。
+  - **memory-lance**：`LanceVectorStore` 新增非 trait 方法 `list_recent(limit)`，全表扫描后在内存按 `timestamp` 降序取前 limit 条。
+  - **文档**：`docs/dbot-cli-vector-query-plan.md` 方案；`dbot-cli/README.md` 增加 list-vectors 用法与环境变量；`memory-lance` 集成测试增加 `test_lance_list_recent_returns_ordered_by_timestamp_desc`。
 - **向量搜索准确度优化阶段 1：配置接入（Top-K 与相关项）**
   - **BotConfig**：新增 `memory_recent_limit`、`memory_relevant_top_k`，从环境变量 `MEMORY_RECENT_LIMIT`、`MEMORY_RELEVANT_TOP_K` 读取，默认值分别为 10、5。
   - **runner**：初始化 SyncAIHandler 时传入上述配置，用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy。

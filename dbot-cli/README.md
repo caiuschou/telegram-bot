@@ -30,6 +30,29 @@ cargo build --release --package dbot-cli
 ./target/release/dbot --token YOUR_BOT_TOKEN
 ```
 
+### 加载消息到向量数据库
+
+```bash
+./target/release/dbot load --batch-size 50
+```
+
+### 查询向量数据库最近 N 条记录
+
+按时间倒序输出 LanceDB 中最近 N 条记录（默认 100 条），用于排查与抽查：
+
+```bash
+# 最近 100 条（默认）
+./target/release/dbot list-vectors
+
+# 指定条数
+./target/release/dbot list-vectors --limit 50
+
+# 指定 LanceDB 路径（覆盖环境变量）
+./target/release/dbot list-vectors --lance-db-path ./mylancedb
+```
+
+依赖环境变量：`LANCE_DB_PATH`（默认 `./lancedb`）、`LANCE_EMBEDDING_DIM`（默认 `1536`，需与写入时一致）。
+
 ## 环境变量
 
 创建 `.env` 文件配置常用变量：
@@ -40,6 +63,10 @@ BOT_TOKEN=your_bot_token
 
 # 数据库路径
 DATABASE_URL=file:./telegram_bot.db
+
+# 向量数据库（list-vectors / load 使用）
+LANCE_DB_PATH=./lancedb
+LANCE_EMBEDDING_DIM=1536
 ```
 
 ## 项目结构

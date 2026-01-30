@@ -24,4 +24,5 @@ openai-client = { path = "../openai-client" }
 memory = { path = "../memory" }
 memory-sqlite = { path = "../crates/memory-sqlite" }
 memory-loader = { path = "../crates/memory-loader" }
+memory-lance = { path = "../crates/memory-lance" }
 async-trait = "0.1"

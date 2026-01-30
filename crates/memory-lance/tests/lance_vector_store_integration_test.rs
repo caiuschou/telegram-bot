@@ -7,8 +7,9 @@
 //! - 按用户 / 会话 ID 检索
 //! - 语义向量检索
 //! - 数据持久化（重启后可读）
+//! - list_recent 按时间倒序返回最近 N 条
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -259,4 +260,73 @@ async fn test_lance_vector_query_verification() {
         entry_b.id,
         "nearest to query (same as B) should be entry B"
     );
+}
+
+/// list_recent 按时间倒序返回最近 N 条
+///
+/// 验证点：
+/// - 写入多条不同 timestamp 的记录后，list_recent(limit) 返回按时间降序的前 limit 条
+/// - limit=0 返回空列表
+///
+/// 外部交互：临时目录创建 Lance 数据库并写入三条记录。
+#[tokio::test]
+async fn test_lance_list_recent_returns_ordered_by_timestamp_desc() {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let lance_db_path = temp_dir.path().join("lance_list_recent_db");
+    let lance_path_str = lance_db_path.to_string_lossy().to_string();
+
+    let store: LanceVectorStore = LanceVectorStore::new(&lance_path_str)
+        .await
+        .expect("Failed to create LanceVectorStore");
+
+    const DIM: usize = 1536;
+    let base_time = Utc::now() - Duration::seconds(10);
+
+    let make_entry = |content: &str, secs_after_base: i64| {
+        let metadata = MemoryMetadata {
+            user_id: Some("u1".to_string()),
+            conversation_id: Some("c1".to_string()),
+            role: MemoryRole::User,
+            timestamp: base_time + Duration::seconds(secs_after_base),
+            tokens: Some(5),
+            importance: Some(1.0),
+        };
+        MemoryEntry {
+            id: Uuid::new_v4(),
+            content: content.to_string(),
+            embedding: Some(vec![0.1f32; DIM]),
+            metadata,
+        }
+    };
+
+    let e1 = make_entry("oldest", 0);
+    let e2 = make_entry("middle", 5);
+    let e3 = make_entry("newest", 9);
+
+    store.add(e1.clone()).await.expect("add e1");
+    store.add(e2.clone()).await.expect("add e2");
+    store.add(e3.clone()).await.expect("add e3");
+
+    let recent = store.list_recent(2).await.expect("list_recent(2)");
+    assert_eq!(recent.len(), 2, "list_recent(2) should return 2 entries");
+    assert_eq!(
+        recent[0].content, "newest",
+        "first should be newest by timestamp"
+    );
+    assert_eq!(
+        recent[1].content, "middle",
+        "second should be middle by timestamp"
+    );
+
+    let recent_all = store.list_recent(10).await.expect("list_recent(10)");
+    assert_eq!(
+        recent_all.len(), 3,
+        "list_recent(10) should return all 3 entries"
+    );
+    assert_eq!(recent_all[0].content, "newest");
+    assert_eq!(recent_all[1].content, "middle");
+    assert_eq!(recent_all[2].content, "oldest");
+
+    let empty = store.list_recent(0).await.expect("list_recent(0)");
+    assert!(empty.is_empty(), "list_recent(0) should return empty");
 }

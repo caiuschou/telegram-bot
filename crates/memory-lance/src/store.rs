@@ -352,6 +352,62 @@ impl LanceVectorStore {
             Field::new("importance", DataType::Float32, true),
         ])))
     }
+
+    /// 按时间倒序返回最近 `limit` 条记录（仅 Lance 使用，非 MemoryStore trait）。
+    ///
+    /// 全表扫描后在内存中按 `metadata.timestamp` 降序排序并取前 `limit` 条。
+    /// 与外部交互：仅读 LanceDB 表，不涉及网络。
+    ///
+    /// # 参数
+    ///
+    /// * `limit` - 返回的最大条数；0 则返回空 vec。
+    ///
+    /// # 返回
+    ///
+    /// 按时间从新到旧排列的 `MemoryEntry` 列表。
+    pub async fn list_recent(&self, limit: usize) -> Result<Vec<MemoryEntry>> {
+        if limit == 0 {
+            info!(limit = 0, "list_recent: limit is 0, returning empty");
+            return Ok(Vec::new());
+        }
+
+        info!(limit = limit, "Querying Lance vector store for list_recent");
+        let db = self.db.read().await;
+        let table = db
+            .open_table(&self.config.table_name)
+            .execute()
+            .await
+            .map_err(|e| anyhow!("Failed to open table: {}", e))?;
+
+        let results = table
+            .query()
+            .execute()
+            .await
+            .map_err(|e| anyhow!("Failed to execute query: {}", e))?;
+
+        let batches = results
+            .try_collect::<Vec<_>>()
+            .await
+            .map_err(|e| anyhow!("Failed to collect results: {}", e))?;
+
+        let mut entries = Vec::new();
+        for batch in batches {
+            for row in 0..batch.num_rows() {
+                let entry = self.batch_to_entry(&batch, row)?;
+                entries.push(entry);
+            }
+        }
+
+        entries.sort_by(|a, b| b.metadata.timestamp.cmp(&a.metadata.timestamp));
+        entries.truncate(limit);
+
+        info!(
+            requested = limit,
+            returned = entries.len(),
+            "Lance vector store list_recent returned"
+        );
+        Ok(entries)
+    }
 }
 
 #[async_trait]
