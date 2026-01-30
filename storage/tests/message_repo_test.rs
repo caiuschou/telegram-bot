@@ -370,3 +370,32 @@ async fn test_search_messages() {
     assert!(found[0].content.contains("hello"));
     assert!(found[1].content.contains("hello"));
 }
+
+/// **Test: cleanup_old_messages deletes messages older than cutoff and returns count.**
+#[tokio::test]
+async fn test_cleanup_old_messages() {
+    let (_dir, database_url) = fresh_db_path();
+    let repo = MessageRepository::new(&database_url)
+        .await
+        .expect("Failed to create repository");
+
+    let deleted = repo.cleanup_old_messages(30).await.expect("cleanup");
+    assert_eq!(deleted, 0);
+
+    repo.save(&MessageRecord::new(
+        1,
+        1,
+        None,
+        None,
+        None,
+        "text".to_string(),
+        "old".to_string(),
+        "received".to_string(),
+    ))
+    .await
+    .expect("save");
+
+    // Use -1 days so cutoff is in the future; all existing messages are "older" and get deleted
+    let deleted = repo.cleanup_old_messages(-1).await.expect("cleanup");
+    assert_eq!(deleted, 1);
+}
