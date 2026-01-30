@@ -90,12 +90,12 @@ fn load_embedding_config() -> Result<EmbeddingConfig> {
     })
 }
 
-/// 处理 load 命令
-/// 
-/// 从环境变量读取配置，调用 memory_loader::load 执行数据加载。
-/// 会初始化 tracing，使 memory-loader 内部的 info 日志输出到控制台。
+/// Handle the load command.
+///
+/// Reads config from env, calls memory_loader::load to perform data load.
+/// Initializes tracing so memory-loader info logs go to console.
 async fn handle_load(batch_size: usize) -> Result<()> {
-    // 初始化 tracing，使导入过程的 info 日志可见
+    // Init tracing so import info logs are visible
     tracing_subscriber::fmt()
         .with_env_filter(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string())
@@ -125,10 +125,10 @@ async fn handle_load(batch_size: usize) -> Result<()> {
     Ok(())
 }
 
-/// 处理 list-vectors 命令
+/// Handle list-vectors command.
 ///
-/// 从环境变量读取 LANCE_DB_PATH、LANCE_EMBEDDING_DIM，连接 LanceDB，
-/// 调用 LanceVectorStore::list_recent 按时间倒序取最近 N 条并打印。
+/// Reads LANCE_DB_PATH, LANCE_EMBEDDING_DIM from env, connects to LanceDB,
+/// calls LanceVectorStore::list_recent for latest N entries (desc by time) and prints.
 fn lance_embedding_dim() -> usize {
     std::env::var("LANCE_EMBEDDING_DIM")
         .ok()

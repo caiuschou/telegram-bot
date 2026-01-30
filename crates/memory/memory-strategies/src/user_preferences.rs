@@ -102,7 +102,7 @@ impl ContextStrategy for UserPreferencesStrategy {
                 user_id = %user_id,
                 preference_count = preferences.len(),
                 preferences = %prefs_str,
-                "UserPreferencesStrategy: 用户偏好 extracted"
+                "UserPreferencesStrategy: user preferences extracted"
             );
             Ok(StrategyResult::Preferences(prefs_str))
         }

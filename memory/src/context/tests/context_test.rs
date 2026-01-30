@@ -96,7 +96,7 @@ fn test_format_for_model_distinguishes_recent_and_semantic() {
     let ctx = make_context(
         None,
         vec!["User: Hi".to_string(), "Assistant: Hello".to_string()],
-        vec!["User: 猫吃什么".to_string(), "Assistant: 猫吃鱼".to_string()],
+        vec!["User: What do cats eat?".to_string(), "Assistant: Cats eat fish.".to_string()],
         None,
         20,
     );
@@ -105,8 +105,8 @@ fn test_format_for_model_distinguishes_recent_and_semantic() {
     assert!(out.contains("Relevant reference (semantic):"));
     assert!(out.contains("User: Hi"));
     assert!(out.contains("Assistant: Hello"));
-    assert!(out.contains("猫吃什么"));
-    assert!(out.contains("猫吃鱼"));
+    assert!(out.contains("What do cats eat?"));
+    assert!(out.contains("Cats eat fish."));
 }
 
 #[test]
@@ -128,13 +128,13 @@ fn test_to_messages_returns_chat_messages_with_different_roles() {
         vec![
             "User: Hi".to_string(),
             "Assistant: Hello".to_string(),
-            "User: 猫吃什么".to_string(),
+            "User: What do cats eat?".to_string(),
         ],
-        vec!["User: 狗吃什么".to_string(), "Assistant: 狗吃狗粮。".to_string()],
+        vec!["User: What do dogs eat?".to_string(), "Assistant: Dogs eat dog food.".to_string()],
         Some("Pref: tea".to_string()),
         50,
     );
-    let msgs = ctx.to_messages(true, "那猫呢？");
+    let msgs = ctx.to_messages(true, "What about cats?");
     // System, one User(context: preferences + recent + semantic), User(question)
     assert!(msgs.len() >= 3);
     let first = &msgs[0];
@@ -144,11 +144,11 @@ fn test_to_messages_returns_chat_messages_with_different_roles() {
     assert!(msgs[1].content.contains(SECTION_RECENT));
     assert!(msgs[1].content.contains("Hi"));
     assert!(msgs[1].content.contains("Hello"));
-    assert!(msgs[1].content.contains("猫吃什么"));
+    assert!(msgs[1].content.contains("What do cats eat?"));
     assert!(msgs[1].content.contains("User Preferences: Pref: tea"));
-    assert!(msgs[1].content.contains("狗吃什么"));
-    assert!(msgs[1].content.contains("狗吃狗粮。"));
+    assert!(msgs[1].content.contains("What do dogs eat?"));
+    assert!(msgs[1].content.contains("Dogs eat dog food."));
     let last = msgs.last().unwrap();
     assert!(matches!(last.role, MessageRole::User));
-    assert_eq!(last.content, "那猫呢？");
+    assert_eq!(last.content, "What about cats?");
 }

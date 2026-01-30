@@ -86,12 +86,12 @@ impl ContextStrategy for SemanticSearchStrategy {
             "SemanticSearchStrategy: starting semantic search"
         );
 
-        info!(query = %query_text, query_len = query_text.len(), "step: 词向量 生成查询向量 (embedding)");
+        info!(query = %query_text, query_len = query_text.len(), "step: embedding generate query vector");
         let query_embedding = match self.embedding_service.embed(query_text).await {
             Ok(emb) => {
                 info!(
                     dimension = emb.len(),
-                    "step: 词向量 查询向量生成完成"
+                    "step: embedding query vector done"
                 );
                 emb
             }
@@ -105,7 +105,7 @@ impl ContextStrategy for SemanticSearchStrategy {
             dimension = query_embedding.len(),
             limit = self.limit,
             min_score = self.min_score,
-            "step: 词向量 向量检索 (semantic_search)"
+            "step: embedding semantic_search"
         );
         let scored_entries = match store
             .semantic_search(
@@ -145,7 +145,7 @@ impl ContextStrategy for SemanticSearchStrategy {
                 score_min = %min_s,
                 score_mean = %mean_s,
                 score_max = %max_s,
-                "step: 词向量 向量检索 分数分布"
+                "step: embedding semantic_search score distribution"
             );
         }
 
@@ -160,7 +160,7 @@ impl ContextStrategy for SemanticSearchStrategy {
                 query = %query_text,
                 min_score = self.min_score,
                 count_before = count_before,
-                "SemanticSearchStrategy: 语义检索结果全部低于阈值，未保留任何条目"
+                "SemanticSearchStrategy: all semantic results below threshold, no entries kept"
             );
         }
 
@@ -171,16 +171,16 @@ impl ContextStrategy for SemanticSearchStrategy {
 
         info!(
             entry_count = entries.len(),
-            "step: 词向量 向量检索完成"
+            "step: embedding semantic_search done"
         );
         info!(
             query = %query_text,
             entry_count = entries.len(),
             message_count = messages.len(),
-            "SemanticSearchStrategy: 语义检索 returned messages"
+            "SemanticSearchStrategy: semantic search returned messages"
         );
         for (i, msg) in messages.iter().enumerate() {
-            info!(strategy = "SemanticSearchStrategy", index = i, content = %msg, "语义检索");
+            info!(strategy = "SemanticSearchStrategy", index = i, content = %msg, "semantic search");
         }
 
         Ok(StrategyResult::Messages {

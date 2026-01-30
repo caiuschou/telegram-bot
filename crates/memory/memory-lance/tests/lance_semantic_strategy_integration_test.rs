@@ -1,14 +1,12 @@
-//! Lance + SemanticSearchStrategy 集成测试
+//! Lance + SemanticSearchStrategy integration test
 //!
-//! 使用真实 Lance 存储和智谱（Zhipu）词嵌入验证完整策略链路：
-//! - 使用 BigModelEmbedding（智谱 embedding-2）为测试数据生成向量并写入 Lance
-//! - SemanticSearchStrategy 使用同一智谱服务对查询生成向量并做语义检索
-//! - 验证查询「猫」时返回与「关于猫」语义最近的一条消息
+//! Uses real Lance store and Zhipu embedding to verify full strategy flow:
+//! - BigModelEmbedding (Zhipu embedding-2) generates vectors for test data and writes to Lance
+//! - SemanticSearchStrategy uses same Zhipu service to embed query and run semantic search
+//! - Verify query about cat returns the message semantically nearest to "about cat"
 //!
-//! 外部交互：
-//! - 临时目录创建 Lance 数据库
-//! - memory::SemanticSearchStrategy、memory::MemoryStore、embedding::EmbeddingService
-//! - 智谱开放平台 API（需环境变量 BIGMODEL_API_KEY 或 ZHIPUAI_API_KEY，未设置时跳过测试）
+//! External: temp dir Lance DB; SemanticSearchStrategy, MemoryStore, EmbeddingService;
+//! Zhipu API (BIGMODEL_API_KEY or ZHIPUAI_API_KEY, skip if unset).
 
 use chrono::Utc;
 use std::sync::Arc;
@@ -23,10 +21,10 @@ use memory::{
 };
 use memory_lance::{LanceConfig, LanceVectorStore};
 
-/// 智谱 embedding-2 模型向量维度
+/// Zhipu embedding-2 model dimension
 const DIM: usize = 1024;
 
-/// 从环境变量获取智谱 API Key；未设置时返回 None，测试将跳过。
+/// Get Zhipu API key from env; None if unset (test will skip).
 fn zhipu_api_key() -> Option<String> {
     std::env::var("BIGMODEL_API_KEY")
         .ok()
@@ -34,7 +32,7 @@ fn zhipu_api_key() -> Option<String> {
         .or_else(|| std::env::var("ZHIPUAI_API_KEY").ok().filter(|s| !s.is_empty()))
 }
 
-/// 创建智谱词嵌入服务（embedding-2），无 API Key 时返回 None。
+/// Create Zhipu embedding service (embedding-2); None if no API key.
 fn make_zhipu_embedding() -> Option<Arc<BigModelEmbedding>> {
     zhipu_api_key().map(|key| Arc::new(BigModelEmbedding::new(key, "embedding-2".to_string())))
 }
@@ -50,12 +48,12 @@ fn meta(role: MemoryRole) -> MemoryMetadata {
     }
 }
 
-/// 验证：Lance 存储 + SemanticSearchStrategy + 智谱词嵌入
+/// Verify: Lance store + SemanticSearchStrategy + Zhipu embedding
 ///
-/// 步骤：
-/// 1. 使用智谱 BigModelEmbedding（embedding-2）生成向量；无 API Key 时跳过
-/// 2. 创建临时 Lance 库并写入三条带智谱向量的 MemoryEntry（猫、狗、汽车）
-/// 3. 对查询「用户问：猫吃什么？」执行 build_context，断言返回的消息中包含「关于猫」且为最近邻
+/// Steps:
+/// 1. Use Zhipu BigModelEmbedding (embedding-2) for vectors; skip if no API key
+/// 2. Create temp Lance DB and write three MemoryEntry with Zhipu vectors (cat, dog, car)
+/// 3. build_context for query "User asks: what do cats eat?"; assert returned message contains "about cat" and is nearest
 #[tokio::test]
 async fn test_lance_semantic_strategy_returns_relevant_message() {
     let embedding = match make_zhipu_embedding() {
@@ -76,9 +74,9 @@ async fn test_lance_semantic_strategy_returns_relevant_message() {
         .await
         .expect("create LanceVectorStore");
 
-    let content_cat = "关于猫的讨论：猫是可爱的宠物。";
-    let content_dog = "关于狗的讨论：狗很忠诚。";
-    let content_car = "关于汽车的讨论：电动汽车很环保。";
+    let content_cat = "Discussion about cats: cats are lovely pets.";
+    let content_dog = "Discussion about dogs: dogs are loyal.";
+    let content_car = "Discussion about cars: electric cars are eco-friendly.";
 
     let emb_cat = embedding.embed(content_cat).await.expect("embed cat");
     let emb_dog = embedding.embed(content_dog).await.expect("embed dog");
@@ -109,7 +107,7 @@ async fn test_lance_semantic_strategy_returns_relevant_message() {
 
     let strategy = SemanticSearchStrategy::new(3, embedding, 0.0);
     let result = strategy
-        .build_context(&store, &None, &None, &Some("用户问：猫吃什么？".to_string()))
+        .build_context(&store, &None, &None, &Some("User asks: what do cats eat?".to_string()))
         .await
         .expect("build_context");
 
@@ -126,18 +124,18 @@ async fn test_lance_semantic_strategy_returns_relevant_message() {
 
     let first = &messages[0];
     assert!(
-        first.contains("猫"),
-        "nearest to query '猫' should be the cat entry, got: {}",
+        first.contains("cat") || first.contains("cats"),
+        "nearest to query about cat should be the cat entry, got: {}",
         first
     );
     assert!(
-        first.contains("关于猫"),
+        first.contains("cats") || first.contains("cat"),
         "first message should be the cat discussion, got: {}",
         first
     );
 }
 
-/// 验证：无查询时策略返回 Empty
+/// Verify: strategy returns Empty when no query
 #[tokio::test]
 async fn test_lance_semantic_strategy_empty_query_returns_empty() {
     let embedding = match make_zhipu_embedding() {
@@ -158,7 +156,7 @@ async fn test_lance_semantic_strategy_empty_query_returns_empty() {
         .await
         .expect("create LanceVectorStore");
 
-    let content = "一条消息";
+    let content = "A message";
     let emb = embedding.embed(content).await.expect("embed");
     let entry = MemoryEntry {
         id: Uuid::new_v4(),

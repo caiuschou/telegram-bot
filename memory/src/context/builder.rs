@@ -233,7 +233,7 @@ impl ContextBuilder {
     }
 }
 
-/// Logs context components in detail for debugging: 最近消息, 语义检索, 用户偏好.
+/// Logs context components in detail for debugging: recent messages, semantic search, user preferences.
 fn log_context_detail(
     recent_messages: &[String],
     semantic_messages: &[String],
@@ -241,22 +241,22 @@ fn log_context_detail(
 ) {
     info!(
         count = recent_messages.len(),
-        "context_detail: 最近消息"
+        "context_detail: recent messages"
     );
     for (i, msg) in recent_messages.iter().enumerate() {
-        info!(index = i, content = %msg, "最近消息");
+        info!(index = i, content = %msg, "recent messages");
     }
     info!(
         count = semantic_messages.len(),
-        "context_detail: 语义检索"
+        "context_detail: semantic search"
     );
     for (i, msg) in semantic_messages.iter().enumerate() {
-        info!(index = i, content = %msg, "语义检索");
+        info!(index = i, content = %msg, "semantic search");
     }
     if let Some(prefs) = preferences {
-        info!(preferences = %prefs, "context_detail: 用户偏好");
+        info!(preferences = %prefs, "context_detail: user preferences");
     } else {
-        info!("context_detail: 用户偏好 (无)");
+        info!("context_detail: user preferences (none)");
     }
 }
 
@@ -273,8 +273,8 @@ fn apply_strategy_result(
         StrategyResult::Messages { category, messages } => {
             let total_len: usize = messages.iter().map(|m| m.len()).sum();
             let label = match category {
-                MessageCategory::Recent => "最近消息",
-                MessageCategory::Semantic => "语义检索",
+                MessageCategory::Recent => "recent messages",
+                MessageCategory::Semantic => "semantic search",
             };
             info!(
                 strategy_name,
@@ -297,7 +297,7 @@ fn apply_strategy_result(
                 strategy_name,
                 strategy_index,
                 preferences = %prefs,
-                "Strategy returned user preferences (用户偏好)"
+                "Strategy returned user preferences"
             );
             *preferences = Some(prefs);
         }

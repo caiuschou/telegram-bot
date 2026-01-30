@@ -46,7 +46,7 @@ impl TelegramBotLLM {
                     info!(user_id = user_id, "Sent LLM response to user");
                 }
                 Err(e) => {
-                    let error_msg = format!("抱歉，处理您的请求时出错: {}", e);
+                    let error_msg = format!("Sorry, something went wrong processing your request: {}", e);
                     bot.send_message(msg.chat.id, error_msg).await?;
                     error!(user_id = user_id, error = %e, "LLM response error");
                 }
@@ -86,7 +86,7 @@ impl TelegramBotLLM {
                 })
                 .await
             {
-                let error_msg = format!("抱歉，处理您的请求时出错: {}", e);
+                let error_msg = format!("Sorry, something went wrong processing your request: {}", e);
                 bot.send_message(msg.chat.id, error_msg).await?;
                 error!(user_id = user_id, error = %e, "LLM stream response error");
             } else {

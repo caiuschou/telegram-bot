@@ -49,14 +49,14 @@ fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
     }
 
     if env::var("MEMORY_STORE_TYPE").is_err() {
-        // 在集成测试中优先使用内存存储，避免对 Lance/SQLite 的强依赖
+        // Prefer in-memory store in integration tests to avoid hard dependency on Lance/SQLite
         env::set_var("MEMORY_STORE_TYPE", "memory");
     }
 
-    // 集成测试使用 OpenAI embedding，避免依赖 BIGMODEL_API_KEY
+    // Integration tests use OpenAI embedding to avoid BIGMODEL_API_KEY dependency
     env::set_var("EMBEDDING_PROVIDER", "openai");
 
-    // 始终为测试覆盖路径型配置
+    // Always override path config for tests
     env::set_var(
         "DATABASE_URL",
         format!("file:{}/test.db", temp_path.display()),
@@ -69,10 +69,10 @@ fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
     BotConfig::load(None).expect("BotConfig::load must succeed in test setup")
 }
 
-/// 初始化 tracing 日志，仅在测试进程中调用一次。
+/// Initialize tracing; call once per test process.
 ///
-/// - 使用 `RUST_LOG` / `RUST_LOG_STYLE` 环境变量控制输出级别和样式。
-/// - 通过 `with_test_writer()` 确保日志在 `cargo test` 时输出到测试控制台。
+/// - Use `RUST_LOG` / `RUST_LOG_STYLE` env vars to control level and style.
+/// - `with_test_writer()` ensures log output goes to test console when running `cargo test`.
 static TRACING_INIT: Once = Once::new();
 
 fn init_tracing() {
@@ -87,12 +87,12 @@ fn init_tracing() {
     });
 }
 
-/// Teloxide 请求路径格式为 `/bot<token>/<method>`，测试用 token 为 `test_bot_token_12345`。
+/// Teloxide request path format is `/bot<token>/<method>`; test token is `test_bot_token_12345`.
 const TEST_BOT_TOKEN: &str = "test_bot_token_12345";
 
-/// 在 mock 服务器上注册 Telegram getMe 与 sendMessage 的 mock。
-/// 路径需与 teloxide 实际请求一致：`/bot<token>/getMe`、`/bot<token>/sendMessage`。
-/// 返回 Mock guard，调用方必须持有至请求完成，否则 mock 被 drop 后 server 返回空 body 导致 JSON 解析错误。
+/// Register mocks for Telegram getMe and sendMessage on the mock server.
+/// Paths must match teloxide requests: `/bot<token>/getMe`, `/bot<token>/sendMessage`.
+/// Returns mock guards; caller must hold until request completes, else server returns empty body and JSON parse fails.
 fn register_telegram_mocks(server: &mut mockito::ServerGuard) -> (mockito::Mock, mockito::Mock) {
     let get_me_path = format!("/bot{}/getMe", TEST_BOT_TOKEN);
     let mock_get_me = server
@@ -134,16 +134,16 @@ fn register_telegram_mocks(server: &mut mockito::ServerGuard) -> (mockito::Mock,
     (mock_get_me, mock_send)
 }
 
-/// 向 MemoryStore 预写入若干条消息上下文，供集成测试验证「根据记忆回复」。
+/// Pre-seed MemoryStore with message context for integration tests (reply-from-memory).
 ///
-/// 与 `build_memory_context` 中策略一致（参见 `docs/rag/context-retrieval-before-reply.md`）：
-/// - **RecentMessagesStrategy**：按 `conversation_id` / `user_id` 拉取最近消息；
-/// - **SemanticSearchStrategy**：用当前问题做向量检索（embed + semantic_search），
-///   需要 store 中有可被查询的条目；本函数写入的即「向量库中会被查询到的内容」。
-/// 使用与测试消息相同的 `user_id` / `conversation_id`（如 "123456"），这样策略能检索到这些条目，
-/// AI 生成回复时会带上这些上下文。
+/// Aligned with strategies in `build_memory_context` (see `docs/rag/context-retrieval-before-reply.md`):
+/// - **RecentMessagesStrategy**: fetch recent messages by `conversation_id` / `user_id`;
+/// - **SemanticSearchStrategy**: vector search on current question (embed + semantic_search),
+///   requires store entries to query; this function writes the content that will be queried.
+/// Uses same `user_id` / `conversation_id` as test messages (e.g. "123456") so strategies can retrieve them;
+/// AI reply will include this context.
 ///
-/// 外部交互：仅调用 `MemoryStore::add`，不涉及网络或文件。
+/// External: only calls `MemoryStore::add`, no network or file I/O.
 async fn seed_memory_context(
     store: std::sync::Arc<dyn MemoryStore>,
     user_id: &str,
@@ -153,19 +153,19 @@ async fn seed_memory_context(
     let conversation_id = Some(conversation_id.to_string());
     let base_time = chrono::Utc::now() - chrono::Duration::hours(1);
 
-    // 对话历史（RecentMessagesStrategy 会按会话拉取）
+    // Conversation history (RecentMessagesStrategy fetches by conversation)
     let entries: &[(&str, MemoryRole, i64)] = &[
-        ("我叫小明。", MemoryRole::User, 0),
-        ("你好小明，有什么可以帮你的？", MemoryRole::Assistant, 1),
-        ("我想了解一下天气。", MemoryRole::User, 2),
-        ("好的，你可以问我具体城市或日期。", MemoryRole::Assistant, 3),
-        // 以下为向量库中需被查询到的内容：用户偏好、历史帮助、时区等，便于 SemanticSearchStrategy 检索
-        ("我平时喜欢用英文交流。", MemoryRole::User, 4),
-        ("好的，我会优先用英文回复你。", MemoryRole::Assistant, 5),
-        ("上次你帮我查了北京的天气，谢谢。", MemoryRole::User, 6),
-        ("不客气，需要再查天气随时说。", MemoryRole::Assistant, 7),
-        ("请记住：我的时区是 UTC+8。", MemoryRole::User, 8),
-        ("已记住，会在时间相关回复里考虑 UTC+8。", MemoryRole::Assistant, 9),
+        ("My name is Xiao Ming.", MemoryRole::User, 0),
+        ("Hi Xiao Ming, how can I help?", MemoryRole::Assistant, 1),
+        ("I'd like to know about the weather.", MemoryRole::User, 2),
+        ("Sure, you can ask me for a city or date.", MemoryRole::Assistant, 3),
+        // Content for vector store: user preferences, past help, timezone, for SemanticSearchStrategy
+        ("I usually prefer to communicate in English.", MemoryRole::User, 4),
+        ("OK, I'll reply in English by default.", MemoryRole::Assistant, 5),
+        ("Last time you looked up Beijing weather for me, thanks.", MemoryRole::User, 6),
+        ("You're welcome, ask anytime for weather again.", MemoryRole::Assistant, 7),
+        ("Please remember: my timezone is UTC+8.", MemoryRole::User, 8),
+        ("Noted, I'll consider UTC+8 in time-related replies.", MemoryRole::Assistant, 9),
     ];
 
     for (content, role, offset_min) in entries {
@@ -183,7 +183,7 @@ async fn seed_memory_context(
     Ok(())
 }
 
-/// 主流程集成测试占位：LLM 回复完整流程（仅环境与组件初始化）
+/// Smoke test: LLM reply flow (env and component init only)
 #[tokio::test]
 async fn test_llm_reply_complete_flow_smoke() {
     init_tracing();
@@ -196,21 +196,21 @@ async fn test_llm_reply_complete_flow_smoke() {
     let _memory_store = MockMemoryStore::new();
 }
 
-/// AI 回复流程端到端测试（需真实 OPENAI_API_KEY，Telegram API 使用 mock）
+/// E2E test: AI reply flow (requires real OPENAI_API_KEY; Telegram API uses mock).
 ///
-/// 验证点：
-/// - TelegramBot 使用 MockMemoryStore 初始化，Telegram 请求发往 mock 服务器（不访问真实 Telegram）
-/// - 用户“回复机器人”消息触发 AI 队列
-/// - handle_core_message 后持久化、记忆写入、查询被调用
-/// - AI 处理器运行后：store 至少 1 次，query 至少 1 次
+/// Checks:
+/// - TelegramBot init with MockMemoryStore; Telegram requests go to mock server (no real Telegram)
+/// - User "reply to bot" message triggers AI pipeline
+/// - After handle_core_message: persistence, memory write, query are invoked
+/// - After AI handler: store at least 1 call, query at least 1 call
 ///
-/// 外部交互：依赖 OPENAI_API_KEY 调用真实 OpenAI API，未设置时跳过；Telegram 发往本地 mock。
+/// External: uses OPENAI_API_KEY for real OpenAI API; skipped if unset; Telegram goes to local mock.
 #[tokio::test]
 async fn test_ai_reply_complete_flow() {
     init_tracing();
     env::set_var("EMBEDDING_PROVIDER", "openai");
 
-    // 先加载 .env.test / .env，再检查 OPENAI_API_KEY，否则文件中的 key 不会被读到
+    // Load .env.test / .env first, then check OPENAI_API_KEY, else key from file won't be read
     let _ = dotenvy::from_filename(".env.test").or_else(|_| dotenvy::dotenv());
 
     if env::var("OPENAI_API_KEY").is_err() {
@@ -218,9 +218,9 @@ async fn test_ai_reply_complete_flow() {
         return;
     }
 
-    // 启动 Telegram API mock 服务器，避免使用假 token 访问真实 API 导致 Invalid bot token（使用 new_async 避免在 tokio runtime 内再 block_on）
+    // Start Telegram API mock server to avoid Invalid bot token from fake token (new_async avoids block_on inside tokio)
     let mut server = mockito::Server::new_async().await;
-    // 持有 mock guard 直至测试结束，否则 mock 被 drop 后请求会得到空 body，teloxide 解析 JSON 报 EOF
+    // Hold mock guards until test end; else after drop server returns empty body and teloxide JSON parse gets EOF
     let (_mock_get_me, _mock_send) = register_telegram_mocks(&mut server);
     env::set_var("TELEGRAM_API_URL", server.url());
 
@@ -233,8 +233,8 @@ async fn test_ai_reply_complete_flow() {
         .await
         .expect("TelegramBot::new_with_memory_store");
 
-    // 预写入消息上下文（与 docs/rag/context-retrieval-before-reply 中策略一致），
-    // build_memory_context 会通过 RecentMessagesStrategy / SemanticSearchStrategy 检索到这些条目，AI 根据记忆回复。
+    // Pre-seed message context (aligned with docs/rag/context-retrieval-before-reply);
+    // build_memory_context retrieves via RecentMessagesStrategy / SemanticSearchStrategy; AI replies from memory.
     const TEST_USER_ID: i64 = 123456;
     const TEST_CHAT_ID: i64 = 123456;
     seed_memory_context(
@@ -266,10 +266,10 @@ async fn test_ai_reply_complete_flow() {
         reply_to_message_content: Some("Previous bot response".to_string()),
     };
 
-    // SyncLLMHandler 在链内同步执行：before() 存用户消息，handle() 调 LLM 并返回 Reply，after() 存 LLM 回复。handle_core_message 返回时链已结束。
+    // SyncLLMHandler runs in chain: before() stores user msg, handle() calls LLM and returns Reply, after() stores LLM reply. Chain done when handle_core_message returns.
     bot.handle_core_message(&msg).await.expect("handle_core_message");
 
-    // 预写入 10 条（含向量库中需被查询的内容）+ middleware before() 存 1 条用户消息 + after() 存 1 条 AI 回复；至少应有 11 次 store（10 seed + 1 user）。
+    // 10 seeded entries (including vector-store content) + middleware before() 1 user msg + after() 1 AI reply; at least 11 store calls (10 seed + 1 user).
     assert!(
         mock_store.get_store_call_count() >= 11,
         "Memory store should have at least 11 adds (10 seeded + 1 user message), got {}",

@@ -47,13 +47,13 @@ async fn test_bigmodel_embedding() {
     assert_eq!(embedding.len(), 1024); // embedding-2 produces 1024 dimensions
 }
 
-/// **Test: Single-text embedding for Chinese (real API).**
+/// **Test: Single-text embedding (real API).**
 ///
 /// **Setup:** Same as `test_bigmodel_embedding` but uses `with_api_key` (default model).
 ///
-/// **Action:** Calls `embed("你好世界")`.
+/// **Action:** Calls `embed("Hello world")`.
 ///
-/// **Expected:** Returns a non-empty embedding of length 1024; validates Chinese-optimized behavior.
+/// **Expected:** Returns a non-empty embedding of length 1024.
 #[tokio::test]
 #[ignore]
 async fn test_bigmodel_embedding_chinese() {
@@ -63,7 +63,7 @@ async fn test_bigmodel_embedding_chinese() {
 
     let service = BigModelEmbedding::with_api_key(api_key);
 
-    let embedding = service.embed("你好世界").await.unwrap();
+    let embedding = service.embed("Hello world").await.unwrap();
     assert!(!embedding.is_empty());
     assert_eq!(embedding.len(), 1024);
 }

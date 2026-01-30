@@ -1,13 +1,13 @@
-//! Lance 向量存储集成测试
+//! Lance vector store integration tests
 //!
-//! 验证内容：
-//! - Lance 数据库初始化与表创建
-//! - 数据库存储目录自动创建
-//! - `MemoryEntry` 写入与读取
-//! - 按用户 / 会话 ID 检索
-//! - 语义向量检索
-//! - 数据持久化（重启后可读）
-//! - list_recent 按时间倒序返回最近 N 条
+//! Verifies:
+//! - Lance DB init and table creation
+//! - DB storage directory auto-creation
+//! - MemoryEntry write/read
+//! - Search by user / conversation ID
+//! - Semantic vector search
+//! - Data persistence (readable after restart)
+//! - list_recent returns N most recent entries by time
 
 use chrono::{Duration, Utc};
 use tempfile::TempDir;
@@ -16,43 +16,40 @@ use uuid::Uuid;
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use memory_lance::LanceVectorStore;
 
-/// Lance 向量存储验证测试
+/// Lance vector store verification test
 ///
-/// 验证点：
-/// - Lance 数据库初始化 - 创建数据库连接、初始化向量表
-/// - 数据库目录被正确创建
-/// - 消息向量化存储到 Lance（添加 MemoryEntry）
-/// - 数据持久化验证
+/// Checks:
+/// - Lance DB init (connection, vector table)
+/// - DB directory created correctly
+/// - Message vectorization stored to Lance (add MemoryEntry)
+/// - Data persistence
 ///
-/// 外部交互：
-/// - 在临时目录创建 Lance 数据库
-/// - 创建并写入 MemoryEntry 到数据库
-/// - 验证数据库文件存在且可读取
+/// External: create Lance DB in temp dir, write MemoryEntry, verify files exist and are readable.
 #[tokio::test]
 async fn test_lance_vector_store_verification() {
-    // 1. 创建临时目录用于 Lance 数据库
+    // 1. Create temp dir for Lance DB
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let lance_db_path = temp_dir.path().join("lance_db");
     let lance_path_str = lance_db_path.to_string_lossy().to_string();
 
-    // 2. 验证数据库目录在创建前不存在
+    // 2. DB dir should not exist before creation
     assert!(
         !lance_db_path.exists(),
         "Lance database directory should not exist before creation"
     );
 
-    // 3. 创建 LanceVectorStore（会自动初始化数据库和表）
+    // 3. Create LanceVectorStore (auto-inits DB and table)
     let store: LanceVectorStore = LanceVectorStore::new(&lance_path_str)
         .await
         .expect("Failed to create LanceVectorStore");
 
-    // 4. 验证数据库目录被正确创建
+    // 4. DB dir created correctly
     assert!(
         lance_db_path.exists(),
         "Lance database directory should be created after store initialization"
     );
 
-    // 5. 验证数据库目录包含文件
+    // 5. DB dir contains files
     let lance_db_files = std::fs::read_dir(&lance_db_path)
         .expect("Should be able to read Lance database directory");
     let file_count = lance_db_files.count();
@@ -62,7 +59,7 @@ async fn test_lance_vector_store_verification() {
         file_count
     );
 
-    // 6. 创建测试 MemoryEntry（包含模拟的 embedding 向量）
+    // 6. Create test MemoryEntry (mock embedding vector)
     let test_content = "Test message for Lance vector store";
     let test_embedding: Vec<f32> = (0..1536).map(|i| i as f32 / 1536.0).collect();
 
@@ -82,13 +79,13 @@ async fn test_lance_vector_store_verification() {
         metadata,
     };
 
-    // 7. 添加 MemoryEntry 到 Lance 存储
+    // 7. Add MemoryEntry to Lance store
     store
         .add(entry.clone())
         .await
         .expect("Failed to add entry to Lance store");
 
-    // 8. 验证 MemoryEntry 可以被检索
+    // 8. MemoryEntry is retrievable
     let retrieved: Option<MemoryEntry> = store
         .get(entry.id)
         .await
@@ -113,7 +110,7 @@ async fn test_lance_vector_store_verification() {
         "Retrieved entry should have embedding"
     );
 
-    // 9. 验证用户搜索功能
+    // 9. User search
     let user_entries: Vec<MemoryEntry> = store
         .search_by_user("test_user_123")
         .await
@@ -128,7 +125,7 @@ async fn test_lance_vector_store_verification() {
         "Search results should include the added entry"
     );
 
-    // 10. 验证会话搜索功能
+    // 10. Conversation search
     let conversation_entries: Vec<MemoryEntry> = store
         .search_by_conversation("test_conversation_456")
         .await
@@ -143,7 +140,7 @@ async fn test_lance_vector_store_verification() {
         "Search results should include the added entry"
     );
 
-    // 11. 验证语义搜索功能
+    // 11. Semantic search
     let query_embedding: Vec<f32> = (0..1536).map(|i| i as f32 / 1536.0).collect();
     let search_results: Vec<(f32, MemoryEntry)> = store
         .semantic_search(&query_embedding, 10, None, None)
@@ -155,7 +152,7 @@ async fn test_lance_vector_store_verification() {
         "Semantic search should return results"
     );
 
-    // 12. 验证数据持久化：重新打开数据库并读取数据
+    // 12. Persistence: reopen DB and read
     let store2: LanceVectorStore = LanceVectorStore::new(&lance_path_str)
         .await
         .expect("Failed to reopen LanceVectorStore");
@@ -171,15 +168,13 @@ async fn test_lance_vector_store_verification() {
     );
 }
 
-/// Lance 向量查询验证测试
+/// Lance vector query verification test
 ///
-/// 验证点：
-/// - 语义搜索返回按相似度排序的结果
-/// - 查询向量与某条记录的 embedding 最接近时，该记录应排在首位
+/// Checks:
+/// - Semantic search returns results ordered by similarity
+/// - When query vector is closest to a record's embedding, that record is first
 ///
-/// 外部交互：
-/// - 在临时目录创建 Lance 数据库并写入多条带不同向量的记录
-/// - 执行 semantic_search 并断言结果顺序
+/// External: create Lance DB in temp dir, write entries with different vectors, run semantic_search and assert order
 #[tokio::test]
 async fn test_lance_vector_query_verification() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -192,7 +187,7 @@ async fn test_lance_vector_query_verification() {
 
     const DIM: usize = 1536;
 
-    // 构造三条记录：A 首维为 1，B 第二维为 1，C 第三维为 1，其余为 0
+    // Three records: A dim 0 = 1, B dim 1 = 1, C dim 2 = 1, rest 0
     let make_embedding = |i: usize| {
         let mut v = vec![0.0f32; DIM];
         v[i] = 1.0;
@@ -231,7 +226,7 @@ async fn test_lance_vector_query_verification() {
     store.add(entry_b.clone()).await.expect("add B");
     store.add(entry_c.clone()).await.expect("add C");
 
-    // 用与 A 相同的向量查询，最近邻应为 A
+    // Query with same vector as A; nearest should be A
     let query_near_a: Vec<f32> = make_embedding(0);
     let results = store
         .semantic_search(&query_near_a, 3, None, None)
@@ -249,7 +244,7 @@ async fn test_lance_vector_query_verification() {
     );
     assert_eq!(results[0].1.content, "entry A");
 
-    // 用与 B 相同的向量查询，最近邻应为 B
+    // Query with same vector as B; nearest should be B
     let query_near_b: Vec<f32> = make_embedding(1);
     let results_b = store
         .semantic_search(&query_near_b, 3, None, None)
@@ -262,16 +257,15 @@ async fn test_lance_vector_query_verification() {
     );
 }
 
-/// 语义检索回归集：3 条黄金用例（查询→期望命中）
+/// Semantic search regression: 3 golden cases (query -> expected hit)
 ///
-/// 用例来自可复现的 one-hot 向量 fixture，不依赖外部 API，便于 CI 稳定。
-/// 约定：查询向量与某条记录的 embedding 一致时，该条应为首条召回。
+/// One-hot vector fixtures, no external API, CI-stable.
+/// When query vector matches a record's embedding, that record is first.
 ///
-/// | 用例 | 查询向量 | 期望命中内容 |
-/// |------|----------|--------------|
-/// | 1 | 第 0 维为 1，其余 0 | "entry A" |
-/// | 2 | 第 1 维为 1，其余 0 | "entry B" |
-/// | 3 | 第 2 维为 1，其余 0 | "entry C" |
+/// | Case | Query vector | Expected content |
+/// | 1 | dim 0 = 1, rest 0 | "entry A" |
+/// | 2 | dim 1 = 1, rest 0 | "entry B" |
+/// | 3 | dim 2 = 1, rest 0 | "entry C" |
 #[tokio::test]
 async fn test_semantic_search_regression_golden_cases() {
     let temp_dir = TempDir::new().expect("temp dir");
@@ -349,13 +343,13 @@ async fn test_semantic_search_regression_golden_cases() {
     }
 }
 
-/// list_recent 按时间倒序返回最近 N 条
+/// list_recent returns N most recent entries by time (desc)
 ///
-/// 验证点：
-/// - 写入多条不同 timestamp 的记录后，list_recent(limit) 返回按时间降序的前 limit 条
-/// - limit=0 返回空列表
+/// Checks:
+/// - After writing entries with different timestamps, list_recent(limit) returns first limit by time desc
+/// - limit=0 returns empty list
 ///
-/// 外部交互：临时目录创建 Lance 数据库并写入三条记录。
+/// External: temp dir Lance DB with three records.
 #[tokio::test]
 async fn test_lance_list_recent_returns_ordered_by_timestamp_desc() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");

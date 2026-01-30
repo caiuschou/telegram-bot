@@ -220,7 +220,7 @@ impl TelegramBot {
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
-        // 初始化记忆中间件（带 embedding 服务，写入时算向量以参与语义检索）
+        // Init memory middleware (with embedding; writes compute vectors for semantic search)
         let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
             components.embedding_service.clone(),
@@ -255,7 +255,7 @@ impl TelegramBot {
             components.recent_store.clone(),
         ));
 
-        // 构建处理器链
+        // Build handler chain
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
@@ -288,9 +288,9 @@ impl TelegramBot {
         Ok(())
     }
 
-    /// 使用 core 层消息直接驱动处理器链（仅用于集成测试，避免构造 teloxide Message）。
+    /// Drive handler chain with core Message (for integration tests; avoids building teloxide Message).
     ///
-    /// 行为：与 handle_message 一致，但入参为 dbot_core::Message，便于测试中构造“回复机器人”等场景。
+    /// Same behavior as handle_message but takes dbot_core::Message for tests (e.g. reply-to-bot).
     #[doc(hidden)]
     pub async fn handle_core_message(&self, message: &CoreMessage) -> Result<()> {
         info!(
@@ -320,7 +320,7 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
         "Initializing bot"
     );
 
-    // 使用 TelegramBot 结构封装后的初始化逻辑
+    // Use TelegramBot struct for init logic
     let bot = TelegramBot::new(config).await?;
     let handler_chain = bot.handler_chain.clone();
     let bot_username = bot.components.bot_username.clone();

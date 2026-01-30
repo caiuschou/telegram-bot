@@ -10,7 +10,7 @@ use super::{chat_message_to_openai, LlmClient, StreamChunk};
 
 /// Default system prompt: plain text only, suitable for Telegram (no Markdown/formatting).
 pub const DEFAULT_SYSTEM_CONTENT: &str =
-    "不要使用 Markdown 或任何格式化符号（如*、_、`、#等），只输出纯文本，适合在 Telegram 里直接发送。";
+    "Do not use Markdown or any formatting symbols (e.g. *, _, `, #); output plain text only, suitable for sending directly in Telegram.";
 
 /// [`LlmClient`] implementation using the OpenAI chat completion API.
 #[derive(Clone)]

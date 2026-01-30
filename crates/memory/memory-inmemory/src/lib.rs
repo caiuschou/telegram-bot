@@ -117,7 +117,7 @@ impl MemoryStore for InMemoryVectorStore {
             info!(
                 id = %entry.id,
                 dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
-                "step: 词向量 InMemory 写入向量"
+                "step: embedding InMemory write vector"
             );
         }
         info!(
@@ -210,7 +210,7 @@ impl MemoryStore for InMemoryVectorStore {
             limit = limit,
             user_id = ?user_id,
             conversation_id = ?conversation_id,
-            "step: 词向量 InMemory 向量检索"
+            "step: embedding InMemory semantic search"
         );
         info!(
             embedding_len = query_embedding.len(),
@@ -248,7 +248,7 @@ impl MemoryStore for InMemoryVectorStore {
         info!(
             limit = limit,
             count = results.len(),
-            "step: 词向量 InMemory 向量检索完成"
+            "step: embedding InMemory semantic search done"
         );
         info!(
             limit = limit,

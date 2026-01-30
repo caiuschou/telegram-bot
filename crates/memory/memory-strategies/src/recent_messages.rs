@@ -75,7 +75,7 @@ impl ContextStrategy for RecentMessagesStrategy {
                 );
                 e
             })?;
-            // 排除 content 为空的条目，避免上下文出现 "User: " / "Assistant: " 无内容行（可能来自历史错误写入或列序问题）
+            // Skip entries with empty content to avoid "User: " / "Assistant: " lines with no body (e.g. from bad writes or column order)
             entries.retain(|e| !e.content.is_empty());
             entries.sort_by_key(|e| e.metadata.timestamp);
             let n = entries.len();
@@ -92,10 +92,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                 conversation_id = %conv_id,
                 entry_count = entries.len(),
                 message_count = messages.len(),
-                "RecentMessagesStrategy: 最近消息 by conversation_id"
+                "RecentMessagesStrategy: recent messages by conversation_id"
             );
             for (i, msg) in messages.iter().enumerate() {
-                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "最近消息");
+                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "recent messages");
             }
             return Ok(StrategyResult::Messages {
                 category: MessageCategory::Recent,
@@ -133,10 +133,10 @@ impl ContextStrategy for RecentMessagesStrategy {
                 user_id = %uid,
                 entry_count = entries.len(),
                 message_count = messages.len(),
-                "RecentMessagesStrategy: 最近消息 by user_id"
+                "RecentMessagesStrategy: recent messages by user_id"
             );
             for (i, msg) in messages.iter().enumerate() {
-                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "最近消息");
+                info!(strategy = "RecentMessagesStrategy", index = i, content = %msg, "recent messages");
             }
             return Ok(StrategyResult::Messages {
                 category: MessageCategory::Recent,

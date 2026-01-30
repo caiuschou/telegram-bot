@@ -52,7 +52,7 @@ impl BotConfig {
             .and_then(|s| s.parse().ok())
             .unwrap_or(false);
         let llm_thinking_message =
-            env::var("THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
+            env::var("THINKING_MESSAGE").unwrap_or_else(|_| "Thinking...".to_string());
         let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT").ok();
         let memory_store_type =
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_load_config_with_defaults() {
-        // 设置必要的环境变量
+        // Set required env vars
         env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "test_token");
         env::remove_var("OPENAI_API_KEY");
@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(config.openai_base_url, "https://api.openai.com/v1");
         assert_eq!(config.llm_model, "gpt-3.5-turbo");
         assert_eq!(config.llm_use_streaming, false);
-        assert_eq!(config.llm_thinking_message, "正在思考...");
+        assert_eq!(config.llm_thinking_message, "Thinking...");
         assert_eq!(config.memory_store_type, "memory");
         assert_eq!(config.memory_sqlite_path, "./data/memory.db");
         assert_eq!(config.embedding_provider, "openai");
@@ -307,9 +307,9 @@ mod tests {
         let config = BotConfig::load(None).unwrap();
         assert!(config.llm_system_prompt.is_none());
 
-        env::set_var("LLM_SYSTEM_PROMPT", "你是一个测试人设。");
+        env::set_var("LLM_SYSTEM_PROMPT", "You are a test persona.");
         let config = BotConfig::load(None).unwrap();
-        assert_eq!(config.llm_system_prompt.as_deref(), Some("你是一个测试人设。"));
+        assert_eq!(config.llm_system_prompt.as_deref(), Some("You are a test persona."));
 
         env::remove_var("LLM_SYSTEM_PROMPT");
     }

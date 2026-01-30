@@ -303,7 +303,7 @@ impl MemoryStore for SQLiteVectorStore {
             info!(
                 id = %entry.id,
                 dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
-                "step: 词向量 SQLite 写入向量"
+                "step: embedding SQLite write vector"
             );
         }
         info!(
@@ -591,7 +591,7 @@ impl MemoryStore for SQLiteVectorStore {
             limit = limit,
             user_id = ?user_id,
             conversation_id = ?conversation_id,
-            "step: 词向量 SQLite 向量检索"
+            "step: embedding SQLite semantic search"
         );
         info!(
             embedding_len = query_embedding.len(),
@@ -629,7 +629,7 @@ impl MemoryStore for SQLiteVectorStore {
         info!(
             limit = limit,
             count = results.len(),
-            "step: 词向量 SQLite 向量检索完成"
+            "step: embedding SQLite semantic search done"
         );
         info!(
             limit = limit,

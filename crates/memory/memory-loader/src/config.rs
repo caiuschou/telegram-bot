@@ -48,7 +48,7 @@ pub(crate) fn embedding_dim_for_config(config: &EmbeddingConfig) -> usize {
             .map(|m| match m {
                 "text-embedding-3-large" => 3072,
                 "text-embedding-ada-002" => 1536,
-                _ => 1536, // text-embedding-3-small 等默认
+                _ => 1536, // text-embedding-3-small etc. default
             })
             .unwrap_or(1536),
         EmbeddingProvider::Zhipuai => config

@@ -72,7 +72,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncLLMHandler {
         None,
         embedding_service,
         false,
-        "思考中...".to_string(),
+        "Thinking...".to_string(),
         10,
         5,
         0.0,
@@ -203,9 +203,9 @@ async fn test_get_question_no_bot_username_mention_ignored() {
     assert_eq!(q, None);
 }
 
-// --- reply_to_message_content 测试 ---
+// --- reply_to_message_content tests ---
 
-/// 辅助函数：构造带回复内容的 Message
+/// Helper: build Message with reply content
 fn make_message_with_reply_content(
     content: &str,
     reply_to_message_id: Option<String>,
@@ -238,26 +238,26 @@ fn make_message_with_reply_content(
 async fn test_reply_to_bot_with_content_returns_question() {
     let h = test_handler(Some("bot")).await;
     let msg = make_message_with_reply_content(
-        "继续说",
+        "Continue",
         Some("bot_msg_123".to_string()),
         true,
-        Some("这是机器人之前的回复内容".to_string()),
+        Some("Previous bot reply content".to_string()),
     );
-    // get_question 应该返回用户当前消息内容
+    // get_question should return user's current message content
     let q = h.get_question(&msg, Some("bot"));
-    assert_eq!(q, Some("继续说".to_string()));
+    assert_eq!(q, Some("Continue".to_string()));
 }
 
 #[tokio::test]
 async fn test_reply_to_bot_content_is_preserved() {
-    // 验证 reply_to_message_content 字段被正确设置
+    // Verify reply_to_message_content is set correctly
     let msg = make_message_with_reply_content(
-        "用户追问",
+        "User follow-up",
         Some("bot_msg_456".to_string()),
         true,
-        Some("机器人之前说的话".to_string()),
+        Some("What the bot said before".to_string()),
     );
-    assert_eq!(msg.reply_to_message_content, Some("机器人之前说的话".to_string()));
+    assert_eq!(msg.reply_to_message_content, Some("What the bot said before".to_string()));
     assert_eq!(msg.reply_to_message_id, Some("bot_msg_456".to_string()));
     assert!(msg.reply_to_message_from_bot);
 }
@@ -265,12 +265,12 @@ async fn test_reply_to_bot_content_is_preserved() {
 #[tokio::test]
 async fn test_reply_to_non_bot_with_content() {
     let h = test_handler(Some("bot")).await;
-    // 回复非机器人消息时，即使有内容也不应触发 LLM
+    // When replying to non-bot message, LLM should not be triggered even with content
     let msg = make_message_with_reply_content(
-        "回复用户消息",
+        "Reply to user message",
         Some("user_msg_789".to_string()),
         false,
-        Some("其他用户的消息".to_string()),
+        Some("Another user's message".to_string()),
     );
     let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, None);

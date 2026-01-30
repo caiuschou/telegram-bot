@@ -16,13 +16,13 @@ use tokio::time::sleep;
 use tracing::{debug, error, info, instrument};
 
 // --- User-facing fallback messages (sent to Telegram on errors) ---
-const MSG_SEND_FAILED: &str = "抱歉，发送回复时出错。";
-const MSG_REQUEST_FAILED: &str = "抱歉，处理您的请求时出错，请稍后重试。";
-const MSG_STREAM_FAILED: &str = "抱歉，LLM 响应失败。";
+const MSG_SEND_FAILED: &str = "Sorry, something went wrong while sending the reply.";
+const MSG_REQUEST_FAILED: &str = "Sorry, something went wrong processing your request. Please try again later.";
+const MSG_STREAM_FAILED: &str = "Sorry, LLM response failed.";
 
 /// Logs the exact messages submitted to the LLM (role + full content) for debugging.
 fn log_messages_submitted_to_llm(messages: &[ChatMessage]) {
-    info!(count = messages.len(), "submit_to_llm: 提交给 LLM 的消息列表");
+    info!(count = messages.len(), "submit_to_llm: messages submitted to LLM");
     for (i, m) in messages.iter().enumerate() {
         info!(
             index = i,
@@ -61,7 +61,7 @@ pub struct SyncLLMHandler {
 impl SyncLLMHandler {
     /// Default "question" when the user only @-mentions with no text; LLM is asked to greet and invite a question.
     pub const DEFAULT_EMPTY_MENTION_QUESTION: &str =
-        "用户只是 @ 了你，没有写具体问题。请简短友好地打招呼并邀请用户提问。";
+        "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
 
     // ---------- Construction ----------
 
@@ -118,8 +118,8 @@ impl SyncLLMHandler {
             .to_string()
     }
 
-    /// Resolves the user question: 回复机器人时用当前内容；@ 提及且问题非空时用提取后的内容；
-    /// @ 提及但内容为空时用 DEFAULT_EMPTY_MENTION_QUESTION，使机器人仍会回复；否则 None。
+    /// Resolves the user question: when replying to bot use current content; when @mention with non-empty text use extracted content;
+    /// when @mention but empty use DEFAULT_EMPTY_MENTION_QUESTION so bot still replies; otherwise None.
     /// External: uses Message (dbot_core) fields only. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
         if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
@@ -131,7 +131,7 @@ impl SyncLLMHandler {
                 if !q.is_empty() {
                     return Some(q);
                 }
-                // 仅 @ 提及、无内容时仍触发回复，使用默认提示让 AI 打招呼并邀请用户提问
+                // @mention only with no content still triggers reply; use default prompt for AI to greet and invite question
                 return Some(Self::DEFAULT_EMPTY_MENTION_QUESTION.to_string());
             }
         }
@@ -201,10 +201,10 @@ impl SyncLLMHandler {
             None => vec![prompt::ChatMessage::user(question)],
         };
 
-        // 如果是回复机器人的消息，将被回复的内容作为助手消息插入到用户消息之前，
-        // 让 LLM 了解用户在回复哪条消息
+        // If replying to bot message, insert the replied content as assistant message before user message
+        // so LLM knows which message the user is replying to
         if let Some(replied_content) = reply_to_content {
-            // 找到最后一条用户消息的位置，在其前面插入被回复的助手消息
+            // Find last user message index and insert replied assistant message before it
             if let Some(last_user_idx) = messages.iter().rposition(|m| matches!(m.role, prompt::MessageRole::User)) {
                 messages.insert(last_user_idx, prompt::ChatMessage::assistant(replied_content));
                 info!(
@@ -292,9 +292,9 @@ impl SyncLLMHandler {
             Err(e) => {
                 Self::log_error_chain(&e, "Failed to get LLM response");
                 let err_str = e.to_string();
-                if err_str.contains("401") || err_str.contains("令牌") {
+                if err_str.contains("401") || err_str.contains("token") || err_str.contains("Token") {
                     error!(
-                        "Hint: 401/令牌错误通常表示 OPENAI_API_KEY 已过期、无效，或与 OPENAI_BASE_URL 对应的服务不匹配，请检查 .env 配置"
+                        "Hint: 401/token errors usually mean OPENAI_API_KEY is expired, invalid, or does not match OPENAI_BASE_URL; check .env"
                     );
                 }
                 return self.send_fallback_and_stop(message, MSG_REQUEST_FAILED).await;
