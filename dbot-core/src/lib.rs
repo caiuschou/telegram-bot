@@ -1,3 +1,8 @@
+//! # dbot-core
+//!
+//! Core types and traits for the Telegram bot: [`Bot`], [`Handler`], [`Middleware`], message and user types,
+//! and tracing initialization. Transport-agnostic; used by dbot-telegram and handler-chain.
+
 pub mod bot;
 pub mod error;
 pub mod logger;

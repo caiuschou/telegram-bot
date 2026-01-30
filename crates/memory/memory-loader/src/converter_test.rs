@@ -1,6 +1,6 @@
-//! convert 函数单元测试
+//! Unit tests for [`crate::converter::convert`].
 //!
-//! 测试 MessageRecord → MemoryEntry 的字段映射与 role 判断。
+//! Covers field mapping from [`storage::MessageRecord`] to [`memory::MemoryEntry`] and role derivation from `direction`.
 
 #[cfg(test)]
 mod tests {
@@ -10,6 +10,10 @@ mod tests {
 
     use crate::converter::convert;
 
+    /// **Test: Received message maps to User role and correct content/metadata.**
+    ///
+    /// **Setup:** A `MessageRecord` with `direction = "received"`.
+    /// **Expected:** `content` and ids match; `metadata.role` is `MemoryRole::User`; `embedding` is `None`.
     #[test]
     fn test_convert_received_message() {
         let msg = MessageRecord {
@@ -34,6 +38,10 @@ mod tests {
         assert!(entry.embedding.is_none());
     }
 
+    /// **Test: Sent message maps to Assistant role.**
+    ///
+    /// **Setup:** A `MessageRecord` with `direction = "sent"`.
+    /// **Expected:** `metadata.role` is `MemoryRole::Assistant`; content preserved.
     #[test]
     fn test_convert_sent_message() {
         let msg = MessageRecord {
@@ -55,6 +63,10 @@ mod tests {
         assert_eq!(entry.metadata.role, MemoryRole::Assistant);
     }
 
+    /// **Test: Unknown direction defaults to User role.**
+    ///
+    /// **Setup:** A `MessageRecord` with `direction = "unknown"`.
+    /// **Expected:** `metadata.role` is `MemoryRole::User`.
     #[test]
     fn test_convert_unknown_direction() {
         let msg = MessageRecord {
@@ -75,6 +87,10 @@ mod tests {
         assert_eq!(entry.metadata.role, MemoryRole::User);
     }
 
+    /// **Test: Invalid UUID in message id is replaced by a new v4 UUID.**
+    ///
+    /// **Setup:** A `MessageRecord` with `id = "invalid-uuid"`.
+    /// **Expected:** `entry.id` is not the literal "invalid-uuid" (converter generates new UUID).
     #[test]
     fn test_convert_invalid_uuid() {
         let msg = MessageRecord {

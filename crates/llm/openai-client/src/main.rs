@@ -1,3 +1,8 @@
+//! Minimal binary to exercise the OpenAI chat completion API.
+//!
+//! Reads `OPENAI_API_KEY` from env (or `.env`). Optional `OPENAI_BASE_URL` uses a custom endpoint.
+//! Sends a single user message and prints the assistant reply.
+
 use async_openai::types::ChatCompletionRequestUserMessageArgs;
 use openai_client::OpenAIClient;
 
@@ -8,6 +13,7 @@ async fn main() -> anyhow::Result<()> {
     let api_key =
         std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY environment variable not set");
 
+    // Use custom base URL if set (e.g. proxy or compatible API).
     let client = if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
         OpenAIClient::with_base_url(api_key, base_url)
     } else {

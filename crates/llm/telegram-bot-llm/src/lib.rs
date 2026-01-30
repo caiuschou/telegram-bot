@@ -1,5 +1,8 @@
-//! 简单 LLM 机器人：TelegramBotLLM 封装 LLM 调用（llm-client）与 @ 提及解析，提供 handle_message / handle_message_stream。
-//! 与外部交互：teloxide Bot 发消息，llm_client::OpenAILlmClient 调 LLM。
+//! # Telegram bot LLM layer
+//!
+//! [`TelegramBotLLM`] wraps an LLM client (e.g. [`llm_client::OpenAILlmClient`]) and @-mention parsing.
+//! It provides `handle_message` and `handle_message_stream` for teloxide: when the bot is mentioned,
+//! it extracts the question and calls the LLM, then sends the reply (or streamed chunks) back.
 
 use anyhow::Result;
 use llm_client::{LlmClient, OpenAILlmClient};
@@ -7,13 +10,17 @@ use prompt::ChatMessage;
 use teloxide::{prelude::*, types::Message};
 use tracing::{error, info, instrument};
 
+/// Bot that responds to @-mentions with LLM-generated replies (single or streamed).
 #[derive(Clone)]
 pub struct TelegramBotLLM {
+    /// Bot username used to detect @bot_username mentions.
     bot_username: String,
+    /// Underlying LLM client (e.g. OpenAI).
     llm_client: OpenAILlmClient,
 }
 
 impl TelegramBotLLM {
+    /// Creates a new bot that uses the given username for mention detection and the given LLM client.
     pub fn new(bot_username: String, llm_client: OpenAILlmClient) -> Self {
         Self {
             bot_username,
@@ -21,6 +28,7 @@ impl TelegramBotLLM {
         }
     }
 
+    /// Handles one message: if the bot is @-mentioned, gets LLM reply and sends it in one message.
     #[instrument(skip(self, bot, msg))]
     pub async fn handle_message(&self, bot: Bot, msg: Message) -> Result<()> {
         let text = msg
@@ -48,6 +56,7 @@ impl TelegramBotLLM {
         Ok(())
     }
 
+    /// Handles one message with streamed reply: each chunk is sent as a separate Telegram message.
     #[instrument(skip(self, bot, msg))]
     pub async fn handle_message_stream(&self, bot: Bot, msg: Message) -> Result<()> {
         let text = msg
@@ -88,16 +97,19 @@ impl TelegramBotLLM {
         Ok(())
     }
 
+    /// Returns true if the message text contains @bot_username.
     fn is_bot_mentioned(&self, text: &str) -> bool {
         let mention = format!("@{}", self.bot_username);
         text.contains(&mention)
     }
 
+    /// Removes @bot_username from text and trims; used as the user question for the LLM.
     fn extract_question(&self, text: &str) -> String {
         let mention = format!("@{}", self.bot_username);
         text.replace(&mention, "").trim().to_string()
     }
 
+    /// Single non-streamed LLM reply for the given question (one user message).
     #[instrument(skip(self))]
     pub async fn get_llm_response(&self, question: &str) -> Result<String> {
         self.llm_client
@@ -105,11 +117,13 @@ impl TelegramBotLLM {
             .await
     }
 
+    /// Non-streamed LLM reply for an arbitrary message list (e.g. for context/conversation).
     #[instrument(skip(self))]
     pub async fn get_llm_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String> {
         self.llm_client.get_llm_response_with_messages(messages).await
     }
 
+    /// Streamed LLM reply for a single question; invokes callback for each chunk.
     #[instrument(skip(self, callback))]
     pub async fn get_llm_response_stream<F, Fut>(
         &self,
@@ -125,6 +139,7 @@ impl TelegramBotLLM {
             .await
     }
 
+    /// Streamed LLM reply for an arbitrary message list; invokes callback for each chunk.
     #[instrument(skip(self, messages, callback))]
     pub async fn get_llm_response_stream_with_messages<F, Fut>(
         &self,

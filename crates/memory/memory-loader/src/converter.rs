@@ -1,36 +1,33 @@
-//! MessageRecord → MemoryEntry 转换
+//! MessageRecord → MemoryEntry conversion.
 //!
-//! 将 SQLite 消息记录转换为向量库使用的 MemoryEntry。
-//! 外部依赖：storage::MessageRecord、memory::MemoryEntry。
+//! Converts SQLite message records into [`memory::MemoryEntry`] for the vector store.
+//! Dependencies: [`storage::MessageRecord`], [`memory::MemoryEntry`].
 
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole};
 use storage::MessageRecord;
 use uuid::Uuid;
 
-/// 将 MessageRecord 转换为 MemoryEntry
+/// Converts a [`MessageRecord`] into a [`MemoryEntry`].
 ///
-/// # 字段映射
+/// # Field mapping
 ///
-/// - id: 保留原始 UUID
-/// - content: message.content
-/// - embedding: None（后续由 EmbeddingService 填充）
-/// - metadata.user_id: message.user_id (转为 String)
-/// - metadata.conversation_id: message.chat_id (转为 String)
-/// - metadata.role: 根据 direction 判断
-///   - "received" → MemoryRole::User
-///   - "sent" → MemoryRole::Assistant
-///   - 其他 → MemoryRole::User (默认)
-/// - metadata.timestamp: message.created_at
-/// - metadata.tokens: None
-/// - metadata.importance: None
+/// - `id`: Parsed from `msg.id` (UUID); on parse failure a new v4 UUID is generated.
+/// - `content`: `msg.content`
+/// - `embedding`: `None` (filled later by the embedding service during load).
+/// - `metadata.user_id`: `msg.user_id` as string
+/// - `metadata.conversation_id`: `msg.chat_id` as string
+/// - `metadata.role`: From `msg.direction` — `"received"` → User, `"sent"` → Assistant, else User
+/// - `metadata.timestamp`: `msg.created_at`
+/// - `metadata.tokens`: `None`
+/// - `metadata.importance`: `None`
 ///
-/// # 参数
+/// # Arguments
 ///
-/// * `msg` - SQLite 消息记录
+/// * `msg` - SQLite message record to convert
 ///
-/// # 返回
+/// # Returns
 ///
-/// 返回转换后的 MemoryEntry
+/// The converted [`MemoryEntry`] (no embedding).
 pub(crate) fn convert(msg: &MessageRecord) -> MemoryEntry {
     let role = match msg.direction.as_str() {
         "received" => MemoryRole::User,

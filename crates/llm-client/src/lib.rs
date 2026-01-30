@@ -1,6 +1,7 @@
-//! # llm-client
+//! # LLM client abstraction
 //!
-//! LLM 调用抽象：LlmClient trait + OpenAI 实现。与传输（Telegram）无关，供 llm-handlers、telegram-bot-llm 使用。
+//! Defines the [`LlmClient`] trait and an OpenAI implementation. Transport-agnostic;
+//! used by llm-handlers and telegram-bot-llm.
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -14,20 +15,20 @@ mod openai_llm;
 
 pub use openai_llm::OpenAILlmClient;
 
-/// 流式响应的一块内容，与 openai-client::StreamChunk 对齐。
+/// A chunk of streamed LLM output; aligned with `openai_client::StreamChunk`.
 #[derive(Debug, Clone)]
 pub struct StreamChunk {
     pub content: String,
     pub done: bool,
 }
 
-/// LLM 客户端抽象：按消息列表请求完成或流式完成。
+/// LLM client interface: request completion or streamed completion from a list of messages.
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    /// 给定消息列表（含 system/user/assistant），返回模型回复文本。实现方负责前置 system 消息等。
+    /// Returns the model reply text for the given messages (system/user/assistant). Implementations add system prompt etc.
     async fn get_llm_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String>;
 
-    /// 流式完成：对每个 chunk 调用 callback，返回完整回复文本。
+    /// Streamed completion: invokes `callback` for each chunk and returns the full reply text.
     async fn get_llm_response_stream_with_messages<F, Fut>(
         &self,
         messages: Vec<ChatMessage>,
@@ -38,6 +39,7 @@ pub trait LlmClient: Send + Sync {
         Fut: std::future::Future<Output = Result<()>> + Send;
 }
 
+/// Converts a single [`ChatMessage`] into OpenAI API message format.
 fn chat_message_to_openai(msg: &ChatMessage) -> Result<ChatCompletionRequestMessage> {
     use openai_client::ChatCompletionRequestAssistantMessageArgs;
     let content = msg.content.clone();

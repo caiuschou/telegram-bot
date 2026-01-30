@@ -1,3 +1,8 @@
+//! # OpenAI API client
+//!
+//! Thin wrapper around [async-openai] for chat completion (non-stream and stream).
+//! Provides token masking for safe logging and a simple request/response API.
+
 use async_openai::{types::CreateChatCompletionRequestArgs, Client};
 use futures::StreamExt;
 use std::sync::Arc;
@@ -28,19 +33,25 @@ pub fn mask_token(token: &str) -> String {
     }
 }
 
+/// OpenAI chat client. Wraps async-openai client; optionally holds API key for masked logging.
 #[derive(Clone)]
 pub struct OpenAIClient {
+    /// Shared async-openai client used for all API calls.
     client: Arc<Client<async_openai::config::OpenAIConfig>>,
-    /// API key stored only for logging (masked). None when created via with_client().
+    /// API key stored only for logging (masked). None when created via `with_client()`.
     api_key_for_logging: Option<String>,
 }
 
+/// A chunk of streamed completion content and whether the stream is finished.
 pub struct StreamChunk {
+    /// Accumulated text for this chunk (since last callback).
     pub content: String,
+    /// True if this is the final chunk for the response.
     pub done: bool,
 }
 
 impl OpenAIClient {
+    /// Builds a client using the given API key and default API base URL.
     pub fn new(api_key: String) -> Self {
         let api_key_for_logging = Some(api_key.clone());
         let config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
@@ -51,6 +62,7 @@ impl OpenAIClient {
         }
     }
 
+    /// Builds a client with a custom base URL (e.g. for proxies or compatible endpoints).
     pub fn with_base_url(api_key: String, base_url: String) -> Self {
         let api_key_for_logging = Some(api_key.clone());
         let config = async_openai::config::OpenAIConfig::new()
@@ -63,6 +75,7 @@ impl OpenAIClient {
         }
     }
 
+    /// Builds a client from an existing async-openai client (no API key stored for logging).
     pub fn with_client(client: Client<async_openai::config::OpenAIConfig>) -> Self {
         Self {
             client: Arc::new(client),
@@ -70,6 +83,10 @@ impl OpenAIClient {
         }
     }
 
+    /// Sends a chat completion request and returns the full assistant reply as a string.
+    ///
+    /// Logs masked API key, request JSON, and token usage. Returns the first choice's content
+    /// or an error if the response has no choices.
     pub async fn chat_completion(
         &self,
         model: &str,
@@ -116,6 +133,8 @@ impl OpenAIClient {
         }
     }
 
+    /// Streams chat completion and invokes `callback` for each chunk (about every 1s or on finish).
+    /// Returns the full concatenated response text. Stream errors are propagated.
     pub async fn chat_completion_stream<F, Fut>(
         &self,
         model: &str,
@@ -153,11 +172,13 @@ impl OpenAIClient {
 
         let mut full_response = String::new();
         let mut last_update = std::time::Instant::now();
+        // Accumulates content since last callback; flushed every ~1s or on finish.
         let mut pending_content = String::new();
 
         while let Some(result) = stream.next().await {
             match result {
                 Ok(chunk) => {
+                    // Log usage when present (often on last chunk).
                     if let Some(ref u) = chunk.usage {
                         tracing::info!(
                             prompt_tokens = u.prompt_tokens,
@@ -171,7 +192,7 @@ impl OpenAIClient {
                             pending_content.push_str(content);
                             full_response.push_str(content);
                         }
-
+                        // Flush callback every 1 second or when the model signals finish.
                         if last_update.elapsed() >= std::time::Duration::from_secs(1)
                             || choice.finish_reason.is_some()
                         {

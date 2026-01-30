@@ -55,10 +55,12 @@ use async_openai::{types::CreateEmbeddingRequestArgs, Client};
 use embedding::EmbeddingService;
 use tracing::{debug, info, instrument, warn};
 
-/// OpenAI embedding service implementation.
+/// OpenAI embedding service implementation. Holds the async-openai client and model name.
 #[derive(Debug, Clone)]
 pub struct OpenAIEmbedding {
+    /// OpenAI client used for embeddings API calls.
     client: Client<async_openai::config::OpenAIConfig>,
+    /// Embedding model name (e.g. "text-embedding-3-small").
     model: String,
 }
 
@@ -319,5 +321,4 @@ impl EmbeddingService for OpenAIEmbedding {
     }
 }
 
-#[cfg(test)]
-mod openai_embedding_test;
+// Unit/integration tests live in tests/openai_embedding_test.rs

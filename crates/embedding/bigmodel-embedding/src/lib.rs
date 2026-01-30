@@ -55,13 +55,17 @@ use serde::{Deserialize, Serialize};
 use embedding::EmbeddingService;
 use tracing::info;
 
+/// BigModel embeddings API base URL (v4).
 const BIGMODEL_API_BASE: &str = "https://open.bigmodel.cn/api/paas/v4/embeddings";
 
-/// BigModel embedding service implementation.
+/// BigModel embedding service implementation. Holds HTTP client, API key, and model name.
 #[derive(Debug, Clone)]
 pub struct BigModelEmbedding {
+    /// Reusable HTTP client for API requests.
     client: Client,
+    /// API key for Authorization header (Bearer).
     api_key: String,
+    /// Embedding model name (e.g. "embedding-2", "embedding-3").
     model: String,
 }
 
@@ -105,12 +109,14 @@ impl BigModelEmbedding {
     }
 }
 
+/// Request body for BigModel embeddings API (single or batch).
 #[derive(Debug, Serialize)]
 struct EmbeddingRequest<'a> {
     model: &'a str,
     input: Input<'a>,
 }
 
+/// Input can be a single string or a batch of strings; API accepts both.
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum Input<'a> {
@@ -118,6 +124,7 @@ enum Input<'a> {
     Batch(&'a [&'a str]),
 }
 
+/// Response from BigModel embeddings API; we only use `data`.
 #[derive(Debug, Deserialize)]
 struct EmbeddingResponse {
     data: Vec<EmbeddingData>,
@@ -127,12 +134,14 @@ struct EmbeddingResponse {
     _usage: Usage,
 }
 
+/// One embedding vector in the response; `index` matches input order for batch.
 #[derive(Debug, Deserialize)]
 struct EmbeddingData {
     embedding: Vec<f32>,
     index: usize,
 }
 
+/// Token usage (optional in response).
 #[derive(Debug, Deserialize, Default)]
 struct Usage {
     #[serde(default)]
@@ -316,5 +325,4 @@ impl EmbeddingService for BigModelEmbedding {
     }
 }
 
-#[cfg(test)]
-mod bigmodel_embedding_test;
+// Unit/integration tests live in tests/bigmodel_embedding_test.rs

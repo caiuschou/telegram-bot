@@ -21,36 +21,34 @@ use tracing::info;
 use config::{create_embedding_service, embedding_dim_for_config};
 use converter::convert;
 
-/// 执行数据加载
+/// Runs the full data load: read messages from SQLite, generate embeddings, write to LanceDB.
 ///
-/// 从 SQLite 读取消息，生成 embedding，写入 LanceDB。
+/// # Flow
 ///
-/// # 流程
+/// 1. Connect to SQLite (`MessageRepository`).
+/// 2. Connect to LanceDB (`LanceVectorStore`); embedding dimension must match the embedding service.
+/// 3. Initialize `EmbeddingService` from `config.embedding` (OpenAI or Zhipuai).
+/// 4. Get total message count.
+/// 5. Loop in batches: fetch → convert → embed → write to LanceDB.
+/// 6. Return `LoadResult` with total, loaded count, and elapsed seconds.
 ///
-/// 1. 连接 SQLite (MessageRepository)
-/// 2. 连接 LanceDB (LanceVectorStore)
-/// 3. 初始化 EmbeddingService（按 config.embedding.provider 选择 OpenAI 或智谱）
-/// 4. 获取消息总数
-/// 5. 批量循环：读取 → 转换 → embedding → 写入
-/// 6. 返回 LoadResult
+/// # Arguments
 ///
-/// # 参数
+/// * `config` - Load configuration (DB URLs, embedding provider, batch size, etc.).
 ///
-/// * `config` - 加载配置
+/// # Returns
 ///
-/// # 返回
-///
-/// 返回 LoadResult 或错误
+/// `LoadResult` or an error (e.g. DB or embedding API failure).
 pub async fn load(config: LoadConfig) -> Result<LoadResult> {
     let start_time = std::time::Instant::now();
 
     info!("Starting data load process");
 
-    // 1. 连接 SQLite
+    // 1. Connect to SQLite
     info!("Connecting to SQLite: {}", config.database_url);
     let msg_repo = MessageRepository::new(&config.database_url).await?;
 
-    // 2. 连接 LanceDB（向量维度需与当前 embedding 服务一致）
+    // 2. Connect to LanceDB; embedding dimension must match the embedding service
     let embedding_dim = embedding_dim_for_config(&config.embedding);
     info!(
         "Connecting to LanceDB: {} (embedding_dim={})",
@@ -63,7 +61,7 @@ pub async fn load(config: LoadConfig) -> Result<LoadResult> {
     };
     let vector_store = LanceVectorStore::with_config(lance_config).await?;
 
-    // 3. 初始化 EmbeddingService（按 provider 选择 OpenAI 或智谱）
+    // 3. Initialize embedding service (OpenAI or Zhipuai per config)
     let provider_name = match config.embedding.provider {
         EmbeddingProvider::OpenAI => "OpenAI",
         EmbeddingProvider::Zhipuai => "Zhipuai",
@@ -71,7 +69,7 @@ pub async fn load(config: LoadConfig) -> Result<LoadResult> {
     info!("Initializing embedding service: {}", provider_name);
     let embedding_service = create_embedding_service(&config.embedding);
 
-    // 4. 获取消息总数
+    // 4. Get total message count
     let stats = msg_repo.get_stats().await?;
     let total = stats.total_messages as usize;
     info!("Total messages to load: {}", total);
@@ -85,7 +83,7 @@ pub async fn load(config: LoadConfig) -> Result<LoadResult> {
         });
     }
 
-    // 5. 批量循环处理（按 offset 分页）
+    // 5. Batch loop: paginate by offset
     let mut loaded = 0;
     let mut offset: i64 = 0;
 

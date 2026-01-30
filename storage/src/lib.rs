@@ -14,8 +14,7 @@ mod models;
 mod repository;
 mod sqlite_pool;
 
-#[cfg(test)]
-mod message_repo_test;
+// Unit/integration tests live in tests/message_repo_test.rs
 
 pub use error::StorageError;
 pub use message_repo::MessageRepository;

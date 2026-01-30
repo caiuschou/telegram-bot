@@ -1,10 +1,14 @@
-//! Unit tests for MessageRepository.
+//! Integration tests for [`storage::MessageRepository`].
 //!
-//! Covers get_message_by_id, get_recent_messages_by_chat and filtering.
+//! Covers `get_message_by_id`, `get_recent_messages_by_chat`, and chat filtering using an in-memory SQLite database.
 
-use crate::message_repo::MessageRepository;
-use crate::models::MessageRecord;
+use storage::{MessageRecord, MessageRepository};
 
+/// **Test: Get message by id when the message exists.**
+///
+/// **Setup:** In-memory DB; save one message with known id, user_id, chat_id, content.
+/// **Action:** `get_message_by_id(&test_message.id)`.
+/// **Expected:** Returns `Some(message)` with matching id, content, user_id, chat_id.
 #[tokio::test]
 async fn test_get_message_by_id_existing() {
     let database_url = "sqlite::memory:";
@@ -40,6 +44,11 @@ async fn test_get_message_by_id_existing() {
     assert_eq!(message.chat_id, 456);
 }
 
+/// **Test: Get message by id when no message has that id.**
+///
+/// **Setup:** Empty in-memory DB.
+/// **Action:** `get_message_by_id("non-existent-id")`.
+/// **Expected:** Returns `None`.
 #[tokio::test]
 async fn test_get_message_by_id_not_found() {
     let database_url = "sqlite::memory:";
@@ -55,6 +64,11 @@ async fn test_get_message_by_id_not_found() {
     assert!(retrieved.is_none());
 }
 
+/// **Test: Get recent messages by chat returns correct count and order.**
+///
+/// **Setup:** Save 15 messages in the same chat.
+/// **Action:** `get_recent_messages_by_chat(chat_id, 10)`.
+/// **Expected:** Returns 10 messages, all with the given chat_id (most recent first).
 #[tokio::test]
 async fn test_get_recent_messages_by_chat() {
     let database_url = "sqlite::memory:";
@@ -92,6 +106,11 @@ async fn test_get_recent_messages_by_chat() {
     }
 }
 
+/// **Test: Get recent messages for a chat with no messages.**
+///
+/// **Setup:** Empty in-memory DB.
+/// **Action:** `get_recent_messages_by_chat(99999, 10)`.
+/// **Expected:** Returns empty vec.
 #[tokio::test]
 async fn test_get_recent_messages_by_chat_empty() {
     let database_url = "sqlite::memory:";
@@ -107,6 +126,11 @@ async fn test_get_recent_messages_by_chat_empty() {
     assert!(recent.is_empty());
 }
 
+/// **Test: Recent messages are filtered by chat_id.**
+///
+/// **Setup:** Save 5 messages in chat_id1 and 5 in chat_id2.
+/// **Action:** `get_recent_messages_by_chat(chat_id1, 10)` and same for chat_id2.
+/// **Expected:** Each result contains only messages for that chat_id.
 #[tokio::test]
 async fn test_get_recent_messages_by_chat_filtering() {
     let database_url = "sqlite::memory:";
