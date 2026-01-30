@@ -13,6 +13,7 @@
 
 use std::path::Path;
 
+use embedding::EmbeddingService;
 use bigmodel_embedding::BigModelEmbedding;
 
 /// Loads `.env` from the workspace root so `BIGMODEL_API_KEY` is available in ignored tests.
