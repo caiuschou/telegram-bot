@@ -6,7 +6,7 @@
 use super::types::{Context, ContextMetadata};
 use super::utils::estimate_tokens;
 use memory_core::{MessageCategory, MemoryStore, StrategyResult};
-use memory_strategies::ContextStrategy;
+use memory_strategies::{ContextStrategy, StoreKind};
 use std::sync::Arc;
 use chrono::Utc;
 use tracing::{debug, error, info, instrument};
@@ -31,8 +31,16 @@ use tracing::{debug, error, info, instrument};
 /// - Messages with category Semantic go to semantic_messages (reference)
 /// - Preferences replace previous preferences (last strategy wins)
 /// - Empty results are ignored
+///
+/// # Dual store (recent vs semantic)
+///
+/// When `recent_store` is set, strategies with `StoreKind::Recent` (RecentMessages, UserPreferences)
+/// use it; others (e.g. SemanticSearch) use the primary `store`. This allows recent messages from
+/// SQLite while semantic search uses e.g. Lance.
 pub struct ContextBuilder {
     store: Arc<dyn MemoryStore>,
+    /// When set, RecentMessagesStrategy and UserPreferencesStrategy use this store; SemanticSearchStrategy uses `store`.
+    pub(crate) recent_store: Option<Arc<dyn MemoryStore>>,
     /// Exposed for tests that assert builder configuration.
     pub(crate) strategies: Vec<Box<dyn ContextStrategy>>,
     /// Exposed for tests that assert builder configuration.
@@ -52,6 +60,7 @@ impl ContextBuilder {
     pub fn new(store: Arc<dyn MemoryStore>) -> Self {
         Self {
             store,
+            recent_store: None,
             strategies: Vec::new(),
             token_limit: 4096,
             user_id: None,
@@ -59,6 +68,12 @@ impl ContextBuilder {
             query: None,
             system_message: None,
         }
+    }
+
+    /// Uses the given store for RecentMessagesStrategy and UserPreferencesStrategy; semantic search still uses the primary store.
+    pub fn with_recent_store(mut self, recent_store: Arc<dyn MemoryStore>) -> Self {
+        self.recent_store = Some(recent_store);
+        self
     }
 
     /// Adds a context strategy to the builder.
@@ -140,14 +155,15 @@ impl ContextBuilder {
 
         for (strategy_index, strategy) in self.strategies.iter().enumerate() {
             let strategy_name = strategy.name();
+            let store: &dyn MemoryStore = match strategy.store_kind() {
+                StoreKind::Recent if self.recent_store.is_some() => {
+                    self.recent_store.as_deref().unwrap()
+                }
+                _ => self.store.as_ref(),
+            };
             info!(strategy_index, strategy_name, "Executing context strategy");
             let result = strategy
-                .build_context(
-                    &*self.store,
-                    &self.user_id,
-                    &self.conversation_id,
-                    &self.query,
-                )
+                .build_context(store, &self.user_id, &self.conversation_id, &self.query)
                 .await
                 .map_err(|e| {
                     error!(strategy_index, strategy_name, error = %e, "Context build: strategy failed");

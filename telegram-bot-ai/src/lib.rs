@@ -32,6 +32,8 @@ pub struct TelegramBotAI {
     bot_username: String,
     openai_client: OpenAIClient,
     model: String,
+    /// 系统提示词；未设置时使用 DEFAULT_SYSTEM_CONTENT。可从 .env 的 AI_SYSTEM_PROMPT 注入。
+    system_prompt: Option<String>,
 }
 
 impl TelegramBotAI {
@@ -40,12 +42,31 @@ impl TelegramBotAI {
             bot_username,
             openai_client,
             model: "gpt-3.5-turbo".to_string(),
+            system_prompt: None,
         }
     }
 
     pub fn with_model(mut self, model: String) -> Self {
         self.model = model;
         self
+    }
+
+    /// 设置系统提示词；未设置时使用内置默认。与外部交互：该内容会作为 OpenAI system 消息发送。
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(prompt.into());
+        self
+    }
+
+    /// 使用可选系统提示词；为 None 时使用内置默认。
+    pub fn with_system_prompt_opt(mut self, prompt: Option<String>) -> Self {
+        self.system_prompt = prompt;
+        self
+    }
+
+    fn system_content(&self) -> &str {
+        self.system_prompt
+            .as_deref()
+            .unwrap_or(Self::DEFAULT_SYSTEM_CONTENT)
     }
 
     #[instrument(skip(self, bot, msg))]
@@ -127,16 +148,16 @@ impl TelegramBotAI {
             .await
     }
 
-    /// Default system instruction (Chinese assistant, plain text for Telegram). Used when prepending system to messages.
-    const DEFAULT_SYSTEM_CONTENT: &'static str = "你是一个有用的助手，用中文回答问题。不要使用Markdown格式，不要使用任何格式化符号（如*、_、`、#等），输出纯文本，适合Telegram消息。";
+    /// 与外部交互：作为 OpenAI 的 system 消息，影响模型回复风格。
+    const DEFAULT_SYSTEM_CONTENT: &'static str = "不要使用 Markdown 或任何格式化符号（如*、_、`、#等），只输出纯文本，适合在 Telegram 里直接发送。";
 
     /// Sends messages that map one-to-one to OpenAI `messages` (e.g. from `prompt::format_for_model_as_messages` or `Context::to_messages`).
-    /// Prepends a system message so the full list is [System(DEFAULT_SYSTEM_CONTENT), ...messages].
+    /// Prepends a system message (from .env AI_SYSTEM_PROMPT or DEFAULT_SYSTEM_CONTENT).
     #[instrument(skip(self, messages))]
     pub async fn get_ai_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String> {
         let mut openai_messages: Vec<ChatCompletionRequestMessage> = vec![
             ChatCompletionRequestSystemMessageArgs::default()
-                .content(Self::DEFAULT_SYSTEM_CONTENT)
+                .content(self.system_content())
                 .build()?
                 .into(),
         ];
@@ -175,7 +196,7 @@ impl TelegramBotAI {
     {
         let mut openai_messages: Vec<ChatCompletionRequestMessage> = vec![
             ChatCompletionRequestSystemMessageArgs::default()
-                .content(Self::DEFAULT_SYSTEM_CONTENT)
+                .content(self.system_content())
                 .build()?
                 .into(),
         ];

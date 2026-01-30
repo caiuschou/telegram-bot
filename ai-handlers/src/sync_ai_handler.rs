@@ -32,7 +32,7 @@ fn log_messages_submitted_to_ai(messages: &[ChatMessage]) {
     }
 }
 
-/// Synchronous AI handler: when the message is an AI query (reply-to or @mention), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
+/// Synchronous AI handler: when the message is an AI query (user replies to the bot's message, or @mentions the bot), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
 ///
 /// **External interactions:** Telegram Bot API (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), TelegramBotAI (LLM).
 #[derive(Clone)]
@@ -42,6 +42,8 @@ pub struct SyncAIHandler {
     pub(crate) bot: Arc<Bot>,
     pub(crate) repo: MessageRepository,
     pub(crate) memory_store: Arc<dyn MemoryStore>,
+    /// When set, RecentMessagesStrategy and UserPreferencesStrategy use this store (e.g. SQLite); semantic search still uses `memory_store`.
+    pub(crate) recent_store: Option<Arc<dyn MemoryStore>>,
     pub(crate) embedding_service: Arc<dyn EmbeddingService>,
     pub(crate) use_streaming: bool,
     pub(crate) thinking_message: String,
@@ -60,6 +62,7 @@ impl SyncAIHandler {
         bot: Bot,
         repo: MessageRepository,
         memory_store: Arc<dyn MemoryStore>,
+        recent_store: Option<Arc<dyn MemoryStore>>,
         embedding_service: Arc<dyn EmbeddingService>,
         use_streaming: bool,
         thinking_message: String,
@@ -72,6 +75,7 @@ impl SyncAIHandler {
             bot: Arc::new(bot),
             repo,
             memory_store,
+            recent_store,
             embedding_service,
             use_streaming,
             thinking_message,
@@ -84,9 +88,9 @@ impl SyncAIHandler {
         self.bot_username.read().await.clone()
     }
 
-    // ---------- Question detection (reply-to or @mention) ----------
+    // ---------- Question detection (reply-to-bot or @mention) ----------
 
-    /// Returns true if the given text contains a @mention of the bot. Used by handler to detect AI queries.
+    /// Returns true if the given text contains a @mention of the bot.
     /// External: none (pure function). Public for integration tests in `tests/`.
     pub fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
         text.contains(&format!("@{}", bot_username))
@@ -100,10 +104,10 @@ impl SyncAIHandler {
             .to_string()
     }
 
-    /// Resolves the user question: from reply-to-message content or from @mention text. Returns None if not an AI query.
+    /// Resolves the user question: 回复机器人的消息时用当前内容；@ 提及且问题非空时用提取后的内容；否则 None。
     /// External: uses Message (dbot_core) fields only. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
-        if message.reply_to_message_id.is_some() {
+        if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
             return Some(message.content.clone());
         }
         if let Some(username) = bot_username {
@@ -136,7 +140,13 @@ impl SyncAIHandler {
         conversation_id: &str,
         question: &str,
     ) -> Option<Context> {
-        let builder = ContextBuilder::new(self.memory_store.clone())
+        let builder = ContextBuilder::new(self.memory_store.clone());
+        let builder = if let Some(ref r) = self.recent_store {
+            builder.with_recent_store(r.clone())
+        } else {
+            builder
+        };
+        let builder = builder
             .with_strategy(Box::new(RecentMessagesStrategy::new(self.memory_recent_limit)))
             .with_strategy(Box::new(SemanticSearchStrategy::new(
                 self.memory_relevant_top_k,
@@ -343,7 +353,11 @@ impl Handler for SyncAIHandler {
         let question = match self.get_question(message, bot_username.as_deref()) {
             Some(q) => q,
             None => {
-                info!(user_id = message.user.id, "step: SyncAIHandler not AI query (no reply-to, no @mention), skip");
+                if bot_username.is_none() && message.content.contains('@') {
+                    info!(user_id = message.user.id, "step: SyncAIHandler bot_username not set yet; skip");
+                } else {
+                    info!(user_id = message.user.id, "step: SyncAIHandler not AI query (no reply-to-bot, no @mention), skip");
+                }
                 return Ok(HandlerResponse::Continue);
             }
         };
@@ -351,7 +365,7 @@ impl Handler for SyncAIHandler {
             user_id = message.user.id,
             reply_to = ?message.reply_to_message_id,
             question = %question,
-            "Processing AI query (reply or @mention)"
+            "Processing AI query (reply-to-bot or @mention)"
         );
 
         if self.use_streaming {

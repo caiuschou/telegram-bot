@@ -11,8 +11,12 @@ pub struct BotConfig {
     pub ai_model: String,
     pub ai_use_streaming: bool,
     pub ai_thinking_message: String,
+    /// AI 系统提示词（人设/行为）；未设置时使用 telegram-bot-ai 内置默认。环境变量：`AI_SYSTEM_PROMPT`。
+    pub ai_system_prompt: Option<String>,
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
+    /// When true, recent messages (RecentMessagesStrategy / UserPreferencesStrategy) use a dedicated SQLite store; semantic search still uses the primary store (e.g. Lance). Env: `MEMORY_RECENT_USE_SQLITE`.
+    pub memory_recent_use_sqlite: bool,
     pub memory_lance_path: Option<String>,
     /// Embedding 服务提供商：`openai` | `zhipuai`。用于 RAG 语义检索的向量化。
     pub embedding_provider: String,
@@ -45,10 +49,18 @@ impl BotConfig {
             .unwrap_or(false);
         let ai_thinking_message =
             env::var("AI_THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
+        let ai_system_prompt = env::var("AI_SYSTEM_PROMPT").ok();
         let memory_store_type =
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
         let memory_sqlite_path =
             env::var("MEMORY_SQLITE_PATH").unwrap_or_else(|_| "./data/memory.db".to_string());
+        let memory_recent_use_sqlite = env::var("MEMORY_RECENT_USE_SQLITE")
+            .ok()
+            .and_then(|s| match s.to_lowercase().as_str() {
+                "1" | "true" | "yes" => Some(true),
+                _ => s.parse().ok(),
+            })
+            .unwrap_or(false);
         let memory_lance_path = env::var("MEMORY_LANCE_PATH").ok();
         let embedding_provider =
             env::var("EMBEDDING_PROVIDER").unwrap_or_else(|_| "openai".to_string());
@@ -78,8 +90,10 @@ impl BotConfig {
             ai_model,
             ai_use_streaming,
             ai_thinking_message,
+            ai_system_prompt,
             memory_store_type,
             memory_sqlite_path,
+            memory_recent_use_sqlite,
             memory_lance_path,
             embedding_provider,
             bigmodel_api_key,
@@ -118,6 +132,8 @@ mod tests {
         env::remove_var("TELOXIDE_API_URL");
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
+        env::remove_var("MEMORY_RECENT_USE_SQLITE");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -136,6 +152,7 @@ mod tests {
         assert!(config.bigmodel_api_key.is_empty());
         assert_eq!(config.memory_recent_limit, 10);
         assert_eq!(config.memory_relevant_top_k, 5);
+        assert_eq!(config.memory_recent_use_sqlite, false);
     }
 
     #[test]
@@ -167,6 +184,8 @@ mod tests {
         env::remove_var("TELOXIDE_API_URL");
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
+        env::remove_var("MEMORY_RECENT_USE_SQLITE");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -191,6 +210,7 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
         assert_eq!(config.memory_recent_limit, 10);
@@ -208,6 +228,30 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_load_config_memory_recent_use_sqlite() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("MEMORY_RECENT_USE_SQLITE");
+        env::remove_var("AI_SYSTEM_PROMPT");
+
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_recent_use_sqlite, false);
+
+        env::set_var("MEMORY_RECENT_USE_SQLITE", "1");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_recent_use_sqlite, true);
+
+        env::set_var("MEMORY_RECENT_USE_SQLITE", "true");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_recent_use_sqlite, true);
+
+        env::remove_var("MEMORY_RECENT_USE_SQLITE");
+    }
+
+    #[test]
+    #[serial]
     fn test_load_config_with_override_token() {
         env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "env_token");
@@ -216,10 +260,30 @@ mod tests {
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(Some("override_token".to_string())).unwrap();
 
         assert_eq!(config.bot_token, "override_token");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_ai_system_prompt() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("AI_SYSTEM_PROMPT");
+
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.ai_system_prompt.is_none());
+
+        env::set_var("AI_SYSTEM_PROMPT", "你是一个测试人设。");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.ai_system_prompt.as_deref(), Some("你是一个测试人设。"));
+
+        env::remove_var("AI_SYSTEM_PROMPT");
     }
 
     #[test]
@@ -234,6 +298,7 @@ mod tests {
         env::remove_var("BIGMODEL_API_KEY");
         env::set_var("BIGMODEL_API_KEY", "bigmodel-key");
         env::remove_var("ZHIPUAI_API_KEY");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -252,6 +317,7 @@ mod tests {
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
         env::set_var("ZHIPUAI_API_KEY", "zhipu-key");
+        env::remove_var("AI_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 

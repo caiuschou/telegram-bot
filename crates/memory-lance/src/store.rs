@@ -219,25 +219,28 @@ impl LanceVectorStore {
     }
 
     /// Converts a RecordBatch row to a MemoryEntry.
+    /// Uses column names from the batch schema so that reading is correct even if LanceDB returns columns in a different order (e.g. alphabetical).
     fn batch_to_entry(&self, batch: &RecordBatch, row: usize) -> Result<MemoryEntry> {
-        let id_col = batch
-            .column(0)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let schema = batch.schema();
+        let col = |name: &str| {
+            schema
+                .index_of(name)
+                .map_err(|e| anyhow!("schema missing column {:?}: {}", name, e))
+                .and_then(|i| Ok(batch.column(i).clone()))
+        };
+
+        let id_arc = col("id")?;
+        let id_col = id_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("ID column is not StringArray"))?;
         let id = Uuid::parse_str(id_col.value(row))?;
 
-        let content_col = batch
-            .column(1)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let content_arc = col("content")?;
+        let content_col = content_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("Content column is not StringArray"))?;
         let content = content_col.value(row).to_string();
 
-        let vector_col = batch
-            .column(2)
-            .as_any()
-            .downcast_ref::<arrow_array::FixedSizeListArray>()
+        let vector_arc = col("vector")?;
+        let vector_col = vector_arc.as_ref().as_any().downcast_ref::<arrow_array::FixedSizeListArray>()
             .ok_or_else(|| anyhow!("Vector column is not FixedSizeListArray"))?;
 
         let embedding = if vector_col.is_null(row) {
@@ -251,10 +254,8 @@ impl LanceVectorStore {
             Some(values.iter().map(|x| x.unwrap_or(0.0)).collect())
         };
 
-        let user_id_col = batch
-            .column(3)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let user_id_arc = col("user_id")?;
+        let user_id_col = user_id_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("User ID column is not StringArray"))?;
         let user_id = if user_id_col.is_null(row) || user_id_col.value(row).is_empty() {
             None
@@ -262,10 +263,8 @@ impl LanceVectorStore {
             Some(user_id_col.value(row).to_string())
         };
 
-        let conversation_id_col = batch
-            .column(4)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let conversation_id_arc = col("conversation_id")?;
+        let conversation_id_col = conversation_id_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("Conversation ID column is not StringArray"))?;
         let conversation_id = if conversation_id_col.is_null(row) || conversation_id_col.value(row).is_empty() {
             None
@@ -273,10 +272,8 @@ impl LanceVectorStore {
             Some(conversation_id_col.value(row).to_string())
         };
 
-        let role_col = batch
-            .column(5)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let role_arc = col("role")?;
+        let role_col = role_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("Role column is not StringArray"))?;
         let role_str = role_col.value(row);
         let role = match role_str {
@@ -286,18 +283,14 @@ impl LanceVectorStore {
             _ => return Err(anyhow!("Unknown role: {}", role_str)),
         };
 
-        let timestamp_col = batch
-            .column(6)
-            .as_any()
-            .downcast_ref::<StringArray>()
+        let timestamp_arc = col("timestamp")?;
+        let timestamp_col = timestamp_arc.as_ref().as_any().downcast_ref::<StringArray>()
             .ok_or_else(|| anyhow!("Timestamp column is not StringArray"))?;
         let timestamp = chrono::DateTime::parse_from_rfc3339(timestamp_col.value(row))?
             .with_timezone(&chrono::Utc);
 
-        let tokens_col = batch
-            .column(7)
-            .as_any()
-            .downcast_ref::<arrow_array::UInt32Array>()
+        let tokens_arc = col("tokens")?;
+        let tokens_col = tokens_arc.as_ref().as_any().downcast_ref::<arrow_array::UInt32Array>()
             .ok_or_else(|| anyhow!("Tokens column is not UInt32Array"))?;
         let tokens = if tokens_col.is_null(row) {
             None
@@ -305,10 +298,8 @@ impl LanceVectorStore {
             Some(tokens_col.value(row) as u32)
         };
 
-        let importance_col = batch
-            .column(8)
-            .as_any()
-            .downcast_ref::<arrow_array::Float32Array>()
+        let importance_arc = col("importance")?;
+        let importance_col = importance_arc.as_ref().as_any().downcast_ref::<arrow_array::Float32Array>()
             .ok_or_else(|| anyhow!("Importance column is not Float32Array"))?;
         let importance = if importance_col.is_null(row) {
             None

@@ -29,6 +29,7 @@ fn create_test_message(content: &str) -> Message {
         direction: dbot_core::MessageDirection::Incoming,
         created_at: Utc::now(),
         reply_to_message_id: None,
+        reply_to_message_from_bot: false,
     }
 }
 

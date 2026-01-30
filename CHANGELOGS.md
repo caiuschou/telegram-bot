@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **RecentMessages 使用 SQLite、语义搜索不受影响（双 store）**
+  - **memory-strategies**：`ContextStrategy` 新增 `store_kind() -> StoreKind`（Primary / Recent）；`RecentMessagesStrategy`、`UserPreferencesStrategy` 为 Recent，`SemanticSearchStrategy` 为 Primary；导出 `StoreKind`。
+  - **memory**：`ContextBuilder` 新增 `recent_store: Option<Arc<dyn MemoryStore>>` 与 `with_recent_store(recent_store)`；`build()` 时按策略的 `store_kind()` 选择主 store 或 recent_store 传入。
+  - **middleware**：`MemoryConfig` 新增 `recent_store: Option<Arc<dyn MemoryStore>>`；`with_store_and_embedding(store, embedding_service, recent_store)` 增加第三参数；before/after 写入主 store 后，若 recent_store 存在且与主 store 不同则同时写入 recent_store。
+  - **ai-handlers**：`SyncAIHandler::new` 增加 `recent_store: Option<Arc<dyn MemoryStore>>`；`build_memory_context` 中当 `recent_store` 为 Some 时对 `ContextBuilder` 调用 `with_recent_store`。
+  - **telegram-bot**：`BotConfig` 新增 `memory_recent_use_sqlite: bool`（环境变量 `MEMORY_RECENT_USE_SQLITE`，1/true/yes 为 true）；runner 在 `memory_recent_use_sqlite` 时创建 SQLite 存储并作为 recent_store 传入；`BotComponents` 新增 `recent_store`；`MemoryMiddleware` 与 `SyncAIHandler` 使用该 recent_store。
+  - **文档**：`.env.example`、`.env.test.example` 增加 `MEMORY_RECENT_USE_SQLITE` 与相关说明；config 单测 `test_load_config_memory_recent_use_sqlite`。
+
+### Documentation
+- **策略与 SQLite：最近消息来自 SQLite，仍执行向量检索**
+  - **memory-strategies**：crate 文档说明 RecentMessagesStrategy 从 store（如 SQLite）取最近消息，SemanticSearchStrategy 仍做向量检索；使用 SQLite 时二者均由同一 SQLite 存储提供。
+  - **docs/rag/memory/storage.md**：SQLiteVectorStore 说明补充：支持 `search_by_*`（最近消息）与 `semantic_search`（向量检索）。
+
+### Fixed
+- **最近消息上下文出现大量 "User: " / "Assistant: " 无内容行**
+  - **原因**：Lance 查询返回的 RecordBatch 列序可能与代码假设不一致，或历史存在 content 为空的条目。
+  - **memory-lance**：`batch_to_entry` 改为按**列名**（schema.index_of）读取列，不依赖列序，避免误读 content。
+  - **memory-strategies**：`RecentMessagesStrategy` 在 `search_by_conversation` / `search_by_user` 后 `retain(|e| !e.content.is_empty())`，过滤掉 content 为空的条目，避免空行进入上下文。
+
+### Changed
+- **Bot 系统提示改为很嗲的台湾妹人设，Burt/Jason 为厌恶对象**
+  - **telegram-bot-ai**：`DEFAULT_SYSTEM_CONTENT` 改为讲话很嗲的台湾女生，语气软萌、台湾腔；若对话中出现 Burt 或 Jason 则用嫌弃/不爽语气回应；仍要求中文、纯文本、无 Markdown，适合 Telegram。
+- **系统提示词支持 .env 配置**
+  - **telegram-bot**：`BotConfig` 新增 `ai_system_prompt: Option<String>`，从环境变量 `AI_SYSTEM_PROMPT` 读取；未设置时使用 telegram-bot-ai 内置默认。
+  - **telegram-bot-ai**：`TelegramBotAI` 新增 `system_prompt: Option<String>` 及 `with_system_prompt` / `with_system_prompt_opt`；请求时优先使用配置的提示词。
+  - **文档**：`telegram-bot/.env.example`、`.env.test.example` 增加 `AI_SYSTEM_PROMPT` 说明；config 单测增加 `test_load_config_ai_system_prompt`。
+- **回复触发 AI 时仅认「回复机器人的消息」，@mention 保留**
+  - **行为**：① 用户「回复机器人的某条消息」时触发 AI；② 用户 @ 提及机器人且问题非空时也触发 AI。若用户回复的是其他人的消息（非机器人），不因回复触发。
+  - **dbot-core**：`Message` 新增字段 `reply_to_message_from_bot: bool`，表示被回复的那条消息是否由机器人发送。
+  - **telegram-bot adapters**：将 Telegram 的 `reply_to_message.from.is_bot` 映射为 `reply_to_message_from_bot`。
+  - **ai-handlers**：回复路径仅在 `reply_to_message_id.is_some() && reply_to_message_from_bot` 时触发；@mention 路径保留（优先回复、其次 @mention）。
+  - **测试**：同步更新各 crate 中 `Message` 构造与相关单测。
+
+### Added
 - **CLI 查询向量数据库最近 N 条记录**
   - **dbot-cli**：新增子命令 `list-vectors`，按时间倒序输出 LanceDB 中最近 N 条记录（默认 100）；支持 `--limit`、`--lance-db-path`；环境变量 `LANCE_DB_PATH`、`LANCE_EMBEDDING_DIM`。
   - **memory-lance**：`LanceVectorStore` 新增非 trait 方法 `list_recent(limit)`，全表扫描后在内存按 `timestamp` 降序取前 limit 条。

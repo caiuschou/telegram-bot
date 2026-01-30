@@ -47,8 +47,8 @@ impl AIDetectionHandler {
     impl Handler for AIDetectionHandler {
         #[instrument(skip(self, message))]
         async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
-            // 优先检查是否是回复机器人的消息
-            if message.reply_to_message_id.is_some() {
+            // 优先：回复机器人的消息时触发 AI
+            if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
                 info!(
                     user_id = message.user.id,
                     reply_to = ?message.reply_to_message_id,
@@ -69,11 +69,10 @@ impl AIDetectionHandler {
                 return Ok(HandlerResponse::Stop);
             }
 
-            // 检查是否是 @ 提及机器人
+            // 其次：@ 提及机器人且问题非空时触发 AI
             if let Some(bot_username) = self.get_bot_username().await {
                 if self.is_bot_mentioned(&message.content, &bot_username) {
                     let question = self.extract_question(&message.content, &bot_username);
-
                     if !question.is_empty() {
                         info!(
                             user_id = message.user.id,
@@ -194,6 +193,7 @@ mod tests {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
+            reply_to_message_from_bot: false,
         };
 
         let result = handler.handle(&message).await;
@@ -231,6 +231,7 @@ mod tests {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
+            reply_to_message_from_bot: false,
         };
 
         let result = handler.handle(&message).await;
@@ -262,6 +263,7 @@ mod tests {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
+            reply_to_message_from_bot: false,
         };
 
         let result = handler.handle(&message).await;
@@ -269,7 +271,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handler_with_reply_to_message() {
+    async fn test_handler_with_reply_to_bot_message() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let handler = AIDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(None)),
@@ -293,6 +295,7 @@ mod tests {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: Some("bot_msg_456".to_string()),
+            reply_to_message_from_bot: true,
         };
 
         let result = handler.handle(&message).await;
@@ -306,7 +309,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handler_reply_takes_priority_over_mention() {
+    async fn test_handler_reply_to_non_bot_does_not_trigger() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handler = AIDetectionHandler::new(
+            Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
+            Arc::new(tx),
+        );
+
+        let message = Message {
+            id: "msg123".to_string(),
+            user: User {
+                id: 456,
+                username: Some("testuser".to_string()),
+                first_name: Some("Test".to_string()),
+                last_name: None,
+            },
+            chat: Chat {
+                id: 123,
+                chat_type: "group".to_string(),
+            },
+            content: "reply to user message".to_string(),
+            message_type: "text".to_string(),
+            direction: MessageDirection::Incoming,
+            created_at: chrono::Utc::now(),
+            reply_to_message_id: Some("user_msg_789".to_string()),
+            reply_to_message_from_bot: false,
+        };
+
+        let result = handler.handle(&message).await;
+        assert!(matches!(result, Ok(HandlerResponse::Continue)));
+    }
+
+    #[tokio::test]
+    async fn test_handler_reply_to_bot_takes_priority_over_mention() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let handler = AIDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
@@ -330,13 +365,13 @@ mod tests {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: Some("bot_msg_789".to_string()),
+            reply_to_message_from_bot: true,
         };
 
         let result = handler.handle(&message).await;
         assert!(matches!(result, Ok(HandlerResponse::Stop)));
 
         let received_query = rx.recv().await.unwrap();
-        // 回复消息使用原始内容，不提取 @ 部分
         assert_eq!(received_query.question, "@mybot hello world");
         assert_eq!(received_query.reply_to_message_id, Some("bot_msg_789".to_string()));
     }

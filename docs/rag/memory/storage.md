@@ -41,7 +41,7 @@ Performs semantic search using vector embeddings. Returns the top `limit` most s
 #### Implementations
 
 - **InMemoryVectorStore** (memory-inmemory): Simple in-memory storage for testing and development
-- **SQLiteVectorStore** (memory-sqlite): Persistent storage using SQLite
+- **SQLiteVectorStore** (memory-sqlite): Persistent storage using SQLite. Supports both recent-message queries (`search_by_conversation` / `search_by_user`) and **vector search** (`semantic_search` over the `embedding` column); when using SQLite, recent messages come from SQLite and semantic search still runs.
 - **LanceVectorStore** (memory-lance): High-performance vector storage using LanceDB; supports semantic search and is verified by integration tests with real vectors (see `memory-lance/tests/lance_vector_store_integration_test.rs` and `lance_semantic_strategy_integration_test.rs`)
 
 ### Example Usage

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use memory_core::{MemoryStore, StrategyResult};
 use tracing::{debug, info};
 
-use super::strategy::ContextStrategy;
+use super::strategy::{ContextStrategy, StoreKind};
 use super::utils::extract_preferences;
 
 /// Strategy for extracting user preferences from conversation history.
@@ -25,6 +25,10 @@ impl UserPreferencesStrategy {
 impl ContextStrategy for UserPreferencesStrategy {
     fn name(&self) -> &str {
         "UserPreferences"
+    }
+
+    fn store_kind(&self) -> StoreKind {
+        StoreKind::Recent
     }
 
     /// Builds context by extracting user preferences from conversation history.

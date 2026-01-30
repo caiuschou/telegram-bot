@@ -127,14 +127,15 @@ impl MessageRepository {
             .fetch_one(pool)
             .await?;
 
-        let first_message: Option<(DateTime<Utc>,)> =
+        // MIN/MAX return one row with NULL when table is empty; decode as Option<DateTime<Utc>>.
+        let first_message: (Option<DateTime<Utc>>,) =
             sqlx::query_as("SELECT MIN(created_at) FROM messages")
-                .fetch_optional(pool)
+                .fetch_one(pool)
                 .await?;
 
-        let last_message: Option<(DateTime<Utc>,)> =
+        let last_message: (Option<DateTime<Utc>>,) =
             sqlx::query_as("SELECT MAX(created_at) FROM messages")
-                .fetch_optional(pool)
+                .fetch_one(pool)
                 .await?;
 
         info!(
@@ -151,8 +152,8 @@ impl MessageRepository {
             received_messages: received_messages.0,
             unique_users: unique_users.0,
             unique_chats: unique_chats.0,
-            first_message: first_message.map(|t| t.0),
-            last_message: last_message.map(|t| t.0),
+            first_message: first_message.0,
+            last_message: last_message.0,
         })
     }
 

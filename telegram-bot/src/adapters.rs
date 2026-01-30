@@ -41,6 +41,7 @@ impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
             direction: MessageDirection::Incoming,
             created_at: chrono::Utc::now(),
             reply_to_message_id: self.get_reply_to_message_id(),
+            reply_to_message_from_bot: self.get_reply_to_message_from_bot(),
         }
     }
 }
@@ -49,6 +50,15 @@ impl<'a> TelegramMessageWrapper<'a> {
     /// 获取被回复消息的 ID
     fn get_reply_to_message_id(&self) -> Option<String> {
         self.0.reply_to_message().map(|msg| msg.id.to_string())
+    }
+
+    /// 被回复的那条消息是否由机器人发送（用于仅在被回复的是机器人消息时触发 AI）
+    fn get_reply_to_message_from_bot(&self) -> bool {
+        self.0
+            .reply_to_message()
+            .and_then(|m| m.from.as_ref())
+            .map(|u| u.is_bot)
+            .unwrap_or(false)
     }
 }
 

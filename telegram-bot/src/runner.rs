@@ -29,8 +29,10 @@ pub struct BotComponents {
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     /// 同步 AI 处理器（在链内执行，返回 Reply 供 middleware 存记忆）
     pub sync_ai_handler: Arc<SyncAIHandler>,
-    /// 向量记忆存储
+    /// 向量记忆存储（主存储，用于语义检索与默认读写）
     pub memory_store: Arc<dyn MemoryStore>,
+    /// 可选：最近消息专用存储（如 SQLite）。设置时 RecentMessagesStrategy / UserPreferencesStrategy 从此读，middleware 同时写入此处与主存储。
+    pub recent_store: Option<Arc<dyn MemoryStore>>,
     /// Embedding 服务（用于语义检索与写入记忆时生成向量）
     pub embedding_service: Arc<dyn embedding::EmbeddingService>,
 }
@@ -49,10 +51,12 @@ pub struct TelegramBot {
 ///
 /// 注意：此函数假设传入的 `memory_store` 已根据配置选择好具体实现，
 /// 因此不会再根据 `config.memory_store_type` 做分支判断。
-#[instrument(skip(config, memory_store))]
+/// 当 `recent_store` 为 Some 时，最近消息策略使用它，middleware 同时写入主存储与 recent_store。
+#[instrument(skip(config, memory_store, recent_store))]
 async fn build_bot_components(
     config: &BotConfig,
     memory_store: Arc<dyn MemoryStore>,
+    recent_store: Option<Arc<dyn MemoryStore>>,
 ) -> Result<BotComponents> {
     // 初始化存储
     let repo = Arc::new(
@@ -92,8 +96,9 @@ async fn build_bot_components(
         config.openai_api_key.clone(),
         config.openai_base_url.clone(),
     );
-    let ai_bot =
-        TelegramBotAI::new("bot".to_string(), openai_client).with_model(config.ai_model.clone());
+    let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client)
+        .with_model(config.ai_model.clone())
+        .with_system_prompt_opt(config.ai_system_prompt.clone());
 
     // 初始化 Embedding 服务（用于用户提问在向量库中的语义搜索）
     let embedding_service: Arc<dyn embedding::EmbeddingService> = match config.embedding_provider.as_str() {
@@ -121,6 +126,7 @@ async fn build_bot_components(
         teloxide_bot.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
+        recent_store.clone(),
         embedding_service.clone(),
         config.ai_use_streaming,
         config.ai_thinking_message.clone(),
@@ -134,6 +140,7 @@ async fn build_bot_components(
         bot_username,
         sync_ai_handler,
         memory_store,
+        recent_store,
         embedding_service,
     })
 }
@@ -195,7 +202,26 @@ pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponen
         }
     };
 
-    build_bot_components(config, memory_store).await
+    let recent_store: Option<Arc<dyn MemoryStore>> = if config.memory_recent_use_sqlite {
+        info!(
+            db_path = %config.memory_sqlite_path,
+            "Using SQLite for recent messages (RecentMessagesStrategy / UserPreferencesStrategy)"
+        );
+        match SQLiteVectorStore::new(&config.memory_sqlite_path).await {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                error!(error = %e, "Failed to initialize SQLite store for recent messages");
+                return Err(anyhow::anyhow!(
+                    "MEMORY_RECENT_USE_SQLITE=true but failed to open SQLite: {}",
+                    e
+                ));
+            }
+        }
+    } else {
+        None
+    };
+
+    build_bot_components(config, memory_store, recent_store).await
 }
 
 /// 使用自定义 `MemoryStore` 初始化 Bot 组件。
@@ -207,7 +233,7 @@ pub async fn initialize_bot_components_with_store(
     config: &BotConfig,
     memory_store: Arc<dyn MemoryStore>,
 ) -> Result<BotComponents> {
-    build_bot_components(config, memory_store).await
+    build_bot_components(config, memory_store, None).await
 }
 
 impl TelegramBot {
@@ -223,6 +249,7 @@ impl TelegramBot {
         let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
             components.embedding_service.clone(),
+            components.recent_store.clone(),
         ));
 
         // 构建处理器链（SyncAIHandler 在链内同步执行 AI，返回 Reply 供 memory_middleware 在 after() 中存 AI 回复）
@@ -253,6 +280,7 @@ impl TelegramBot {
         let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
             components.embedding_service.clone(),
+            components.recent_store.clone(),
         ));
 
         // 构建处理器链
@@ -329,17 +357,13 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
 
     info!("Bot started successfully");
 
-    // 获取并设置 bot username
-    let bot = teloxide_bot.clone();
-    let bot_username_ref = bot_username.clone();
-    tokio::spawn(async move {
-        if let Ok(me) = bot.get_me().await {
-            if let Some(username) = &me.user.username {
-                *bot_username_ref.write().await = Some(username.clone());
-                info!(username = %username, "Bot username set");
-            }
+    // 在启动 repl 前先设置 bot_username，否则首条 @ 消息到达时尚未设置会导致 SyncAIHandler 判定为“非 AI 查询”而不回复
+    if let Ok(me) = teloxide_bot.get_me().await {
+        if let Some(username) = &me.user.username {
+            *bot_username.write().await = Some(username.clone());
+            info!(username = %username, "Bot username set before repl");
         }
-    });
+    }
 
     // 启动 bot 监听：单次运行 repl，long polling 退出后进程结束（无外层循环、无自动重连）。
     let chain = handler_chain.clone();

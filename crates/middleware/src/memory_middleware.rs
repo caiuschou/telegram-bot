@@ -22,8 +22,10 @@ use chrono::Utc;
 /// Configuration for MemoryMiddleware.
 #[derive(Clone)]
 pub struct MemoryConfig {
-    /// Memory store instance (used by middleware and by tests for assertions).
+    /// Memory store instance (used by middleware and by tests for assertions). Primary store for semantic search and general persistence.
     pub store: Arc<dyn MemoryStore>,
+    /// Optional store for recent messages only. When set, user messages and AI replies are also written here so RecentMessagesStrategy reads from it; semantic search still uses `store`.
+    pub recent_store: Option<Arc<dyn MemoryStore>>,
     /// Optional embedding service: when set, user messages and AI replies are embedded before saving so they participate in semantic search.
     pub embedding_service: Option<Arc<dyn EmbeddingService>>,
     /// Maximum number of recent messages to include in context
@@ -40,6 +42,7 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             store: Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>,
+            recent_store: None,
             embedding_service: None,
             max_recent_messages: 10,
             max_context_tokens: 4096,
@@ -70,12 +73,15 @@ impl MemoryMiddleware {
     }
 
     /// Creates a new MemoryMiddleware with store and embedding service so saved messages get embeddings and participate in semantic search.
+    /// When `recent_store` is set, user messages and AI replies are also written there so recent-message strategies read from it.
     pub fn with_store_and_embedding(
         store: Arc<dyn MemoryStore>,
         embedding_service: Arc<dyn EmbeddingService>,
+        recent_store: Option<Arc<dyn MemoryStore>>,
     ) -> Self {
         Self::new(MemoryConfig {
             store,
+            recent_store,
             embedding_service: Some(embedding_service),
             ..Default::default()
         })
@@ -182,6 +188,13 @@ impl Middleware for MemoryMiddleware {
                     "step: MemoryMiddleware before done, user message saved to memory"
                 );
             }
+            if let Some(ref r) = self.config.recent_store {
+                if !std::ptr::addr_eq(r.as_ref() as *const _, self.config.store.as_ref() as *const _) {
+                    if let Err(e) = r.add(entry).await {
+                        error!(error = %e, "Failed to save user message to recent store");
+                    }
+                }
+            }
         } else {
             info!(
                 user_id = %user_id,
@@ -229,6 +242,13 @@ impl Middleware for MemoryMiddleware {
                         entry_id = %entry.id,
                         "step: MemoryMiddleware after done, AI reply saved to memory"
                     );
+                }
+                if let Some(ref r) = self.config.recent_store {
+                    if !std::ptr::addr_eq(r.as_ref() as *const _, self.config.store.as_ref() as *const _) {
+                        if let Err(e) = r.add(entry).await {
+                            error!(error = %e, "Failed to save AI reply to recent store");
+                        }
+                    }
                 }
             } else {
                 info!(

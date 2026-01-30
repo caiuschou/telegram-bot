@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use memory_core::{MessageCategory, MemoryStore, StrategyResult};
 use tracing::{debug, info};
 
-use super::strategy::ContextStrategy;
+use super::strategy::{ContextStrategy, StoreKind};
 use super::utils::format_message;
 
 /// Strategy for retrieving recent conversation messages.
@@ -31,6 +31,10 @@ impl RecentMessagesStrategy {
 impl ContextStrategy for RecentMessagesStrategy {
     fn name(&self) -> &str {
         "RecentMessages"
+    }
+
+    fn store_kind(&self) -> StoreKind {
+        StoreKind::Recent
     }
 
     /// Builds context by retrieving the most recent conversation messages.
@@ -71,6 +75,8 @@ impl ContextStrategy for RecentMessagesStrategy {
                 );
                 e
             })?;
+            // 排除 content 为空的条目，避免上下文出现 "User: " / "Assistant: " 无内容行（可能来自历史错误写入或列序问题）
+            entries.retain(|e| !e.content.is_empty());
             entries.sort_by_key(|e| e.metadata.timestamp);
             let n = entries.len();
             if n > self.limit {
@@ -111,6 +117,7 @@ impl ContextStrategy for RecentMessagesStrategy {
                 );
                 e
             })?;
+            entries.retain(|e| !e.content.is_empty());
             entries.sort_by_key(|e| e.metadata.timestamp);
             let n = entries.len();
             if n > self.limit {

@@ -53,6 +53,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
         bot,
         repo,
         memory_store,
+        None,
         embedding_service,
         false,
         "思考中...".to_string(),
@@ -64,6 +65,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
 fn make_message(
     content: &str,
     reply_to_message_id: Option<String>,
+    reply_to_message_from_bot: bool,
 ) -> Message {
     Message {
         id: "msg_1".to_string(),
@@ -82,6 +84,7 @@ fn make_message(
         direction: MessageDirection::Incoming,
         created_at: Utc::now(),
         reply_to_message_id,
+        reply_to_message_from_bot,
     }
 }
 
@@ -128,17 +131,25 @@ async fn test_extract_question_no_mention_returns_trimmed() {
 // --- get_question ---
 
 #[tokio::test]
-async fn test_get_question_reply_to_returns_content() {
+async fn test_get_question_reply_to_bot_returns_content() {
     let h = test_handler(Some("bot")).await;
-    let msg = make_message("What is 2+2?", Some("prev_id".to_string()));
+    let msg = make_message("What is 2+2?", Some("prev_id".to_string()), true);
     let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, Some("What is 2+2?".to_string()));
 }
 
 #[tokio::test]
+async fn test_get_question_reply_to_non_bot_returns_none() {
+    let h = test_handler(Some("bot")).await;
+    let msg = make_message("What is 2+2?", Some("user_msg_id".to_string()), false);
+    let q = h.get_question(&msg, Some("bot"));
+    assert_eq!(q, None);
+}
+
+#[tokio::test]
 async fn test_get_question_mention_with_non_empty_question() {
     let h = test_handler(Some("bot")).await;
-    let msg = make_message("@bot tell me the time", None);
+    let msg = make_message("@bot tell me the time", None, false);
     let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, Some("tell me the time".to_string()));
 }
@@ -146,7 +157,7 @@ async fn test_get_question_mention_with_non_empty_question() {
 #[tokio::test]
 async fn test_get_question_mention_only_returns_none() {
     let h = test_handler(Some("bot")).await;
-    let msg = make_message("@bot", None);
+    let msg = make_message("@bot", None, false);
     let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, None);
 }
@@ -154,7 +165,7 @@ async fn test_get_question_mention_only_returns_none() {
 #[tokio::test]
 async fn test_get_question_no_reply_no_mention_returns_none() {
     let h = test_handler(Some("bot")).await;
-    let msg = make_message("random text", None);
+    let msg = make_message("random text", None, false);
     let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, None);
 }
@@ -162,7 +173,7 @@ async fn test_get_question_no_reply_no_mention_returns_none() {
 #[tokio::test]
 async fn test_get_question_no_bot_username_mention_ignored() {
     let h = test_handler(Some("bot")).await;
-    let msg = make_message("@bot hello", None);
+    let msg = make_message("@bot hello", None, false);
     let q = h.get_question(&msg, None);
     assert_eq!(q, None);
 }
