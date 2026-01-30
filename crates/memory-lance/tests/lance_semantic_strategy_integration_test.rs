@@ -107,7 +107,7 @@ async fn test_lance_semantic_strategy_returns_relevant_message() {
     store.add(entry_dog).await.expect("add dog");
     store.add(entry_car).await.expect("add car");
 
-    let strategy = SemanticSearchStrategy::new(3, embedding);
+    let strategy = SemanticSearchStrategy::new(3, embedding, 0.0);
     let result = strategy
         .build_context(&store, &None, &None, &Some("用户问：猫吃什么？".to_string()))
         .await
@@ -168,7 +168,7 @@ async fn test_lance_semantic_strategy_empty_query_returns_empty() {
     };
     store.add(entry).await.expect("add");
 
-    let strategy = SemanticSearchStrategy::new(5, embedding);
+    let strategy = SemanticSearchStrategy::new(5, embedding, 0.0);
     let result = strategy
         .build_context(&store, &None, &None, &None)
         .await

@@ -58,6 +58,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
         "思考中...".to_string(),
         10,
         5,
+        0.0,
     )
 }
 

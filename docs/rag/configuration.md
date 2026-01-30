@@ -13,6 +13,7 @@ MEMORY_INCLUDE_RECENT=true
 MEMORY_INCLUDE_RELEVANT=true
 MEMORY_RECENT_LIMIT=10        # 近期消息条数，默认 10（与 BotConfig 一致）
 MEMORY_RELEVANT_TOP_K=5       # 语义检索 Top-K，默认 5（与 BotConfig 一致）
+MEMORY_SEMANTIC_MIN_SCORE=0.0 # 语义检索最低相似度阈值，默认 0.0（不过滤）；推荐 0.6–0.8
 
 # 嵌入服务配置
 EMBEDDING_PROVIDER=openai     # openai | zhipuai
@@ -88,6 +89,12 @@ base_url = "https://open.bigmodel.cn/api/paas/v4/"
 - **类型**: 正整数（u32）
 - **默认值**: 5（当前 Telegram Bot `BotConfig` 默认）
 - **说明**: 语义检索返回条数（Top-K），用于 RAG 上下文的 `SemanticSearchStrategy`。推荐范围：3–10；过大会引入更多无关上下文。
+
+### memory.semantic_min_score / MEMORY_SEMANTIC_MIN_SCORE
+
+- **类型**: 浮点数（f32）
+- **默认值**: 0.0（当前 Telegram Bot `BotConfig` 默认，表示不过滤）
+- **说明**: 语义检索最低相似度阈值；低于此分数的条目不进入上下文。推荐范围：0.6–0.8 可减少无关上下文；0.0 表示不过滤，保持原有行为。详见 [向量搜索准确度](memory/vector-search-accuracy.md)。
 
 ### embedding.provider
 

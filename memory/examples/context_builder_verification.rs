@@ -138,6 +138,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .with_strategy(Box::new(SemanticSearchStrategy::new(
             5,
             Arc::new(MockEmbeddingService),
+            0.0,
         )))
         .for_user("user123");
 

@@ -232,6 +232,18 @@ table
 - `50-100`: Higher recall, slower performance
 - `>100`: Diminishing returns
 
+#### Accuracy vs speed (Rust 0.23)
+
+LanceDB Rust SDK 支持以下检索精度与速度权衡参数（`memory-lance` 通过 `LanceConfig` 暴露）：
+
+| 手段 | API | 说明 |
+|------|-----|------|
+| **精确检索（暴力搜索）** | `bypass_vector_index()` | 跳过向量索引，对表中每条向量做距离计算并排序；结果最准，大数据量时最慢。无索引时本身就是 flat 搜索。 |
+| **refine_factor** | `refine_factor(u32)` | 仅对 **IVF-PQ** 索引有效：先取 `limit × refine_factor` 个候选，再用完整向量重算距离并重排；值越大召回与排序越准，延迟越高。不设则使用量化距离。 |
+| **nprobes** | `nprobes(usize)` | 仅对 **IVF** 类索引有效：搜索的分区数，默认 20；增大可提高召回、增加延迟。 |
+
+小结：追求**高准确度**时可设 `use_exact_search=true`（小/中表）或调大 `refine_factor`/`nprobes`；追求**高速度**时使用默认（索引 + 默认 nprobes/不 refine）。
+
 ### Batch Operations
 
 #### Batch Insert

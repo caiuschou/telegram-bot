@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use embedding::EmbeddingService;
-use memory_core::{MessageCategory, MemoryStore, StrategyResult};
+use memory_core::{MessageCategory, MemoryEntry, MemoryStore, StrategyResult};
 use tracing::{debug, error, info, warn};
 
 use super::strategy::ContextStrategy;
@@ -17,8 +17,11 @@ use super::utils::format_message;
 ///
 /// Uses the user's question text to generate an embedding, then searches the vector store
 /// for the most semantically similar memory entries to include as context.
+/// Entries with score < min_score are filtered out (see docs/rag/memory/vector-search-accuracy.md).
 pub struct SemanticSearchStrategy {
     limit: usize,
+    /// Minimum similarity score (e.g. cosine). Entries with score < min_score are excluded. 0.0 = no filter.
+    min_score: f32,
     embedding_service: Arc<dyn EmbeddingService>,
 }
 
@@ -29,9 +32,15 @@ impl SemanticSearchStrategy {
     ///
     /// * `limit` - Maximum number of relevant messages to retrieve.
     /// * `embedding_service` - Service to generate query embedding (e.g. OpenAI).
-    pub fn new(limit: usize, embedding_service: Arc<dyn EmbeddingService>) -> Self {
+    /// * `min_score` - Minimum similarity score; entries below this are filtered. Use 0.0 to disable (default behavior).
+    pub fn new(
+        limit: usize,
+        embedding_service: Arc<dyn EmbeddingService>,
+        min_score: f32,
+    ) -> Self {
         Self {
             limit,
+            min_score,
             embedding_service,
         }
     }
@@ -95,9 +104,10 @@ impl ContextStrategy for SemanticSearchStrategy {
         info!(
             dimension = query_embedding.len(),
             limit = self.limit,
+            min_score = self.min_score,
             "step: 词向量 向量检索 (semantic_search)"
         );
-        let entries = match store
+        let scored_entries = match store
             .semantic_search(
                 &query_embedding,
                 self.limit,
@@ -122,6 +132,37 @@ impl ContextStrategy for SemanticSearchStrategy {
                 ));
             }
         };
+
+        // Observability: log score distribution (min/mean/max) for top_k before threshold filter
+        let count_before = scored_entries.len();
+        if count_before > 0 {
+            let scores: Vec<f32> = scored_entries.iter().map(|(s, _)| *s).collect();
+            let min_s = scores.iter().cloned().fold(f32::NAN, f32::min);
+            let max_s = scores.iter().cloned().fold(f32::NAN, f32::max);
+            let mean_s = scores.iter().sum::<f32>() / scores.len() as f32;
+            info!(
+                count = count_before,
+                score_min = %min_s,
+                score_mean = %mean_s,
+                score_max = %max_s,
+                "step: 词向量 向量检索 分数分布"
+            );
+        }
+
+        let entries: Vec<MemoryEntry> = scored_entries
+            .into_iter()
+            .filter(|(score, _)| *score >= self.min_score)
+            .map(|(_, entry)| entry)
+            .collect();
+
+        if count_before > 0 && entries.is_empty() {
+            warn!(
+                query = %query_text,
+                min_score = self.min_score,
+                count_before = count_before,
+                "SemanticSearchStrategy: 语义检索结果全部低于阈值，未保留任何条目"
+            );
+        }
 
         let messages: Vec<String> = entries
             .iter()

@@ -126,6 +126,7 @@ async fn build_bot_components(
         config.ai_thinking_message.clone(),
         config.memory_recent_limit as usize,
         config.memory_relevant_top_k as usize,
+        config.memory_semantic_min_score,
     ));
 
     Ok(BotComponents {

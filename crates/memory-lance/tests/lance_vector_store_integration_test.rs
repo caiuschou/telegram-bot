@@ -145,7 +145,7 @@ async fn test_lance_vector_store_verification() {
 
     // 11. 验证语义搜索功能
     let query_embedding: Vec<f32> = (0..1536).map(|i| i as f32 / 1536.0).collect();
-    let search_results: Vec<MemoryEntry> = store
+    let search_results: Vec<(f32, MemoryEntry)> = store
         .semantic_search(&query_embedding, 10, None, None)
         .await
         .expect("Failed to perform semantic search");
@@ -243,11 +243,11 @@ async fn test_lance_vector_query_verification() {
         "semantic_search should return at least one result"
     );
     assert_eq!(
-        results[0].id,
+        results[0].1.id,
         entry_a.id,
         "nearest to query (same as A) should be entry A"
     );
-    assert_eq!(results[0].content, "entry A");
+    assert_eq!(results[0].1.content, "entry A");
 
     // 用与 B 相同的向量查询，最近邻应为 B
     let query_near_b: Vec<f32> = make_embedding(1);
@@ -256,10 +256,97 @@ async fn test_lance_vector_query_verification() {
         .await
         .expect("semantic_search");
     assert_eq!(
-        results_b[0].id,
+        results_b[0].1.id,
         entry_b.id,
         "nearest to query (same as B) should be entry B"
     );
+}
+
+/// 语义检索回归集：3 条黄金用例（查询→期望命中）
+///
+/// 用例来自可复现的 one-hot 向量 fixture，不依赖外部 API，便于 CI 稳定。
+/// 约定：查询向量与某条记录的 embedding 一致时，该条应为首条召回。
+///
+/// | 用例 | 查询向量 | 期望命中内容 |
+/// |------|----------|--------------|
+/// | 1 | 第 0 维为 1，其余 0 | "entry A" |
+/// | 2 | 第 1 维为 1，其余 0 | "entry B" |
+/// | 3 | 第 2 维为 1，其余 0 | "entry C" |
+#[tokio::test]
+async fn test_semantic_search_regression_golden_cases() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let lance_db_path = temp_dir.path().join("lance_regression_db");
+    let lance_path_str = lance_db_path.to_string_lossy().to_string();
+
+    let store: LanceVectorStore = LanceVectorStore::new(&lance_path_str)
+        .await
+        .expect("create LanceVectorStore");
+
+    const DIM: usize = 1536;
+    let make_embedding = |i: usize| {
+        let mut v = vec![0.0f32; DIM];
+        v[i] = 1.0;
+        v
+    };
+
+    let meta = |role: MemoryRole| MemoryMetadata {
+        user_id: Some("u1".to_string()),
+        conversation_id: Some("c1".to_string()),
+        role,
+        timestamp: Utc::now(),
+        tokens: Some(5),
+        importance: Some(1.0),
+    };
+
+    let entry_a = MemoryEntry {
+        id: Uuid::new_v4(),
+        content: "entry A".to_string(),
+        embedding: Some(make_embedding(0)),
+        metadata: meta(MemoryRole::User),
+    };
+    let entry_b = MemoryEntry {
+        id: Uuid::new_v4(),
+        content: "entry B".to_string(),
+        embedding: Some(make_embedding(1)),
+        metadata: meta(MemoryRole::User),
+    };
+    let entry_c = MemoryEntry {
+        id: Uuid::new_v4(),
+        content: "entry C".to_string(),
+        embedding: Some(make_embedding(2)),
+        metadata: meta(MemoryRole::Assistant),
+    };
+
+    store.add(entry_a).await.expect("add A");
+    store.add(entry_b).await.expect("add B");
+    store.add(entry_c).await.expect("add C");
+
+    let golden_cases: [(usize, &str); 3] = [
+        (0, "entry A"),
+        (1, "entry B"),
+        (2, "entry C"),
+    ];
+
+    for (query_dim, expect_content_substr) in golden_cases {
+        let query_vec = make_embedding(query_dim);
+        let results = store
+            .semantic_search(&query_vec, 3, None, None)
+            .await
+            .expect("semantic_search");
+        assert!(
+            !results.is_empty(),
+            "regression case query_dim={}: should return at least one result",
+            query_dim
+        );
+        let top_content = &results[0].1.content;
+        assert!(
+            top_content.contains(expect_content_substr),
+            "regression case query_dim={}: expected top result to contain {:?}, got {:?}",
+            query_dim,
+            expect_content_substr,
+            top_content
+        );
+    }
 }
 
 /// list_recent 按时间倒序返回最近 N 条

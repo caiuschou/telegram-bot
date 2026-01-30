@@ -118,11 +118,11 @@ impl MemoryStore for MockMemoryStore {
         limit: usize,
         user_id: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+    ) -> Result<Vec<(f32, MemoryEntry)>, anyhow::Error> {
         self.query_call_count.fetch_add(1, Ordering::SeqCst);
         self.semantic_search_call_count.fetch_add(1, Ordering::SeqCst);
         let map = self.inner.lock().unwrap();
-        let mut all: Vec<MemoryEntry> = map
+        let mut all: Vec<(f32, MemoryEntry)> = map
             .values()
             .cloned()
             .filter(|e| {
@@ -134,6 +134,7 @@ impl MemoryStore for MockMemoryStore {
                     .unwrap_or(true);
                 match_user && match_conv
             })
+            .map(|e| (1.0_f32, e))
             .collect();
         all.truncate(limit);
         Ok(all)
