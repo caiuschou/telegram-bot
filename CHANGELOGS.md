@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Telegram 编辑请求频率控制**
+  - **telegram-bot**：`BotConfig` 新增 `telegram_edit_interval_secs`（环境变量 `TELEGRAM_EDIT_INTERVAL_SECS`，默认 5 秒）；流式回复时两次编辑同一条消息的最小间隔可配置，避免触发 Telegram 限流。
+  - **ai-handlers**：`SyncAIHandler` 新增 `edit_interval_secs` 参数；在流式编辑循环中按间隔节流：首次编辑立即执行，后续编辑等待距上次编辑满 `edit_interval_secs` 秒后再发请求。
+  - **配置**：`.env.example` 增加 `TELEGRAM_EDIT_INTERVAL_SECS` 说明；config 单测覆盖默认值与自定义值。
 - **框架层 dbot-telegram（P0）**
   - 新增 crate `crates/dbot-telegram`：Telegram 接入与消息链运行，最小配置（token、api_url、log_file）。
   - 提供：`TelegramMessageWrapper`、`TelegramUserWrapper`（teloxide→core）、`TelegramBotAdapter`（实现 dbot_core::Bot）、`TelegramConfig`、`run_repl(bot, handler_chain, bot_username)`。

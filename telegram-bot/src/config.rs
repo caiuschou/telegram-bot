@@ -31,6 +31,8 @@ pub struct BotConfig {
     pub memory_relevant_top_k: u32,
     /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤。环境变量：`MEMORY_SEMANTIC_MIN_SCORE`，默认 0.0。推荐范围 0.6–0.8。
     pub memory_semantic_min_score: f32,
+    /// 流式回复时，两次编辑同一条消息的最小间隔（秒），用于控制 Telegram 编辑请求频率，避免触发限流。环境变量：`TELEGRAM_EDIT_INTERVAL_SECS`，默认 5。
+    pub telegram_edit_interval_secs: u64,
 }
 
 impl BotConfig {
@@ -86,6 +88,10 @@ impl BotConfig {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.0);
+        let telegram_edit_interval_secs = env::var("TELEGRAM_EDIT_INTERVAL_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5);
 
         Ok(Self {
             bot_token,
@@ -107,6 +113,7 @@ impl BotConfig {
             memory_recent_limit,
             memory_relevant_top_k,
             memory_semantic_min_score,
+            telegram_edit_interval_secs,
         })
     }
 }
@@ -142,6 +149,7 @@ mod tests {
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
         env::remove_var("AI_SYSTEM_PROMPT");
         env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
+        env::remove_var("TELEGRAM_EDIT_INTERVAL_SECS");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -162,6 +170,7 @@ mod tests {
         assert_eq!(config.memory_relevant_top_k, 5);
         assert_eq!(config.memory_recent_use_sqlite, false);
         assert_eq!(config.memory_semantic_min_score, 0.0);
+        assert_eq!(config.telegram_edit_interval_secs, 5);
     }
 
     #[test]
@@ -196,11 +205,13 @@ mod tests {
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
         env::remove_var("AI_SYSTEM_PROMPT");
         env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
+        env::set_var("TELEGRAM_EDIT_INTERVAL_SECS", "10");
 
         let config = BotConfig::load(None).unwrap();
 
         assert_eq!(config.bot_token, "custom_token");
         assert_eq!(config.database_url, "custom.db");
+        assert_eq!(config.telegram_edit_interval_secs, 10);
         assert_eq!(config.openai_api_key, "custom_key");
         assert_eq!(config.openai_base_url, "https://custom.api.com");
         assert_eq!(config.ai_model, "gpt-4");
@@ -209,6 +220,8 @@ mod tests {
         assert_eq!(config.memory_store_type, "sqlite");
         assert_eq!(config.memory_sqlite_path, "/tmp/memory.db");
         assert_eq!(config.embedding_provider, "openai");
+
+        env::remove_var("TELEGRAM_EDIT_INTERVAL_SECS");
     }
 
     #[test]

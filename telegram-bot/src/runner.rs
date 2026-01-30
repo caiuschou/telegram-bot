@@ -136,6 +136,7 @@ async fn build_bot_components(
         config.memory_recent_limit as usize,
         config.memory_relevant_top_k as usize,
         config.memory_semantic_min_score,
+        config.telegram_edit_interval_secs,
     ));
 
     Ok(BotComponents {

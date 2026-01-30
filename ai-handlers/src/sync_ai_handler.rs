@@ -10,7 +10,9 @@ use memory::{
 };
 use prompt::ChatMessage;
 use std::sync::Arc;
+use std::time::Instant;
 use storage::MessageRepository;
+use tokio::time::sleep;
 use tracing::{debug, error, info, instrument};
 
 // --- User-facing fallback messages (sent to Telegram on errors) ---
@@ -52,6 +54,8 @@ pub struct SyncAIHandler {
     pub(crate) memory_relevant_top_k: usize,
     /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤（对应配置 MEMORY_SEMANTIC_MIN_SCORE）。
     pub(crate) memory_semantic_min_score: f32,
+    /// 流式回复时，两次编辑同一条消息的最小间隔（秒），用于控制 Telegram 编辑请求频率；由配置 TELEGRAM_EDIT_INTERVAL_SECS 传入，默认 5。
+    pub(crate) edit_interval_secs: u64,
 }
 
 impl SyncAIHandler {
@@ -75,6 +79,7 @@ impl SyncAIHandler {
         memory_recent_limit: usize,
         memory_relevant_top_k: usize,
         memory_semantic_min_score: f32,
+        edit_interval_secs: u64,
     ) -> Self {
         Self {
             bot_username,
@@ -89,6 +94,7 @@ impl SyncAIHandler {
             memory_recent_limit,
             memory_relevant_top_k,
             memory_semantic_min_score,
+            edit_interval_secs,
         }
     }
 
@@ -344,8 +350,10 @@ impl SyncAIHandler {
         let bot = self.bot.clone();
         let chat = message.chat.clone();
         let full_content = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let edit_interval_secs = self.edit_interval_secs;
+        let last_edit = Arc::new(tokio::sync::Mutex::new(None::<Instant>));
 
-        // On each stream chunk: append to full_content and edit via Bot trait.
+        // On each stream chunk: append to full_content and edit via Bot trait. Throttle edits so we do not exceed Telegram rate limits.
         match self
             .llm_client
             .get_ai_response_stream_with_messages(messages, |chunk| {
@@ -353,13 +361,28 @@ impl SyncAIHandler {
                 let chat = chat.clone();
                 let message_id = message_id.clone();
                 let full_content = full_content.clone();
+                let last_edit = last_edit.clone();
                 async move {
                     if !chunk.content.is_empty() {
+                        if edit_interval_secs > 0 {
+                            let last = last_edit.lock().await;
+                            if let Some(prev) = *last {
+                                let elapsed = prev.elapsed();
+                                let interval = std::time::Duration::from_secs(edit_interval_secs);
+                                if elapsed < interval {
+                                    drop(last);
+                                    sleep(interval - elapsed).await;
+                                }
+                            }
+                        }
                         let mut content = full_content.lock().await;
                         content.push_str(&chunk.content);
                         bot.edit_message(&chat, &message_id, &*content)
                             .await
                             .map_err(|e| anyhow::anyhow!("Failed to edit message: {}", e))?;
+                        if edit_interval_secs > 0 {
+                            *last_edit.lock().await = Some(Instant::now());
+                        }
                     }
                     Ok(())
                 }

@@ -76,6 +76,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
         10,
         5,
         0.0,
+        5,
     )
 }
 
