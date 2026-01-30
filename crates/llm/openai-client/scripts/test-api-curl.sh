@@ -10,9 +10,9 @@ set -e
 
 BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 # 智谱用 glm-4-flash；官方 OpenAI 用 gpt-3.5-turbo
-MODEL="${LLM_MODEL:-glm-4-flash}"
+MODEL="${MODEL:-glm-4-flash}"
 if [[ "$BASE_URL" == *"bigmodel"* ]]; then
-  MODEL="${LLM_MODEL:-glm-4-flash}"
+  MODEL="${MODEL:-glm-4-flash}"
 fi
 
 if [[ -z "${OPENAI_API_KEY:-}" ]]; then

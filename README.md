@@ -75,11 +75,11 @@ BOT_TOKEN=your_bot_token_here
 # OpenAI API Configuration (required)
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1  # or use compatible API
-AI_MODEL=gpt-3.5-turbo
+MODEL=gpt-3.5-turbo
 
 # Streaming Response (optional)
-AI_USE_STREAMING=true
-AI_THINKING_MESSAGE=Thinking...
+USE_STREAMING=true
+THINKING_MESSAGE=Thinking...
 
 # Database Configuration
 DATABASE_URL=file:./telegram_bot.db
@@ -154,9 +154,9 @@ cargo test --test '*_integration_test'
 | `BOT_TOKEN` | Telegram Bot Token | - |
 | `OPENAI_API_KEY` | OpenAI API Key | - |
 | `OPENAI_BASE_URL` | API Base URL | `https://api.openai.com/v1` |
-| `AI_MODEL` | Model to use | `gpt-3.5-turbo` |
-| `AI_USE_STREAMING` | Enable streaming responses | `false` |
-| `AI_THINKING_MESSAGE` | Thinking message | - |
+| `MODEL` | Model to use | `gpt-3.5-turbo` |
+| `USE_STREAMING` | Enable streaming responses | `false` |
+| `THINKING_MESSAGE` | Thinking message | - |
 | `DATABASE_URL` | Database connection | `file:./telegram_bot.db` |
 | `MEMORY_STORE_TYPE` | Memory storage type | `memory` |
 | `MEMORY_RECENT_LIMIT` | Number of recent messages | `10` |
@@ -173,7 +173,7 @@ This project supports Zhipu AI's GLM models:
 ```bash
 OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 OPENAI_API_KEY=your_zhipu_api_key
-AI_MODEL=glm-4-flash
+MODEL=glm-4-flash
 
 # Use Zhipu embedding service
 EMBEDDING_PROVIDER=zhipuai

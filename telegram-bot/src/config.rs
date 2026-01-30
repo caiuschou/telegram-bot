@@ -46,13 +46,13 @@ impl BotConfig {
         let openai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
         let openai_base_url =
             env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-        let llm_model = env::var("LLM_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
-        let llm_use_streaming = env::var("LLM_USE_STREAMING")
+        let llm_model = env::var("MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
+        let llm_use_streaming = env::var("USE_STREAMING")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(false);
         let llm_thinking_message =
-            env::var("LLM_THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
+            env::var("THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
         let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT").ok();
         let memory_store_type =
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
@@ -133,9 +133,9 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("DATABASE_URL");
         env::remove_var("OPENAI_BASE_URL");
-        env::remove_var("LLM_MODEL");
-        env::remove_var("LLM_USE_STREAMING");
-        env::remove_var("LLM_THINKING_MESSAGE");
+        env::remove_var("MODEL");
+        env::remove_var("USE_STREAMING");
+        env::remove_var("THINKING_MESSAGE");
         env::remove_var("MEMORY_STORE_TYPE");
         env::remove_var("MEMORY_SQLITE_PATH");
         env::remove_var("MEMORY_LANCE_PATH");
@@ -184,12 +184,12 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "custom_key");
         env::remove_var("OPENAI_BASE_URL");
         env::set_var("OPENAI_BASE_URL", "https://custom.api.com");
-        env::remove_var("LLM_MODEL");
-        env::set_var("LLM_MODEL", "gpt-4");
-        env::remove_var("LLM_USE_STREAMING");
-        env::set_var("LLM_USE_STREAMING", "true");
-        env::remove_var("LLM_THINKING_MESSAGE");
-        env::set_var("LLM_THINKING_MESSAGE", "Thinking...");
+        env::remove_var("MODEL");
+        env::set_var("MODEL", "gpt-4");
+        env::remove_var("USE_STREAMING");
+        env::set_var("USE_STREAMING", "true");
+        env::remove_var("THINKING_MESSAGE");
+        env::set_var("THINKING_MESSAGE", "Thinking...");
         env::remove_var("MEMORY_STORE_TYPE");
         env::set_var("MEMORY_STORE_TYPE", "sqlite");
         env::remove_var("MEMORY_SQLITE_PATH");

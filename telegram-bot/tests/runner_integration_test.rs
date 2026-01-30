@@ -36,16 +36,16 @@ fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
         env::set_var("OPENAI_BASE_URL", "https://api.openai.com/v1");
     }
 
-    if env::var("LLM_MODEL").is_err() {
-        env::set_var("LLM_MODEL", "gpt-3.5-turbo");
+    if env::var("MODEL").is_err() {
+        env::set_var("MODEL", "gpt-3.5-turbo");
     }
 
-    if env::var("LLM_USE_STREAMING").is_err() {
-        env::set_var("LLM_USE_STREAMING", "false");
+    if env::var("USE_STREAMING").is_err() {
+        env::set_var("USE_STREAMING", "false");
     }
 
-    if env::var("LLM_THINKING_MESSAGE").is_err() {
-        env::set_var("LLM_THINKING_MESSAGE", "Thinking...");
+    if env::var("THINKING_MESSAGE").is_err() {
+        env::set_var("THINKING_MESSAGE", "Thinking...");
     }
 
     if env::var("MEMORY_STORE_TYPE").is_err() {
