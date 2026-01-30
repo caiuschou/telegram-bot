@@ -14,4 +14,6 @@ pub struct MessageQuery {
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub limit: Option<i64>,
+    /// 分页偏移（与 limit 配合使用）
+    pub offset: Option<i64>,
 }

@@ -186,6 +186,10 @@ impl MessageRepository {
             sql.push_str(&format!(" LIMIT {}", limit));
         }
 
+        if let Some(offset) = query.offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
+        }
+
         let mut query_builder = sqlx::query_as::<_, MessageRecord>(&sql);
         for param in &params {
             query_builder = query_builder.bind(param);

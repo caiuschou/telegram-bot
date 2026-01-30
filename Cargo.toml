@@ -18,6 +18,7 @@ members = [
     "crates/memory-inmemory",
     "crates/memory-sqlite",
     "crates/memory-lance",
+    "crates/memory-loader",
     "crates/handler-chain",
     "crates/middleware",
     "crates/prompt",
