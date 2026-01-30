@@ -34,6 +34,14 @@ fn format_omits_system_when_not_requested() {
     assert!(!out.contains("System:"));
 }
 
+/// **Test: When include_system is true but system_message is None, output has no System line.**
+#[test]
+fn format_include_system_true_none_system_message() {
+    let out = format_for_model(true, None, None, &[] as &[&str], &[] as &[&str]);
+    assert!(!out.contains("System:"));
+    assert!(out.is_empty());
+}
+
 /// **Test: When user_preferences is set, output contains "User Preferences: {preferences}".**
 #[test]
 fn format_includes_preferences() {
@@ -211,6 +219,23 @@ fn format_with_roles_recent_as_one_user_block() {
     assert!(msgs[0].content.contains("Dogs eat dog food."));
     assert!(matches!(msgs[1].role, MessageRole::User));
     assert_eq!(msgs[1].content, "What about cats?");
+}
+
+/// **Test: Context block can be semantic-only (no recent, no preferences).**
+#[test]
+fn format_with_roles_semantic_only_then_question() {
+    let msgs = format_for_model_as_messages_with_roles(
+        false,
+        None,
+        None,
+        &[] as &[&str],
+        &["Ref: cats are furry."],
+        "Tell me more.",
+    );
+    assert_eq!(msgs.len(), 2);
+    assert!(msgs[0].content.contains(SECTION_SEMANTIC));
+    assert!(msgs[0].content.contains("Ref: cats are furry."));
+    assert_eq!(msgs[1].content, "Tell me more.");
 }
 
 /// **Test: Order is System, User(recent block), User(question); three messages.**
