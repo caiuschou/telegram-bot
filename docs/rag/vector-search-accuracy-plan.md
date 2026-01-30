@@ -214,3 +214,8 @@
 - Lance 在 user/conversation 过滤时 fetch_limit 可配置或调大，避免过滤后条数不足。
 - 回归集（任务 4.4）：3～5 条黄金用例防止准确度回退。
 - 后续（阶段 5）：embedding 模型配置切换、查询扩展、存库粒度、时间衰减、混合检索、二阶段重排序，按需迭代。
+
+## 评审结论（摘要）
+
+- 计划符合 AGENTS.md（表格、文档、测试），与代码现状一致，可执行。
+- 采纳建议：默认值与 configuration.md 统一；4.2 子页路径固定为 `docs/rag/memory/vector-search-accuracy.md`；阶段 2 trait 决策记录于该子页或 implementation 设计决策；验收区分「可选参数」（默认保持原行为）与「可选功能」（可不做）。

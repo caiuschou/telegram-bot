@@ -83,9 +83,3 @@ bot-runtime/                 # 扩展：运行时
 | HNSW | 中等规模 | 2-3天 | 中等 |
 
 **推荐**：小规模使用内存+SQLite，生产环境使用Lance。
-
-## 相关文档
-
-- [architecture.md](./architecture.md) - 详细架构设计
-- [technical-selection.md](./technical-selection.md) - 技术方案对比
-- [implementation.md](./implementation.md) - 实现路线图

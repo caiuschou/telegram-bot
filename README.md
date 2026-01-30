@@ -278,8 +278,9 @@ let logger = LoggingMiddleware;
 
 ## 📖 详细文档
 
+- [文档索引](docs/README.md) - 全部文档入口与导航
 - [项目设置指南](SETUP.md)
-- [Crate 与文件索引](docs/CRATES.md) - 每个 crate 及对应文件与描述，遵循「每个 crate 尽量简单」
+- [Crate 与文件索引](docs/CRATES.md) - 每个 crate 及对应文件与描述
 - [开发计划（框架与 Bot/AI 拆分）](docs/refactoring/DEVELOPMENT_PLAN.md) - 按阶段与任务表执行的详细开发计划
 - [Memory 记忆管理](MEMORY.md) - 对话记忆、语义搜索、存储后端
 - [dbot-cli 使用文档](dbot-cli/README.md)

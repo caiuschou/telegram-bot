@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/rag/README.md` 移除末尾重复的「相关文档」小节。
   - 向量搜索准确度评审结论并入 `docs/rag/vector-search-accuracy-plan.md`；`vector-search-accuracy-plan-review.md` 改为简短重定向。
   - 根目录 `README.md` 增加「文档索引」链接。
+- **全量 .md 简化（第二轮）**
+  - docs/：api-endpoints、LOGGING、db_query_result、AI_MENTION_REPLY、PERSISTENCE_CHECK、TEST_COVERAGE、rust-telegram-bot-plan、dbot-cli-code-review、TELEGRAM_BOT_TEST_PLAN、RUST_TELEGRAM_BOT_GUIDE 等缩短为要点与表格，移除冗长代码与重复段落。
+  - docs/rag/：architecture、data-flow、implementation、configuration、usage、testing、context-sending-scheme、context-retrieval-before-reply、cost、future、technical-selection、references、context_builder_design、LANCE_USAGE、LANCE_API_RESEARCH、DEVELOPMENT_PLAN 等简化为索引与核心结论。
+  - docs/rag/memory/：README、types、storage、embeddings、usage、testing、vector-search-accuracy 等简化为表格与链接。
+  - docs/refactoring/：DEVELOPMENT_PLAN、crate-split-bot-ai-plan、telegram-bot-framework-design、handler-chain-extraction 等简化为目标与阶段摘要。
+  - 根目录与 crate：SETUP.md、dbot-core/ARCHITECTURE.md、dbot-cli/README（保持）、crates/memory-loader/README 等简化为步骤与配置要点。
 - **策略与 SQLite：最近消息来自 SQLite，仍执行向量检索**
   - **memory-strategies**：crate 文档说明 RecentMessagesStrategy 从 store（如 SQLite）取最近消息，SemanticSearchStrategy 仍做向量检索；使用 SQLite 时二者均由同一 SQLite 存储提供。
   - **docs/rag/memory/storage.md**：SQLiteVectorStore 说明补充：支持 `search_by_*`（最近消息）与 `semantic_search`（向量检索）。

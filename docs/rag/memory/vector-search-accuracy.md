@@ -99,11 +99,4 @@
 
 修改默认阈值、top_k 或 Lance 检索逻辑后，运行 `cargo test -p memory-lance test_semantic_search_regression_golden_cases` 可验证回归集仍通过。
 
----
-
-## 相关文档
-
-- [向量搜索准确度优化开发计划](../vector-search-accuracy-plan.md)
-- [configuration.md](../configuration.md)
-- [storage.md](./storage.md)（MemoryStore 与各实现）
-- [embeddings.md](./embeddings.md)（Embedding 模型与维度）
+详见 [vector-search-accuracy-plan.md](../vector-search-accuracy-plan.md)、[configuration.md](../configuration.md)。
