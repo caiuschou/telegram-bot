@@ -11,6 +11,8 @@ pub trait Bot: Send + Sync {
     async fn edit_message(&self, chat: &Chat, message_id: &str, text: &str) -> Result<()>;
     /// 发送消息并返回该消息的 id（用于流式时后续 edit_message）。无此能力时可返回空字符串或占位。
     async fn send_message_and_return_id(&self, chat: &Chat, text: &str) -> Result<String>;
+    /// 发送图片到指定聊天。image_url 为图片 URL，caption 为可选说明文字。
+    async fn send_photo(&self, chat: &Chat, image_url: &str, caption: Option<&str>) -> Result<()>;
 }
 
 pub struct TelegramBot {
@@ -57,5 +59,16 @@ impl Bot for TelegramBot {
             .await
             .map_err(|e| DbotError::Bot(e.to_string()))?;
         Ok(sent.id.to_string())
+    }
+
+    async fn send_photo(&self, chat: &Chat, image_url: &str, caption: Option<&str>) -> Result<()> {
+        let mut request = self.bot.send_photo(ChatId(chat.id), image_url);
+        if let Some(caption) = caption {
+            request = request.caption(caption);
+        }
+        request
+            .await
+            .map_err(|e| DbotError::Bot(e.to_string()))?;
+        Ok(())
     }
 }

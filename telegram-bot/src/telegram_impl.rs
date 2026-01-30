@@ -57,4 +57,15 @@ impl CoreBot for TelegramBot {
             .map_err(|e| dbot_core::DbotError::Bot(e.to_string()))?;
         Ok(())
     }
+
+    async fn send_photo(&self, chat: &Chat, image_url: &str, caption: Option<&str>) -> Result<()> {
+        let mut request = self.bot.send_photo(ChatId(chat.id), image_url);
+        if let Some(caption) = caption {
+            request = request.caption(caption);
+        }
+        request
+            .await
+            .map_err(|e| dbot_core::DbotError::Bot(e.to_string()))?;
+        Ok(())
+    }
 }

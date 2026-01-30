@@ -1,4 +1,6 @@
 use llm_handlers::SyncLLMHandler;
+use image_handlers::ImageGenerationHandler;
+use image_generation_client::ImageGenerationClient;
 use anyhow::Result;
 use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
 use dbot_telegram::{run_repl, TelegramMessageWrapper};
@@ -126,7 +128,7 @@ async fn build_bot_components(
     let sync_llm_handler = Arc::new(SyncLLMHandler::new(
         bot_username.clone(),
         llm_client,
-        bot_adapter,
+        bot_adapter.clone(),
         repo.as_ref().clone(),
         memory_store.clone(),
         recent_store.clone(),
@@ -137,6 +139,19 @@ async fn build_bot_components(
         config.memory_relevant_top_k as usize,
         config.memory_semantic_min_score,
         config.telegram_edit_interval_secs,
+    ));
+
+    // 初始化图片生成客户端和 Handler
+    let image_client = Arc::new(
+        ImageGenerationClient::with_base_url(
+            config.openai_api_key.clone(),
+            config.openai_base_url.clone(),
+        )
+    );
+    let image_generation_handler = Arc::new(ImageGenerationHandler::new(
+        bot_username.clone(),
+        image_client,
+        bot_adapter,
     ));
 
     Ok(BotComponents {
@@ -257,10 +272,27 @@ impl TelegramBot {
             components.recent_store.clone(),
         ));
 
-        // 构建处理器链（SyncLLMHandler 在链内同步执行 LLM，返回 Reply 供 memory_middleware 在 after() 中存 LLM 回复）
+        // 初始化图片生成客户端和 Handler
+        let image_client = Arc::new(
+            ImageGenerationClient::with_base_url(
+                config.openai_api_key.clone(),
+                config.openai_base_url.clone(),
+            )
+        );
+        let bot_adapter: Arc<dyn dbot_core::Bot> =
+            Arc::new(TelegramBotAdapter::new(components.teloxide_bot.clone()));
+        let image_generation_handler = Arc::new(ImageGenerationHandler::new(
+            components.bot_username.clone(),
+            image_client,
+            bot_adapter,
+        ));
+
+        // 构建处理器链（图片生成 Handler 优先，然后是 SyncLLMHandler）
+        // SyncLLMHandler 在链内同步执行 LLM，返回 Reply 供 memory_middleware 在 after() 中存 LLM 回复
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
+            .add_handler(image_generation_handler)  // 图片生成优先处理
             .add_handler(components.sync_llm_handler.clone());
 
         Ok(Self {
@@ -288,10 +320,26 @@ impl TelegramBot {
             components.recent_store.clone(),
         ));
 
-        // 构建处理器链
+        // 初始化图片生成客户端和 Handler
+        let image_client = Arc::new(
+            ImageGenerationClient::with_base_url(
+                config.openai_api_key.clone(),
+                config.openai_base_url.clone(),
+            )
+        );
+        let bot_adapter: Arc<dyn dbot_core::Bot> =
+            Arc::new(TelegramBotAdapter::new(components.teloxide_bot.clone()));
+        let image_generation_handler = Arc::new(ImageGenerationHandler::new(
+            components.bot_username.clone(),
+            image_client,
+            bot_adapter,
+        ));
+
+        // 构建处理器链（图片生成 Handler 优先，然后是 SyncLLMHandler）
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
+            .add_handler(image_generation_handler)  // 图片生成优先处理
             .add_handler(components.sync_llm_handler.clone());
 
         Ok(Self {
