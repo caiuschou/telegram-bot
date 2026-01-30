@@ -11,20 +11,20 @@ log = "0.4"
 env_logger = "0.11"
 dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
-dbot-telegram = { path = "../crates/dbot-telegram" }
+dbot-telegram = { path = "../dbot-telegram" }
 llm-handlers = { path = "../llm-handlers" }
 storage = { path = "../storage" }
 llm-client = { path = "../crates/llm-client" }
-openai-client = { path = "../openai-client" }
-embedding = { path = "../crates/embedding" }
-openai-embedding = { path = "../crates/openai-embedding" }
-bigmodel-embedding = { path = "../crates/bigmodel-embedding" }
+openai-client = { path = "../crates/llm/openai-client" }
+embedding = { path = "../crates/embedding/embedding" }
+openai-embedding = { path = "../crates/embedding/openai-embedding" }
+bigmodel-embedding = { path = "../crates/embedding/bigmodel-embedding" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory/memory-sqlite" }
 memory-lance = { path = "../crates/memory/memory-lance" }
-middleware = { path = "../crates/middleware" }
-handler-chain = { path = "../crates/handler-chain" }
+middleware = { path = "../middleware" }
+handler-chain = { path = "../handler-chain" }
 async-trait = "0.1"
 chrono = "0.4"
 anyhow = "1.0"

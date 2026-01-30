@@ -9,9 +9,9 @@ storage = { path = "../../../storage" }
 memory = { path = "../../../memory" }
 memory-lance = { path = "../memory-lance" }
 memory-core = { path = "../memory-core" }
-embedding = { path = "../../embedding" }
-openai-embedding = { path = "../../openai-embedding" }
-bigmodel-embedding = { path = "../../bigmodel-embedding" }
+embedding = { path = "../../embedding/embedding" }
+openai-embedding = { path = "../../embedding/openai-embedding" }
+bigmodel-embedding = { path = "../../embedding/bigmodel-embedding" }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 tracing = "0.1"

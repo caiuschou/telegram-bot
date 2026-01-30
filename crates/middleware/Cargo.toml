@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 dbot-core = { path = "../../dbot-core" }
-embedding = { path = "../embedding" }
+embedding = { path = "../embedding/embedding" }
 storage = { path = "../../storage" }
 memory = { path = "../../memory" }
 memory-inmemory = { path = "../memory/memory-inmemory" }

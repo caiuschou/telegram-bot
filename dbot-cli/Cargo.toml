@@ -20,7 +20,7 @@ dbot-core = { path = "../dbot-core" }
 storage = { path = "../storage" }
 telegram-bot = { path = "../telegram-bot" }
 telegram-bot-llm = { path = "../telegram-bot-llm" }
-openai-client = { path = "../openai-client" }
+openai-client = { path = "../crates/llm/openai-client" }
 memory = { path = "../memory" }
 memory-sqlite = { path = "../crates/memory/memory-sqlite" }
 memory-loader = { path = "../crates/memory/memory-loader" }

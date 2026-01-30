@@ -4,7 +4,7 @@
 //! Integration tests that call the real API are marked `#[ignore]` and require OPENAI_API_KEY;
 //! run with: `cargo test -p openai-embedding -- --ignored`
 //!
-//! Env: loads workspace root `.env` (from CARGO_MANIFEST_DIR/../../.env) so OPENAI_API_KEY
+//! Env: loads workspace root `.env` (from CARGO_MANIFEST_DIR/../../../.env) so OPENAI_API_KEY
 //! can be read when running tests from the repo root or from the crate directory.
 
 use std::path::Path;
@@ -12,9 +12,9 @@ use std::path::Path;
 use super::*;
 
 /// Load `.env` from workspace root so OPENAI_API_KEY is available in ignored tests.
-/// Path: crates/openai-embedding -> ../../.env = repo root.
+/// Path: crates/embedding/openai-embedding -> ../../../.env = repo root.
 fn load_root_env() {
-    let root_env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.env");
+    let root_env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.env");
     let _ = dotenvy::from_path(root_env);
 }
 

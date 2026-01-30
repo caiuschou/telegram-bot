@@ -6,14 +6,14 @@ description = "Context building strategies for conversation memory (recent messa
 
 [dependencies]
 memory-core = { path = "../memory-core" }
-embedding = { path = "../../embedding" }
+embedding = { path = "../../embedding/embedding" }
 async-trait = "0.1"
 anyhow = "1.0"
 tracing = "0.1"
 
 [dev-dependencies]
 memory-core = { path = "../memory-core" }
-embedding = { path = "../../embedding" }
+embedding = { path = "../../embedding/embedding" }
 async-trait = "0.1"
 anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
