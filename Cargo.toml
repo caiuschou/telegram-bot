@@ -8,7 +8,7 @@ members = [
     "dbot-cli",
     "crates/llm/openai-client",
     "telegram-bot-examples",
-    "telegram-bot-llm",
+    "crates/llm/telegram-bot-llm",
     "memory",
     "crates/memory/memory-core",
     "crates/memory/memory-strategies",
