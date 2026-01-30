@@ -14,10 +14,10 @@ arrow-array = { version = "56" }
 arrow-schema = { version = "56" }
 futures = "0.3"
 tracing = "0.1"
-memory = { path = "../../memory" }
+memory = { path = "../../../memory" }
 
 [dev-dependencies]
 tempfile = "3"
-embedding = { path = "../embedding" }
-bigmodel-embedding = { path = "../bigmodel-embedding" }
+embedding = { path = "../../embedding" }
+bigmodel-embedding = { path = "../../bigmodel-embedding" }
 async-trait = "0.1"

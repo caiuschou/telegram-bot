@@ -8,7 +8,7 @@ ai-client = { path = "../crates/ai-client" }
 dbot-core = { path = "../dbot-core" }
 storage = { path = "../storage" }
 memory = { path = "../memory" }
-memory-inmemory = { path = "../crates/memory-inmemory" }
+memory-inmemory = { path = "../crates/memory/memory-inmemory" }
 prompt = { path = "../crates/prompt" }
 embedding = { path = "../crates/embedding" }
 async-trait = "0.1"

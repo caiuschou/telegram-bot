@@ -20,9 +20,9 @@ embedding = { path = "../crates/embedding" }
 openai-embedding = { path = "../crates/openai-embedding" }
 bigmodel-embedding = { path = "../crates/bigmodel-embedding" }
 memory = { path = "../memory" }
-memory-inmemory = { path = "../crates/memory-inmemory" }
-memory-sqlite = { path = "../crates/memory-sqlite" }
-memory-lance = { path = "../crates/memory-lance" }
+memory-inmemory = { path = "../crates/memory/memory-inmemory" }
+memory-sqlite = { path = "../crates/memory/memory-sqlite" }
+memory-lance = { path = "../crates/memory/memory-lance" }
 middleware = { path = "../crates/middleware" }
 handler-chain = { path = "../crates/handler-chain" }
 async-trait = "0.1"

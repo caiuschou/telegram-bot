@@ -8,7 +8,7 @@ dbot-core = { path = "../../dbot-core" }
 embedding = { path = "../embedding" }
 storage = { path = "../../storage" }
 memory = { path = "../../memory" }
-memory-inmemory = { path = "../memory-inmemory" }
+memory-inmemory = { path = "../memory/memory-inmemory" }
 async-trait = "0.1"
 tracing = "0.1"
 chrono = "0.4"

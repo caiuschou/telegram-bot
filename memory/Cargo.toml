@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-memory-core = { path = "../crates/memory-core" }
-memory-strategies = { path = "../crates/memory-strategies" }
+memory-core = { path = "../crates/memory/memory-core" }
+memory-strategies = { path = "../crates/memory/memory-strategies" }
 prompt = { path = "../crates/prompt" }
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -21,7 +21,7 @@ embedding = { path = "../crates/embedding" }
 
 [dev-dependencies]
 tokio-test = "0.4"
-memory-inmemory = { path = "../crates/memory-inmemory" }
-memory-sqlite = { path = "../crates/memory-sqlite" }
+memory-inmemory = { path = "../crates/memory/memory-inmemory" }
+memory-sqlite = { path = "../crates/memory/memory-sqlite" }
 openai-embedding = { path = "../crates/openai-embedding" }
 tempfile = "3"
