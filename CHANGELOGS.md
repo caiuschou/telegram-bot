@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **回复消息内容作为 AI 上下文**
+  - **dbot-core**：`Message` 新增字段 `reply_to_message_content: Option<String>`，存储被回复消息的文本内容。
+  - **telegram-bot adapters**：`TelegramMessageWrapper::to_core()` 新增 `get_reply_to_message_content()` 方法，从 Telegram 的 `reply_to_message.text` 提取被回复消息内容。
+  - **ai-handlers**：`SyncAIHandler::build_messages_for_ai()` 新增参数 `reply_to_content: Option<&str>`；当用户回复机器人消息时，被回复的内容作为 assistant 消息插入到最后一条 user 消息前，让 AI 了解对话上下文。
+  - **单元测试**：`sync_ai_handler_test.rs` 新增 `test_reply_to_bot_with_content_returns_question`、`test_reply_to_bot_content_is_preserved`、`test_reply_to_non_bot_with_content` 等测试。
+  - **其他**：所有测试文件中 `Message` 构造已同步更新。
+
+
 - **RecentMessages 使用 SQLite、语义搜索不受影响（双 store）**
   - **memory-strategies**：`ContextStrategy` 新增 `store_kind() -> StoreKind`（Primary / Recent）；`RecentMessagesStrategy`、`UserPreferencesStrategy` 为 Recent，`SemanticSearchStrategy` 为 Primary；导出 `StoreKind`。
   - **memory**：`ContextBuilder` 新增 `recent_store: Option<Arc<dyn MemoryStore>>` 与 `with_recent_store(recent_store)`；`build()` 时按策略的 `store_kind()` 选择主 store 或 recent_store 传入。

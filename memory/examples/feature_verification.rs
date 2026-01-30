@@ -4,7 +4,6 @@ use memory::{
 use memory_inmemory::InMemoryVectorStore;
 use memory_sqlite::SQLiteVectorStore;
 use openai_embedding::OpenAIEmbedding;
-use embedding::EmbeddingService;
 use chrono::Utc;
 use tempfile::tempdir;
 
@@ -42,7 +41,7 @@ async fn main() -> Result<(), anyhow::Error> {
     println!("  ✓ Searched entries by conversation ID");
 
     // Test semantic search with embeddings
-    let mut metadata2 = MemoryMetadata {
+    let metadata2 = MemoryMetadata {
         user_id: Some("user123".to_string()),
         conversation_id: None,
         role: MemoryRole::User,
@@ -89,7 +88,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Test 3: OpenAIEmbedding (will fail gracefully without API key)
     println!("\nTest 3: OpenAIEmbedding");
-    let openai_service = OpenAIEmbedding::new(
+    let _openai_service = OpenAIEmbedding::new(
         std::env::var("OPENAI_API_KEY").unwrap_or_default(),
         "text-embedding-3-small".to_string(),
     );

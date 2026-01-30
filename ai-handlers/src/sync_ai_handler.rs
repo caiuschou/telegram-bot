@@ -173,17 +173,35 @@ impl SyncAIHandler {
     ///
     /// When context is available, returns `context.to_messages(true, question)` which already
     /// contains system/user/assistant. When context is missing, returns a minimal user-only list.
+    /// If the message is a reply to a bot message, the replied message content is prepended as
+    /// assistant context so the AI understands what message the user is replying to.
     /// Callers do not construct messages; they use this method's return value directly.
     async fn build_messages_for_ai(
         &self,
         user_id: &str,
         conversation_id: &str,
         question: &str,
+        reply_to_content: Option<&str>,
     ) -> Vec<prompt::ChatMessage> {
-        match self.build_memory_context(user_id, conversation_id, question).await {
+        let mut messages = match self.build_memory_context(user_id, conversation_id, question).await {
             Some(c) => c.to_messages(true, question),
             None => vec![prompt::ChatMessage::user(question)],
+        };
+
+        // 如果是回复机器人的消息，将被回复的内容作为助手消息插入到用户消息之前，
+        // 让 AI 了解用户在回复哪条消息
+        if let Some(replied_content) = reply_to_content {
+            // 找到最后一条用户消息的位置，在其前面插入被回复的助手消息
+            if let Some(last_user_idx) = messages.iter().rposition(|m| matches!(m.role, prompt::MessageRole::User)) {
+                messages.insert(last_user_idx, prompt::ChatMessage::assistant(replied_content));
+                info!(
+                    replied_content_len = replied_content.len(),
+                    "Inserted reply-to context as assistant message"
+                );
+            }
         }
+
+        messages
     }
 
     // ---------- Sending & logging ----------
@@ -242,7 +260,12 @@ impl SyncAIHandler {
     async fn process_normal(&self, message: &Message, question: &str) -> Result<HandlerResponse> {
         let (user_id, conversation_id) = Self::message_ids(message);
         let messages = self
-            .build_messages_for_ai(&user_id, &conversation_id, question)
+            .build_messages_for_ai(
+                &user_id,
+                &conversation_id,
+                question,
+                message.reply_to_message_content.as_deref(),
+            )
             .await;
 
         info!(
@@ -284,7 +307,12 @@ impl SyncAIHandler {
             "Processing AI query (streaming)"
         );
         let messages = self
-            .build_messages_for_ai(&user_id, &conversation_id, question)
+            .build_messages_for_ai(
+                &user_id,
+                &conversation_id,
+                question,
+                message.reply_to_message_content.as_deref(),
+            )
             .await;
 
         info!(

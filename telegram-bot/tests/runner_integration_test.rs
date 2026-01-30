@@ -280,6 +280,7 @@ async fn test_ai_reply_complete_flow() {
         created_at: chrono::Utc::now(),
         reply_to_message_id: Some("bot_msg_123".to_string()),
         reply_to_message_from_bot: true,
+        reply_to_message_content: Some("Previous bot response".to_string()),
     };
 
     // SyncAIHandler 在链内同步执行：before() 存用户消息，handle() 调 AI 并返回 Reply，after() 存 AI 回复。handle_core_message 返回时链已结束。

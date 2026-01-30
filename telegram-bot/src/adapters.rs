@@ -42,6 +42,7 @@ impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
             created_at: chrono::Utc::now(),
             reply_to_message_id: self.get_reply_to_message_id(),
             reply_to_message_from_bot: self.get_reply_to_message_from_bot(),
+            reply_to_message_content: self.get_reply_to_message_content(),
         }
     }
 }
@@ -59,6 +60,14 @@ impl<'a> TelegramMessageWrapper<'a> {
             .and_then(|m| m.from.as_ref())
             .map(|u| u.is_bot)
             .unwrap_or(false)
+    }
+
+    /// 获取被回复消息的内容（文本），用于作为 AI 上下文
+    fn get_reply_to_message_content(&self) -> Option<String> {
+        self.0
+            .reply_to_message()
+            .and_then(|m| m.text())
+            .map(|s| s.to_string())
     }
 }
 

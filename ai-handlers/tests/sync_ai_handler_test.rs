@@ -86,6 +86,7 @@ fn make_message(
         created_at: Utc::now(),
         reply_to_message_id,
         reply_to_message_from_bot,
+        reply_to_message_content: None,
     }
 }
 
@@ -176,5 +177,78 @@ async fn test_get_question_no_bot_username_mention_ignored() {
     let h = test_handler(Some("bot")).await;
     let msg = make_message("@bot hello", None, false);
     let q = h.get_question(&msg, None);
+    assert_eq!(q, None);
+}
+
+// --- reply_to_message_content 测试 ---
+
+/// 辅助函数：构造带回复内容的 Message
+fn make_message_with_reply_content(
+    content: &str,
+    reply_to_message_id: Option<String>,
+    reply_to_message_from_bot: bool,
+    reply_to_message_content: Option<String>,
+) -> Message {
+    Message {
+        id: "msg_1".to_string(),
+        user: User {
+            id: 123,
+            username: Some("user".to_string()),
+            first_name: Some("User".to_string()),
+            last_name: None,
+        },
+        chat: Chat {
+            id: 456,
+            chat_type: "private".to_string(),
+        },
+        content: content.to_string(),
+        message_type: "text".to_string(),
+        direction: MessageDirection::Incoming,
+        created_at: Utc::now(),
+        reply_to_message_id,
+        reply_to_message_from_bot,
+        reply_to_message_content,
+    }
+}
+
+#[tokio::test]
+async fn test_reply_to_bot_with_content_returns_question() {
+    let h = test_handler(Some("bot")).await;
+    let msg = make_message_with_reply_content(
+        "继续说",
+        Some("bot_msg_123".to_string()),
+        true,
+        Some("这是机器人之前的回复内容".to_string()),
+    );
+    // get_question 应该返回用户当前消息内容
+    let q = h.get_question(&msg, Some("bot"));
+    assert_eq!(q, Some("继续说".to_string()));
+}
+
+#[tokio::test]
+async fn test_reply_to_bot_content_is_preserved() {
+    // 验证 reply_to_message_content 字段被正确设置
+    let msg = make_message_with_reply_content(
+        "用户追问",
+        Some("bot_msg_456".to_string()),
+        true,
+        Some("机器人之前说的话".to_string()),
+    );
+    assert_eq!(msg.reply_to_message_content, Some("机器人之前说的话".to_string()));
+    assert_eq!(msg.reply_to_message_id, Some("bot_msg_456".to_string()));
+    assert!(msg.reply_to_message_from_bot);
+}
+
+#[tokio::test]
+async fn test_reply_to_non_bot_with_content() {
+    let h = test_handler(Some("bot")).await;
+    // 回复非机器人消息时，即使有内容也不应触发 AI
+    let msg = make_message_with_reply_content(
+        "回复用户消息",
+        Some("user_msg_789".to_string()),
+        false,
+        Some("其他用户的消息".to_string()),
+    );
+    let q = h.get_question(&msg, Some("bot"));
     assert_eq!(q, None);
 }

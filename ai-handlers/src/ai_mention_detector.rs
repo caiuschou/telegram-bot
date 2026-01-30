@@ -194,6 +194,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
             reply_to_message_from_bot: false,
+            reply_to_message_content: None,
         };
 
         let result = handler.handle(&message).await;
@@ -232,6 +233,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
             reply_to_message_from_bot: false,
+            reply_to_message_content: None,
         };
 
         let result = handler.handle(&message).await;
@@ -264,6 +266,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: None,
             reply_to_message_from_bot: false,
+            reply_to_message_content: None,
         };
 
         let result = handler.handle(&message).await;
@@ -296,6 +299,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: Some("bot_msg_456".to_string()),
             reply_to_message_from_bot: true,
+            reply_to_message_content: Some("Previous bot message".to_string()),
         };
 
         let result = handler.handle(&message).await;
@@ -334,6 +338,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: Some("user_msg_789".to_string()),
             reply_to_message_from_bot: false,
+            reply_to_message_content: Some("User's previous message".to_string()),
         };
 
         let result = handler.handle(&message).await;
@@ -366,6 +371,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             reply_to_message_id: Some("bot_msg_789".to_string()),
             reply_to_message_from_bot: true,
+            reply_to_message_content: Some("Previous bot message".to_string()),
         };
 
         let result = handler.handle(&message).await;

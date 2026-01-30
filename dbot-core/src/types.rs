@@ -28,6 +28,8 @@ pub struct Message {
     pub reply_to_message_id: Option<String>,
     /// 被回复的那条消息是否由机器人发送；仅当 reply_to_message_id 存在时才有意义，用于判断是否应触发 AI 回复。
     pub reply_to_message_from_bot: bool,
+    /// 被回复消息的内容；用于在 AI 请求中作为上下文，让 AI 了解用户回复的是哪条消息。
+    pub reply_to_message_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
