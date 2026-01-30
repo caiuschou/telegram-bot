@@ -55,7 +55,7 @@ pub(crate) fn embedding_dim_for_config(config: &EmbeddingConfig) -> usize {
             .model
             .as_deref()
             .map(|m| if m.starts_with("embedding-3") { 2048 } else { 1024 })
-            .unwrap_or(1024), // embedding-2 默认 1024
+            .unwrap_or(1024), // embedding-2 default 1024
     }
 }
 

@@ -1,7 +1,6 @@
-//! 单元测试：MemoryMiddleware 的配置、消息与回复写入记忆、上下文构建。
+//! Unit tests for MemoryMiddleware: config, saving user messages and LLM replies to memory, context building.
 //!
-//! 依赖：InMemoryVectorStore；不调用真实外部服务。
-//! 与 memory_middleware 的交互：通过 MemoryConfig、MemoryMiddleware 的公开与 pub(crate) 接口进行测试。
+//! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryMiddleware public/pub(crate) APIs.
 
 use crate::memory_middleware::{MemoryConfig, MemoryMiddleware};
 use chrono::Utc;
@@ -10,7 +9,7 @@ use memory::MemoryRole;
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
 
-/// 构造用于测试的 Message，固定 user_id=123、chat_id=456。
+/// Builds a test Message with fixed user_id=123, chat_id=456.
 fn create_test_message(content: &str) -> Message {
     Message {
         id: "test_message_id".to_string(),
@@ -34,6 +33,7 @@ fn create_test_message(content: &str) -> Message {
     }
 }
 
+/// **Test: MemoryConfig::default() has expected max_recent_messages, max_context_tokens, save flags.**
 #[test]
 fn test_memory_config_default() {
     let config = MemoryConfig::default();
@@ -43,6 +43,7 @@ fn test_memory_config_default() {
     assert!(config.save_llm_responses);
 }
 
+/// **Test: MemoryMiddleware::with_store(store) creates middleware with save_user_messages true.**
 #[test]
 fn test_memory_middleware_creation() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
@@ -64,6 +65,7 @@ fn test_message_to_memory_entry() {
     assert_eq!(entry.metadata.conversation_id, Some("456".to_string()));
 }
 
+/// **Test: before() saves incoming message to store; search_by_user returns one entry.**
 #[tokio::test]
 async fn test_memory_middleware_saves_user_messages() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
@@ -77,6 +79,7 @@ async fn test_memory_middleware_saves_user_messages() {
     assert_eq!(entries[0].content, "Hello");
 }
 
+/// **Test: after() with HandlerResponse::Continue does not save any entry (no reply text).**
 #[tokio::test]
 async fn test_memory_middleware_after_handler_response() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
@@ -108,6 +111,7 @@ async fn test_memory_middleware_after_saves_reply_to_memory() {
     assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
 }
 
+/// **Test: build_context(user_id, conversation_id) returns context string containing saved message.**
 #[tokio::test]
 async fn test_memory_middleware_builds_context() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;

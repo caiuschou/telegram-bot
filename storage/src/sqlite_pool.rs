@@ -1,11 +1,15 @@
 //! SQLite connection pool wrapper for the storage crate.
+//!
+//! Provides [`SqlitePoolManager`] to create and reuse a single pool per database URL;
+//! the database file is created if it does not exist.
 
 use log::info;
 use sqlx::{sqlite::SqliteConnectOptions, SqlitePool};
 
-/// Manages a single SQLite pool; creates DB file if missing.
+/// Manages a single SQLite pool; creates the database file if missing.
 #[derive(Clone)]
 pub struct SqlitePoolManager {
+    /// Underlying sqlx pool for executing queries.
     pool: SqlitePool,
 }
 

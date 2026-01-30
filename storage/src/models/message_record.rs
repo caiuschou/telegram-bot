@@ -6,17 +6,28 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// One row from the messages table; used for save and query results.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct MessageRecord {
+    /// Primary key (e.g. UUID).
     pub id: String,
+    /// Telegram user id.
     pub user_id: i64,
+    /// Chat id.
     pub chat_id: i64,
+    /// Telegram username.
     pub username: Option<String>,
+    /// User first name.
     pub first_name: Option<String>,
+    /// User last name.
     pub last_name: Option<String>,
+    /// Message type (e.g. "text").
     pub message_type: String,
+    /// Message body.
     pub content: String,
+    /// "sent" or "received".
     pub direction: String,
+    /// When the message was stored.
     pub created_at: DateTime<Utc>,
 }
 

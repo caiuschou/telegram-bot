@@ -1,8 +1,7 @@
-//! MockMemoryStore 实现
+//! Mock MemoryStore implementation for tests.
 //!
-//! - 提供一个简单的基于内存的 `MemoryStore` 实现，仅用于测试环境。
-//! - 使用 `HashMap<Uuid, MemoryEntry>` 存储数据，支持按用户和会话查询。
-//! - `semantic_search` 当前实现为截断后的全量返回，后续可按需扩展为真正的相似度搜索。
+//! In-memory [`MemoryStore`] using `HashMap<Uuid, MemoryEntry>`. Supports search_by_user and search_by_conversation.
+//! `semantic_search` returns entries (optionally limited); call counters (store_call_count, query_call_count, semantic_search_call_count) allow assertions.
 
 use std::collections::HashMap;
 use std::sync::{
@@ -14,19 +13,13 @@ use async_trait::async_trait;
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use uuid::Uuid;
 
-/// 简单的内存实现，用于在测试中替代真实向量存储。
-///
-/// 特性：
-/// - 使用 `HashMap<Uuid, MemoryEntry>` 存储数据。
-/// - 提供按用户、会话 ID 的查询能力。
-/// - `semantic_search` 目前实现为简单返回全部数据（按插入顺序）。
-/// - 通过计数器跟踪 `add`、各类查询及 `semantic_search` 调用次数，便于在测试中进行断言。
+/// In-memory MemoryStore for tests. Counters (store_call_count, query_call_count, semantic_search_call_count) for assertions.
 #[derive(Debug, Clone)]
 pub struct MockMemoryStore {
     inner: Arc<Mutex<HashMap<Uuid, MemoryEntry>>>,
     store_call_count: Arc<AtomicUsize>,
     query_call_count: Arc<AtomicUsize>,
-    /// 仅当调用 `semantic_search` 时递增；用于断言「embed + 向量检索」完整执行。
+    /// Incremented only on semantic_search; used to assert embed + vector search ran.
     semantic_search_call_count: Arc<AtomicUsize>,
 }
 
@@ -42,22 +35,22 @@ impl Default for MockMemoryStore {
 }
 
 impl MockMemoryStore {
-    /// 创建新的空 `MockMemoryStore` 实例。
+    /// Creates a new empty MockMemoryStore.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// 获取存储调用次数（例如用户消息和 AI 回复被写入的次数）。
+    /// Returns the number of add/update calls (user messages and AI replies written).
     pub fn get_store_call_count(&self) -> usize {
         self.store_call_count.load(Ordering::SeqCst)
     }
 
-    /// 获取查询调用次数（search_by_user / search_by_conversation / semantic_search 任一调用都会递增）。
+    /// Returns the number of query calls (search_by_user, search_by_conversation, or semantic_search).
     pub fn get_query_call_count(&self) -> usize {
         self.query_call_count.load(Ordering::SeqCst)
     }
 
-    /// 获取语义检索调用次数（仅 `semantic_search` 调用时递增；embed 完成后才会调用）。
+    /// Returns the number of semantic_search calls (incremented only when semantic_search is invoked).
     pub fn get_semantic_search_call_count(&self) -> usize {
         self.semantic_search_call_count.load(Ordering::SeqCst)
     }

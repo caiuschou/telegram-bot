@@ -11,6 +11,7 @@ use tracing::info;
 /// SQLite-backed message persistence and queries (save, get_message_by_id, get_recent_messages_by_chat, get_messages, get_stats).
 #[derive(Clone)]
 pub struct MessageRepository {
+    /// Shared SQLite pool used for all queries.
     pool_manager: SqlitePoolManager,
 }
 
@@ -63,6 +64,7 @@ impl MessageRepository {
         Ok(())
     }
 
+    /// Inserts a single message into the messages table.
     pub async fn save(&self, message: &MessageRecord) -> Result<(), sqlx::Error> {
         let pool = self.pool_manager.pool();
 
@@ -159,6 +161,7 @@ impl MessageRepository {
         })
     }
 
+    /// Returns messages matching the query (optional user_id, chat_id, limit, offset), ordered by created_at DESC.
     pub async fn get_messages(
         &self,
         query: &MessageQuery,
@@ -209,6 +212,7 @@ impl MessageRepository {
         Ok(messages)
     }
 
+    /// Returns messages whose content contains the keyword (LIKE %keyword%), with optional limit.
     pub async fn search_messages(
         &self,
         keyword: &str,
@@ -238,6 +242,7 @@ impl MessageRepository {
         Ok(messages)
     }
 
+    /// Deletes messages older than the given number of days; returns the number of rows deleted.
     pub async fn cleanup_old_messages(&self, days: i32) -> Result<u64, sqlx::Error> {
         let pool = self.pool_manager.pool();
         let cutoff_date = Local::now() - chrono::Duration::days(days as i64);
@@ -272,6 +277,7 @@ impl MessageRepository {
         Ok(message)
     }
 
+    /// Returns the most recent messages for a chat, ordered by created_at DESC, up to the given limit.
     pub async fn get_recent_messages_by_chat(
         &self,
         chat_id: i64,

@@ -8,6 +8,7 @@ use prompt::{
     parse_message_line, ChatMessage, MessageRole, SECTION_RECENT, SECTION_SEMANTIC,
 };
 
+/// **Test: When include_system is true and system_message is set, output contains "System: {message}".**
 #[test]
 fn format_includes_system_when_requested() {
     let out = format_for_model(
@@ -20,6 +21,7 @@ fn format_includes_system_when_requested() {
     assert!(out.contains("System: You are helpful."));
 }
 
+/// **Test: When include_system is false, output does not contain "System:".**
 #[test]
 fn format_omits_system_when_not_requested() {
     let out = format_for_model(
@@ -32,6 +34,7 @@ fn format_omits_system_when_not_requested() {
     assert!(!out.contains("System:"));
 }
 
+/// **Test: When user_preferences is set, output contains "User Preferences: {preferences}".**
 #[test]
 fn format_includes_preferences() {
     let out = format_for_model(
@@ -44,6 +47,7 @@ fn format_includes_preferences() {
     assert!(out.contains("User Preferences: Pref: English"));
 }
 
+/// **Test: Recent and semantic sections are present with correct content (SECTION_RECENT, SECTION_SEMANTIC, lines).**
 #[test]
 fn format_includes_recent_and_semantic_sections() {
     let out = format_for_model(
@@ -61,6 +65,7 @@ fn format_includes_recent_and_semantic_sections() {
     assert!(out.contains("猫吃鱼"));
 }
 
+/// **Test: format_for_model accepts Vec<String> and Vec<&str> for recent and semantic iterators.**
 #[test]
 fn format_accepts_string_slices() {
     let recent: Vec<String> = vec!["A".into(), "B".into()];
@@ -80,6 +85,7 @@ fn format_accepts_string_slices() {
 
 // --- format_for_model_as_messages (OpenAI one-to-one) ---
 
+/// **Test: With no system/preferences/recent/semantic, result is a single User message with current_question.**
 #[test]
 fn format_as_messages_returns_user_question_only_when_no_context() {
     let msgs = format_for_model_as_messages(
@@ -95,6 +101,7 @@ fn format_as_messages_returns_user_question_only_when_no_context() {
     assert_eq!(msgs[0].content, "What is AI?");
 }
 
+/// **Test: When include_system and system_message are set, first message is System, then User(question).**
 #[test]
 fn format_as_messages_includes_system_when_requested() {
     let msgs = format_for_model_as_messages(
@@ -112,6 +119,7 @@ fn format_as_messages_includes_system_when_requested() {
     assert_eq!(msgs[1].content, "Hi");
 }
 
+/// **Test: One User message contains preferences + recent block; second message is current question.**
 #[test]
 fn format_as_messages_context_block_then_question() {
     let msgs = format_for_model_as_messages(
@@ -131,6 +139,7 @@ fn format_as_messages_context_block_then_question() {
     assert_eq!(msgs[1].content, "那猫呢？");
 }
 
+/// **Test: ChatMessage::system/user/assistant set role and content correctly.**
 #[test]
 fn chat_message_constructors() {
     let s = ChatMessage::system("sys");
@@ -146,6 +155,7 @@ fn chat_message_constructors() {
 
 // --- parse_message_line (User / Assistant / System) ---
 
+/// **Test: "User: hello" parses to User role with content "hello".**
 #[test]
 fn parse_message_line_user() {
     let msg = parse_message_line("User: hello").unwrap();
@@ -153,6 +163,7 @@ fn parse_message_line_user() {
     assert_eq!(msg.content, "hello");
 }
 
+/// **Test: "Assistant: hi there" parses to Assistant role with trimmed content.**
 #[test]
 fn parse_message_line_assistant() {
     let msg = parse_message_line("Assistant: hi there").unwrap();
@@ -167,12 +178,14 @@ fn parse_message_line_system() {
     assert_eq!(msg.content, "You are helpful.");
 }
 
+/// **Test: Content after prefix is trimmed (e.g. "  User:  foo  " -> content "foo").**
 #[test]
 fn parse_message_line_trimmed() {
     let msg = parse_message_line("  User:  foo  ").unwrap();
     assert_eq!(msg.content, "foo");
 }
 
+/// **Test: Empty line or unknown prefix returns None.**
 #[test]
 fn parse_message_line_unknown_returns_none() {
     assert!(parse_message_line("").is_none());
@@ -200,6 +213,7 @@ fn format_with_roles_recent_as_one_user_block() {
     assert_eq!(msgs[1].content, "那猫呢？");
 }
 
+/// **Test: Order is System, User(recent block), User(question); three messages.**
 #[test]
 fn format_with_roles_includes_system_then_recent_then_question() {
     let msgs = format_for_model_as_messages_with_roles(

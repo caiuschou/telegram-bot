@@ -1,14 +1,13 @@
-//! 单元测试：PersistenceMiddleware 的创建与 before 持久化行为。
+//! Unit tests for PersistenceMiddleware: creation and before() persistence.
 //!
-//! 依赖：内存 SQLite（sqlite::memory:）；不依赖外部数据库。
-//! 与 persistence_middleware 的交互：通过 PersistenceMiddleware 公开接口进行测试。
+//! Uses in-memory SQLite (sqlite::memory:); no external DB. Tests via PersistenceMiddleware public API.
 
 use crate::persistence_middleware::PersistenceMiddleware;
 use dbot_core::{Message, MessageDirection, Middleware};
 use storage::MessageRepository;
 use chrono::Utc;
 
-/// 构造用于测试的 Message，固定 user_id=123、chat_id=456。
+/// Builds a test Message with fixed user_id=123, chat_id=456.
 fn create_test_message(content: &str) -> Message {
     Message {
         id: "test_message_id".to_string(),
@@ -40,6 +39,7 @@ async fn test_persistence_middleware_creation() {
     let _middleware = PersistenceMiddleware::new(repo);
 }
 
+/// **Test: before() persists message to repo; get_message_by_id returns the saved message.**
 #[tokio::test]
 async fn test_persistence_middleware_before() {
     let repo = MessageRepository::new("sqlite::memory:")

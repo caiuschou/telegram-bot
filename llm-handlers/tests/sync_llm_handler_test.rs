@@ -109,6 +109,7 @@ fn make_message(
 
 // --- is_bot_mentioned ---
 
+/// **Test: is_bot_mentioned returns true when text contains @my_bot (any position).**
 #[tokio::test]
 async fn test_is_bot_mentioned_contains_mention() {
     let h = test_handler(Some("my_bot")).await;
@@ -117,6 +118,7 @@ async fn test_is_bot_mentioned_contains_mention() {
     assert!(h.is_bot_mentioned("prefix @my_bot suffix", "my_bot"));
 }
 
+/// **Test: is_bot_mentioned returns false for no @, @other_bot, or plain "my_bot".**
 #[tokio::test]
 async fn test_is_bot_mentioned_no_mention() {
     let h = test_handler(Some("my_bot")).await;
@@ -138,6 +140,7 @@ async fn test_extract_question_removes_mention_and_trims() {
     assert_eq!(h.extract_question("@bot", "bot"), "");
 }
 
+/// **Test: When no @-mention, extract_question returns trimmed content.**
 #[tokio::test]
 async fn test_extract_question_no_mention_returns_trimmed() {
     let h = test_handler(Some("bot")).await;
@@ -157,6 +160,7 @@ async fn test_get_question_reply_to_bot_returns_content() {
     assert_eq!(q, Some("What is 2+2?".to_string()));
 }
 
+/// **Test: When replying to non-bot message, get_question returns None.**
 #[tokio::test]
 async fn test_get_question_reply_to_non_bot_returns_none() {
     let h = test_handler(Some("bot")).await;
@@ -173,6 +177,7 @@ async fn test_get_question_mention_with_non_empty_question() {
     assert_eq!(q, Some("tell me the time".to_string()));
 }
 
+/// **Test: @bot only (no text) returns DEFAULT_EMPTY_MENTION_QUESTION.**
 #[tokio::test]
 async fn test_get_question_mention_only_returns_default() {
     let h = test_handler(Some("bot")).await;
@@ -189,6 +194,7 @@ async fn test_get_question_no_reply_no_mention_returns_none() {
     assert_eq!(q, None);
 }
 
+/// **Test: When bot_username is None, @bot mention is ignored; returns None.**
 #[tokio::test]
 async fn test_get_question_no_bot_username_mention_ignored() {
     let h = test_handler(Some("bot")).await;

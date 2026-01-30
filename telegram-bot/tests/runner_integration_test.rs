@@ -1,13 +1,7 @@
-//! runner 集成测试工具
+//! Integration tests for telegram-bot runner (run_bot, TelegramBot, handle_core_message).
 //!
-//! - 对 `telegram-bot/src/runner.rs` 中 `run_bot` 的集成测试提供基础工具。
-//! - 与外部交互：
-//!   - 通过 `.env.test` / `.env` 加载真实/测试配置（OPENAI_API_KEY 等）。
-//!   - 使用临时目录作为数据库与日志路径，避免污染工作区。
-//!   - 通过 `MockMemoryStore` 在测试中替代真实向量存储。
-//!
-//! 上下文策略参考：`docs/rag/context-retrieval-before-reply.md`（RecentMessagesStrategy、
-//! SemanticSearchStrategy 等）；预写入消息后 LLM 会在 build_memory_context 中检索到这些条目再生成回复。
+//! Loads config from `.env.test` or `.env`; uses temp dirs for DB and logs; uses MockMemoryStore instead of real vector store.
+//! Pre-seeded memory entries are retrieved by context strategies when building LLM context.
 
 use std::env;
 use std::sync::Once;
@@ -22,23 +16,12 @@ use tracing_subscriber::{fmt, EnvFilter};
 mod mock_memory_store;
 use mock_memory_store::MockMemoryStore;
 
-/// 设置测试配置，使用 `.env.test` / `.env` 与临时目录
-///
-/// 行为：
-/// - 使用 dotenvy 尝试加载 `.env.test`，失败时回退到默认 `.env`。
-/// - 若关键环境变量未设置，则填充合理的默认测试值。
-/// - 使用 `TempDir` 为 `DATABASE_URL`、`MEMORY_SQLITE_PATH` 等路径创建隔离目录。
-///
-/// 外部交互：
-/// - 读取工作目录下的 `.env.test` / `.env`。
-/// - 仅在测试进程生命周期内创建临时文件/目录。
+/// Builds BotConfig for tests: loads .env.test or .env, sets defaults for missing vars, uses temp dir for DB/log paths.
 fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
-    // 优先从 .env.test 加载，其次是默认 .env（若存在）
     let _ = dotenvy::from_filename(".env.test").or_else(|_| dotenvy::dotenv());
 
     let temp_path = temp_dir.path();
 
-    // 必要配置：如果未设置则提供测试默认值/报错
     if env::var("BOT_TOKEN").is_err() {
         env::set_var("BOT_TOKEN", "test_bot_token_12345");
     }
