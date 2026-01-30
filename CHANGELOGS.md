@@ -53,6 +53,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **文档**：`.env.example` 增加 MEMORY_RECENT_LIMIT、MEMORY_RELEVANT_TOP_K 注释；`docs/rag/configuration.md` 增加「Telegram Bot 实现的环境变量」表及推荐范围（recent 5–20，top_k 3–10）。
   - **单元测试**：`telegram-bot/src/config.rs` 新增 `test_load_config_memory_recent_limit_and_top_k`，覆盖默认值与显式设置。
 - **向量搜索准确度优化开发计划**：新增 `docs/rag/vector-search-accuracy-plan.md`，以表格形式列出配置接入（MEMORY_RELEVANT_TOP_K / MEMORY_RECENT_LIMIT）、相似度阈值过滤、Lance 检索精度可选优化及文档与 CHANGELOG 等任务；`docs/rag/README.md` 增加该计划入口链接。
+- **向量搜索准确度优化阶段 2：相似度阈值过滤与可观测性**
+  - **设计决策**：`MemoryStore::semantic_search` 扩展为返回 `Vec<(f32, MemoryEntry)>`（相似度分数 + 条目），决策与理由记录在 `docs/rag/memory/vector-search-accuracy.md`。
+  - **memory-core**：`semantic_search` 返回类型改为 `Result<Vec<(f32, MemoryEntry)>, anyhow::Error>`。
+  - **memory-lance**：从 Lance 结果 batch 读取 `_distance` 列并转换为相似度分数后返回；无 `_distance` 时使用 1.0。
+  - **memory-sqlite / memory-inmemory**：语义检索内部已有相似度计算，改为返回 `(score, entry)` 列表。
+  - **SemanticSearchStrategy**：新增 `min_score: f32` 参数（0.0 表示不过滤）；只保留 `score >= min_score` 的条目；打日志「向量检索 分数分布」（min/mean/max、条数）；全部被阈值过滤时打 warning。
+  - **BotConfig**：新增 `memory_semantic_min_score`，从环境变量 `MEMORY_SEMANTIC_MIN_SCORE` 读取，默认 0.0。
+  - **文档**：`docs/rag/memory/vector-search-accuracy.md` 含配置项、成本与准确度权衡表、异常与降级说明；`docs/rag/configuration.md` 与 `.env.example` 增加 MEMORY_SEMANTIC_MIN_SCORE。
+  - **单元测试**：`memory-strategies/tests/semantic_search_test.rs` 增加 `test_semantic_search_min_score_filters_low_scores`、`test_semantic_search_min_score_zero_keeps_all`；config 测试增加对 `memory_semantic_min_score` 默认值与显式设置的断言。
+- **向量搜索准确度优化阶段 3：Lance 检索精度可选与 fetch_limit 可配置**
+  - **调研**：`docs/rag/LANCE_API_RESEARCH.md` 增加「Accuracy vs speed」小节，记录 Lance Rust 0.23 的 `bypass_vector_index()`（精确/暴力搜索）、`refine_factor`（IVF-PQ 精排）、`nprobes`（IVF 分区数）。
+  - **memory-lance LanceConfig**：新增 `use_exact_search`（默认 false）、`refine_factor`（Option<u32>）、`nprobes`（Option<usize>）、`semantic_fetch_multiplier`（默认 10）；默认值不改变现有调用方行为。
+  - **LanceVectorStore::semantic_search**：按配置在构建查询时链式调用 `bypass_vector_index()`、`refine_factor(rf)`、`nprobes(np)`；过滤时 `fetch_limit = limit × semantic_fetch_multiplier`（至少 50）。
+  - **文档**：`docs/rag/LANCE_USAGE.md` 增加「准确度与速度权衡」表与 LanceConfig 示例；`docs/rag/memory/vector-search-accuracy.md` 增加「Lance 检索参数」表；`docs/rag/vector-search-accuracy-plan.md` 阶段 3 任务标记为已完成。
+- **向量搜索准确度优化阶段 4：文档与 CHANGELOG 收尾**
+  - **docs/rag/README.md**：已包含「向量搜索准确度优化计划」「向量搜索准确度」子页及「配置」入口链接（阶段 2 已加）。
+  - **docs/rag/memory/vector-search-accuracy.md**：补全「距离度量与索引选择」「Embedding 模型建议」小节；含 Top-K、阈值、Lance 检索参数、三档推荐、异常与降级。
+  - **CHANGELOGS.md**：阶段 1–3 相关变更已按 [Unreleased] 记录；本阶段标记计划 4.1–4.3 已完成。
+- **向量搜索准确度优化任务 4.4：语义检索回归集**
+  - **memory-lance**：新增集成测试 `test_semantic_search_regression_golden_cases`，3 条黄金用例（one-hot 查询→期望命中 "entry A/B/C"），可复现、无外部 API，便于 CI 稳定。
+  - **docs/rag/memory/vector-search-accuracy.md**：新增「语义检索回归集（黄金用例）」小节，约定 fixture、用例表与验证命令。
 - **写入记忆时算 embedding**：MemoryMiddleware 保存用户消息与 AI 回复时若配置了 embedding_service，则先对 content 做 embed，再写入 entry.embedding，使新消息参与语义检索。
   - **middleware**：MemoryConfig 新增 `embedding_service: Option<Arc<dyn EmbeddingService>>`；新增 `MemoryMiddleware::with_store_and_embedding(store, embedding_service)`；before()/after() 中若 embedding_service 为 Some 则调用 `embed(&content).await` 并设置 `entry.embedding`，失败时仍保存但不带 embedding。
   - **telegram-bot runner**：BotComponents 新增 `embedding_service`；创建 MemoryMiddleware 改为 `with_store_and_embedding(components.memory_store, components.embedding_service)`。

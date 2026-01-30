@@ -204,7 +204,7 @@ impl MemoryStore for InMemoryVectorStore {
         limit: usize,
         user_id: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+    ) -> Result<Vec<(f32, MemoryEntry)>, anyhow::Error> {
         info!(
             dimension = query_embedding.len(),
             limit = limit,
@@ -240,10 +240,9 @@ impl MemoryStore for InMemoryVectorStore {
 
         similarities.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        let results: Vec<MemoryEntry> = similarities
+        let results: Vec<(f32, MemoryEntry)> = similarities
             .into_iter()
             .take(limit)
-            .map(|(_, entry)| entry)
             .collect();
 
         info!(
@@ -391,7 +390,7 @@ mod tests {
         let results = store.semantic_search(&query, 2, None, None).await.unwrap();
 
         assert_eq!(results.len(), 2);
-        assert_eq!(results[0].content, "Hello world");
+        assert_eq!(results[0].1.content, "Hello world");
     }
 
     #[tokio::test]

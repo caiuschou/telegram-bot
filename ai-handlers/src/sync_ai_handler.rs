@@ -51,6 +51,8 @@ pub struct SyncAIHandler {
     pub(crate) memory_recent_limit: usize,
     /// 语义检索 Top-K，用于 ContextBuilder 的 SemanticSearchStrategy（对应配置 MEMORY_RELEVANT_TOP_K）。
     pub(crate) memory_relevant_top_k: usize,
+    /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤（对应配置 MEMORY_SEMANTIC_MIN_SCORE）。
+    pub(crate) memory_semantic_min_score: f32,
 }
 
 impl SyncAIHandler {
@@ -68,6 +70,7 @@ impl SyncAIHandler {
         thinking_message: String,
         memory_recent_limit: usize,
         memory_relevant_top_k: usize,
+        memory_semantic_min_score: f32,
     ) -> Self {
         Self {
             bot_username,
@@ -81,6 +84,7 @@ impl SyncAIHandler {
             thinking_message,
             memory_recent_limit,
             memory_relevant_top_k,
+            memory_semantic_min_score,
         }
     }
 
@@ -151,6 +155,7 @@ impl SyncAIHandler {
             .with_strategy(Box::new(SemanticSearchStrategy::new(
                 self.memory_relevant_top_k,
                 self.embedding_service.clone(),
+                self.memory_semantic_min_score,
             )))
             .with_strategy(Box::new(UserPreferencesStrategy::new()))
             .with_token_limit(4096)

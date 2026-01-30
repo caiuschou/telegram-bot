@@ -127,7 +127,7 @@ async fn test_lance_all_three_strategies_build_context() {
 
     let context = ContextBuilder::new(store_arc)
         .with_strategy(Box::new(RecentMessagesStrategy::new(10)))
-        .with_strategy(Box::new(SemanticSearchStrategy::new(3, embedding)))
+        .with_strategy(Box::new(SemanticSearchStrategy::new(3, embedding, 0.0)))
         .with_strategy(Box::new(UserPreferencesStrategy::new()))
         .for_user("u1")
         .for_conversation("c1")

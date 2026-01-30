@@ -62,13 +62,13 @@
 
 | ID | 任务 | 工时 | 依赖 | 状态 | 验收标准 |
 |----|------|------|------|------|----------|
-| 2.1 | MemoryStore::semantic_search 是否返回分数：评估接口（带分数 vs 仅条目） | 1h | 无 | 待开始 | 决策：在 store 层返回 (score, entry) 或仅在策略层做二次过滤；如改 trait 需兼容 Lance/SQLite/InMemory；**将决策结论与理由记录在 docs/rag/memory/vector-search-accuracy.md 或 implementation 的设计决策小节** |
-| 2.2 | LanceVectorStore::semantic_search 返回相似度分数 | 2h | 2.1 | 待开始 | 查询结果带分数（或与现有 nearest_to 结果一致），供策略层或统一过滤使用 |
-| 2.3 | SQLiteVectorStore / InMemoryVectorStore 返回相似度分数（仅当 2.1 决定扩展 trait 时执行） | 2h | 2.2 | 待开始 | 与 Lance 行为一致，接口统一；若 2.1 决策为不改 trait 则本任务跳过 |
-| 2.4 | SemanticSearchStrategy 支持最小相似度阈值，过滤低分条目 | 1.5h | 2.2 | 待开始 | 可配置 threshold（如 0.0 表示不过滤），只保留 score >= threshold 的条目 |
-| 2.5 | BotConfig 增加 memory_semantic_min_score，默认 0.0（不破坏现有行为） | 0.5h | 2.4 | 待开始 | 环境变量 MEMORY_SEMANTIC_MIN_SCORE，解析为 f32，文档说明推荐范围（如 0.6–0.8） |
-| 2.6 | 为阈值过滤编写单元/集成测试 | 1.5h | 2.5 | 待开始 | 测试放在 memory-strategies / memory-lance 等 crate 的 tests/；覆盖：低于阈值不返回、高于阈值保留、阈值为 0 时行为与现有一致 |
-| 2.7 | 语义检索可观测：打日志（top_k 分数 min/mean/max、命中条数）；全部被阈值过滤时打 warning | 1h | 2.4 | 待开始 | 便于调参与排错，日志可采样或按 debug 级别 |
+| 2.1 | MemoryStore::semantic_search 是否返回分数：评估接口（带分数 vs 仅条目） | 1h | 无 | 已完成 | 决策：在 store 层返回 (score, entry) 或仅在策略层做二次过滤；如改 trait 需兼容 Lance/SQLite/InMemory；**将决策结论与理由记录在 docs/rag/memory/vector-search-accuracy.md 或 implementation 的设计决策小节** |
+| 2.2 | LanceVectorStore::semantic_search 返回相似度分数 | 2h | 2.1 | 已完成 | 查询结果带分数（或与现有 nearest_to 结果一致），供策略层或统一过滤使用 |
+| 2.3 | SQLiteVectorStore / InMemoryVectorStore 返回相似度分数（仅当 2.1 决定扩展 trait 时执行） | 2h | 2.2 | 已完成 | 与 Lance 行为一致，接口统一；若 2.1 决策为不改 trait 则本任务跳过 |
+| 2.4 | SemanticSearchStrategy 支持最小相似度阈值，过滤低分条目 | 1.5h | 2.2 | 已完成 | 可配置 threshold（如 0.0 表示不过滤），只保留 score >= threshold 的条目 |
+| 2.5 | BotConfig 增加 memory_semantic_min_score，默认 0.0（不破坏现有行为） | 0.5h | 2.4 | 已完成 | 环境变量 MEMORY_SEMANTIC_MIN_SCORE，解析为 f32，文档说明推荐范围（如 0.6–0.8） |
+| 2.6 | 为阈值过滤编写单元/集成测试 | 1.5h | 2.5 | 已完成 | 测试放在 memory-strategies / memory-lance 等 crate 的 tests/；覆盖：低于阈值不返回、高于阈值保留、阈值为 0 时行为与现有一致 |
+| 2.7 | 语义检索可观测：打日志（top_k 分数 min/mean/max、命中条数）；全部被阈值过滤时打 warning | 1h | 2.4 | 已完成 | 便于调参与排错，日志可采样或按 debug 级别 |
 
 **阶段 2 小计**：约 9.5 工时
 
@@ -82,11 +82,11 @@
 
 | ID | 任务 | 工时 | 依赖 | 状态 | 验收标准 |
 |----|------|------|------|------|----------|
-| 3.1 | 调研 Lance 当前 API：refine_factor / nprobe / 精确检索选项 | 2h | 无 | 待开始 | 文档或代码注释记录：如何提高精度、是否支持仅暴力搜索 |
-| 3.2 | LanceConfig 增加可选参数（如 use_exact_search 或 refine_factor） | 1h | 3.1 | 待开始 | 配置项有默认值，不改变现有调用方行为 |
-| 3.3 | LanceVectorStore::semantic_search 根据配置选择检索方式 | 2h | 3.2 | 待开始 | 小数据量或明确要求时可用精确检索；否则保持现有逻辑 |
-| 3.4 | 文档更新：LANCE_USAGE.md、configuration 说明何时追求准确度、何时追求速度 | 1h | 3.3 | 待开始 | 用户能根据场景选择“高准确度”或“高性能” |
-| 3.5 | Lance 过滤时 fetch_limit 可配置或调大（user_id/conversation_id 过滤后条数不足时） | 1h | 3.1 | 待开始 | 如新增环境变量（如 MEMORY_SEMANTIC_FETCH_MULTIPLIER 或 LANCE_*），需在阶段 4.2 子页配置项表中列出；文档说明适用场景 |
+| 3.1 | 调研 Lance 当前 API：refine_factor / nprobe / 精确检索选项 | 2h | 无 | 已完成 | 文档或代码注释记录：如何提高精度、是否支持仅暴力搜索 |
+| 3.2 | LanceConfig 增加可选参数（如 use_exact_search 或 refine_factor） | 1h | 3.1 | 已完成 | 配置项有默认值，不改变现有调用方行为 |
+| 3.3 | LanceVectorStore::semantic_search 根据配置选择检索方式 | 2h | 3.2 | 已完成 | 小数据量或明确要求时可用精确检索；否则保持现有逻辑 |
+| 3.4 | 文档更新：LANCE_USAGE.md、configuration 说明何时追求准确度、何时追求速度 | 1h | 3.3 | 已完成 | 用户能根据场景选择“高准确度”或“高性能” |
+| 3.5 | Lance 过滤时 fetch_limit 可配置或调大（user_id/conversation_id 过滤后条数不足时） | 1h | 3.1 | 已完成 | 如新增环境变量（如 MEMORY_SEMANTIC_FETCH_MULTIPLIER 或 LANCE_*），需在阶段 4.2 子页配置项表中列出；文档说明适用场景 |
 
 **阶段 3 小计**：约 7 工时
 
@@ -100,10 +100,10 @@
 
 | ID | 任务 | 工时 | 依赖 | 状态 | 验收标准 |
 |----|------|------|------|------|----------|
-| 4.1 | docs/rag/README.md 增加“向量搜索准确度优化”入口链接 | 0.5h | 阶段 1–3 | 待开始 | 索引可链到本开发计划及 configuration |
-| 4.2 | 编写 docs/rag/memory/vector-search-accuracy.md：优化手段汇总、配置项、推荐值；含「成本与准确度权衡」表、「异常与降级」、embedding 模型建议 | 2.5h | 4.1 | 待开始 | 子页路径固定为 docs/rag/memory/vector-search-accuracy.md；含 Top-K、阈值、距离度量、索引选择及阶段 3 新增的 Lance/内存相关环境变量；高准确度/平衡/高速度三档推荐配置；embedding 失败与检索为空的降级说明 |
-| 4.3 | 在 CHANGELOGS.md 中记录“向量搜索准确度优化”相关变更 | 0.5h | 4.2 | 待开始 | 按版本或日期记录新增配置与行为变化 |
-| 4.4 | （可选）建立语义检索回归集：3～5 条黄金用例（查询→期望命中），集成测试或脚本断言召回包含期望 | 2h | 2.6 | 待开始 | 用例的查询与期望命中的 message_id/内容来自可复现的 fixture 或文档约定，便于 CI 稳定；可选 P1 |
+| 4.1 | docs/rag/README.md 增加“向量搜索准确度优化”入口链接 | 0.5h | 阶段 1–3 | 已完成 | 索引可链到本开发计划及 configuration |
+| 4.2 | 编写 docs/rag/memory/vector-search-accuracy.md：优化手段汇总、配置项、推荐值；含「成本与准确度权衡」表、「异常与降级」、embedding 模型建议 | 2.5h | 4.1 | 已完成 | 子页路径固定为 docs/rag/memory/vector-search-accuracy.md；含 Top-K、阈值、距离度量、索引选择及阶段 3 新增的 Lance/内存相关环境变量；高准确度/平衡/高速度三档推荐配置；embedding 失败与检索为空的降级说明 |
+| 4.3 | 在 CHANGELOGS.md 中记录“向量搜索准确度优化”相关变更 | 0.5h | 4.2 | 已完成 | 按版本或日期记录新增配置与行为变化 |
+| 4.4 | （可选）建立语义检索回归集：3～5 条黄金用例（查询→期望命中），集成测试或脚本断言召回包含期望 | 2h | 2.6 | 已完成 | 用例的查询与期望命中的 message_id/内容来自可复现的 fixture 或文档约定，便于 CI 稳定；可选 P1 |
 
 **阶段 4 小计**：约 5～7 工时（含 4.4 则+2h）
 

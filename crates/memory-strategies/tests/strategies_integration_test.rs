@@ -58,7 +58,7 @@ async fn test_all_strategies_integration() {
         .unwrap();
 
     let recent = RecentMessagesStrategy::new(10);
-    let semantic = SemanticSearchStrategy::new(5, Arc::new(common::MockEmbeddingService));
+    let semantic = SemanticSearchStrategy::new(5, Arc::new(common::MockEmbeddingService), 0.0);
     let preferences = UserPreferencesStrategy::new();
 
     let recent_result = recent

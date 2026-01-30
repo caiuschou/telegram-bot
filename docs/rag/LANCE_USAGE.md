@@ -99,7 +99,7 @@ store.create_index(memory::LanceIndexType::Auto).await?;
 
 ### 配置选项
 
-Lance 支持多种配置选项：
+Lance 支持多种配置选项（见 `memory_lance::LanceConfig`）：
 
 ```rust
 use memory::{LanceConfig, DistanceType};
@@ -109,10 +109,24 @@ let config = LanceConfig {
     table_name: "memories".to_string(),
     embedding_dim: 1536,  // OpenAI text-embedding-ada-002
     distance_type: DistanceType::Cosine,
+    use_exact_search: false,       // true = 跳过索引、暴力搜索，最准但最慢
+    refine_factor: None,           // IVF-PQ 时可选，如 Some(3) 提高排序精度
+    nprobes: None,                 // IVF 时可选，如 Some(50) 提高召回
+    semantic_fetch_multiplier: 10, // 按 user/conversation 过滤时 fetch_limit = limit × 此值
 };
 
 let store = LanceVectorStore::with_config(config).await?;
 ```
+
+### 准确度与速度权衡
+
+| 场景 | 建议配置 | 说明 |
+|------|----------|------|
+| **高准确度**（小/中表或可接受延迟） | `use_exact_search: true` | 跳过索引，暴力最近邻；结果最准。 |
+| **高准确度**（有 IVF-PQ 索引） | `refine_factor: Some(3)`、`nprobes: Some(50)` | 多分区 + 精排，召回与排序更好。 |
+| **高速度**（默认） | 不设或默认值 | 使用索引与默认 nprobes，延迟最低。 |
+
+详见 [向量搜索准确度](memory/vector-search-accuracy.md) 与 [LANCE_API_RESEARCH](LANCE_API_RESEARCH.md)。
 
 ## 故障排查
 

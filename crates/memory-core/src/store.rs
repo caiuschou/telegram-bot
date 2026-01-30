@@ -33,13 +33,15 @@ pub trait MemoryStore: Send + Sync {
         conversation_id: &str,
     ) -> Result<Vec<MemoryEntry>, anyhow::Error>;
 
-    /// Performs semantic search using vector embeddings. Returns the top `limit` most similar entries.
+    /// Performs semantic search using vector embeddings. Returns the top `limit` most similar entries
+    /// with similarity scores (higher = more similar, e.g. cosine similarity in [0, 1]).
     /// When `user_id` or `conversation_id` is provided, only entries matching those filters are considered.
+    /// Callers (e.g. SemanticSearchStrategy) may filter by score using MEMORY_SEMANTIC_MIN_SCORE.
     async fn semantic_search(
         &self,
         query_embedding: &[f32],
         limit: usize,
         user_id: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error>;
+    ) -> Result<Vec<(f32, MemoryEntry)>, anyhow::Error>;
 }

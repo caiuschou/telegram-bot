@@ -93,8 +93,13 @@ impl MemoryStore for MockStore {
         limit: usize,
         _user_id: Option<&str>,
         _conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+    ) -> Result<Vec<(f32, MemoryEntry)>, anyhow::Error> {
         let entries = self.entries.read().await;
-        Ok(entries.values().take(limit).cloned().collect())
+        Ok(entries
+            .values()
+            .take(limit)
+            .cloned()
+            .map(|e| (1.0_f32, e))
+            .collect())
     }
 }

@@ -29,6 +29,8 @@ pub struct BotConfig {
     pub memory_recent_limit: u32,
     /// 语义检索返回条数上限（Top-K），用于 RAG 上下文中的 SemanticSearchStrategy。环境变量：`MEMORY_RELEVANT_TOP_K`，默认 5。
     pub memory_relevant_top_k: u32,
+    /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤。环境变量：`MEMORY_SEMANTIC_MIN_SCORE`，默认 0.0。推荐范围 0.6–0.8。
+    pub memory_semantic_min_score: f32,
 }
 
 impl BotConfig {
@@ -80,6 +82,10 @@ impl BotConfig {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(5);
+        let memory_semantic_min_score = env::var("MEMORY_SEMANTIC_MIN_SCORE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
 
         Ok(Self {
             bot_token,
@@ -100,6 +106,7 @@ impl BotConfig {
             telegram_api_url,
             memory_recent_limit,
             memory_relevant_top_k,
+            memory_semantic_min_score,
         })
     }
 }
@@ -134,6 +141,7 @@ mod tests {
         env::remove_var("MEMORY_RELEVANT_TOP_K");
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
         env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -153,6 +161,7 @@ mod tests {
         assert_eq!(config.memory_recent_limit, 10);
         assert_eq!(config.memory_relevant_top_k, 5);
         assert_eq!(config.memory_recent_use_sqlite, false);
+        assert_eq!(config.memory_semantic_min_score, 0.0);
     }
 
     #[test]
@@ -186,6 +195,7 @@ mod tests {
         env::remove_var("MEMORY_RELEVANT_TOP_K");
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
         env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -211,19 +221,24 @@ mod tests {
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
         env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
 
         let config = BotConfig::load(None).unwrap();
         assert_eq!(config.memory_recent_limit, 10);
         assert_eq!(config.memory_relevant_top_k, 5);
+        assert_eq!(config.memory_semantic_min_score, 0.0);
 
         env::set_var("MEMORY_RECENT_LIMIT", "20");
         env::set_var("MEMORY_RELEVANT_TOP_K", "8");
+        env::set_var("MEMORY_SEMANTIC_MIN_SCORE", "0.7");
         let config = BotConfig::load(None).unwrap();
         assert_eq!(config.memory_recent_limit, 20);
         assert_eq!(config.memory_relevant_top_k, 8);
+        assert_eq!(config.memory_semantic_min_score, 0.7);
 
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
+        env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
     }
 
     #[test]

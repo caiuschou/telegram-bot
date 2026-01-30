@@ -76,7 +76,7 @@ impl MemoryStore for MockStore {
         _limit: usize,
         _user_id: Option<&str>,
         _conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>, anyhow::Error> {
+    ) -> Result<Vec<(f32, MemoryEntry)>, anyhow::Error> {
         Ok(Vec::new())
     }
 }

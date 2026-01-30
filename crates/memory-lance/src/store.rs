@@ -399,6 +399,26 @@ impl LanceVectorStore {
         );
         Ok(entries)
     }
+
+    /// Converts Lance _distance to similarity score (higher = more similar).
+    /// For Cosine distance: Lance typically returns 1 - cos_sim, so similarity = 1.0 - distance.
+    /// If _distance column is missing, returns 1.0.
+    fn distance_to_similarity(batch: &RecordBatch, distance_col_idx: Option<usize>, row: usize) -> f32 {
+        let Some(idx) = distance_col_idx else {
+            return 1.0;
+        };
+        let col = match batch.column(idx).as_any().downcast_ref::<Float32Array>() {
+            Some(a) => a,
+            None => return 1.0,
+        };
+        let distance = if col.is_null(row) {
+            0.0
+        } else {
+            col.value(row)
+        };
+        // Cosine distance in Lance: smaller = more similar; often distance = 1 - cosine_sim.
+        (1.0 - distance).max(0.0).min(1.0)
+    }
 }
 
 #[async_trait]
@@ -588,7 +608,7 @@ impl MemoryStore for LanceVectorStore {
         limit: usize,
         user_id: Option<&str>,
         conversation_id: Option<&str>,
-    ) -> Result<Vec<MemoryEntry>> {
+    ) -> Result<Vec<(f32, MemoryEntry)>> {
         info!(
             dimension = query_embedding.len(),
             limit = limit,
@@ -612,14 +632,16 @@ impl MemoryStore for LanceVectorStore {
                 anyhow!("Failed to open table: {}", e)
             })?;
 
-        // Fetch more candidates when filtering so we have enough after filter
+        // Fetch more candidates when filtering so we have enough after filter (configurable multiplier)
         let fetch_limit = if user_id.is_some() || conversation_id.is_some() {
-            limit.saturating_mul(10).max(50)
+            limit
+                .saturating_mul(self.config.semantic_fetch_multiplier as usize)
+                .max(50)
         } else {
             limit
         };
 
-        let results = table
+        let mut vector_query = table
             .query()
             .nearest_to(query_embedding)
             .map_err(|e| {
@@ -635,7 +657,19 @@ impl MemoryStore for LanceVectorStore {
                     self.config.embedding_dim,
                     e
                 )
-            })?
+            })?;
+
+        if self.config.use_exact_search {
+            vector_query = vector_query.bypass_vector_index();
+        }
+        if let Some(rf) = self.config.refine_factor {
+            vector_query = vector_query.refine_factor(rf);
+        }
+        if let Some(np) = self.config.nprobes {
+            vector_query = vector_query.nprobes(np);
+        }
+
+        let results = vector_query
             .limit(fetch_limit)
             .execute()
             .await
@@ -662,8 +696,9 @@ impl MemoryStore for LanceVectorStore {
                 anyhow!("Failed to collect results: {}", e)
             })?;
 
-        let mut entries = Vec::new();
+        let mut scored_entries: Vec<(f32, MemoryEntry)> = Vec::new();
         for batch in results {
+            let distance_col_idx = batch.schema().index_of("_distance").ok();
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
                 let match_user = user_id
@@ -673,22 +708,23 @@ impl MemoryStore for LanceVectorStore {
                     .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
                     .unwrap_or(true);
                 if match_user && match_conv {
-                    entries.push(entry);
+                    let score = Self::distance_to_similarity(&batch, distance_col_idx, row);
+                    scored_entries.push((score, entry));
                 }
             }
         }
-        entries.truncate(limit);
+        scored_entries.truncate(limit);
 
         info!(
             limit = limit,
-            count = entries.len(),
+            count = scored_entries.len(),
             "step: 词向量 Lance 向量检索完成"
         );
         info!(
             limit = limit,
-            count = entries.len(),
+            count = scored_entries.len(),
             "Lance vector store semantic_search returned"
         );
-        Ok(entries)
+        Ok(scored_entries)
     }
 }
