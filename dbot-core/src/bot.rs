@@ -25,6 +25,13 @@ pub struct TelegramBot {
     bot: teloxide::Bot,
 }
 
+/// Parses a message id string into an i32. Used by edit_message.
+pub fn parse_message_id(s: &str) -> Result<i32> {
+    s.parse().map_err(|_| {
+        DbotError::Bot(format!("Invalid message_id for edit: {}", s))
+    })
+}
+
 impl TelegramBot {
     /// Creates a bot using the given Telegram bot token.
     pub fn new(token: String) -> Self {
@@ -49,9 +56,7 @@ impl Bot for TelegramBot {
     }
 
     async fn edit_message(&self, chat: &Chat, message_id: &str, text: &str) -> Result<()> {
-        let id: i32 = message_id.parse().map_err(|_| {
-            DbotError::Bot(format!("Invalid message_id for edit: {}", message_id))
-        })?;
+        let id = parse_message_id(message_id)?;
         self.bot
             .edit_message_text(ChatId(chat.id), MessageId(id), text)
             .await
@@ -66,5 +71,28 @@ impl Bot for TelegramBot {
             .await
             .map_err(|e| DbotError::Bot(e.to_string()))?;
         Ok(sent.id.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_telegram_bot_new() {
+        let _bot = TelegramBot::new("dummy_token".to_string());
+    }
+
+    #[test]
+    fn test_parse_message_id_valid() {
+        assert_eq!(parse_message_id("123").unwrap(), 123);
+        assert_eq!(parse_message_id("0").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_parse_message_id_invalid() {
+        assert!(parse_message_id("").is_err());
+        assert!(parse_message_id("abc").is_err());
+        assert!(parse_message_id("12.3").is_err());
     }
 }

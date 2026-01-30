@@ -91,8 +91,53 @@ pub async fn restore<S: MemoryStore>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use memory_inmemory::InMemoryVectorStore;
+    use crate::{MemoryEntry, MemoryMetadata, MemoryRole};
+    use chrono::Utc;
+
+    fn make_entry(content: &str, user_id: &str) -> MemoryEntry {
+        let metadata = MemoryMetadata {
+            user_id: Some(user_id.to_string()),
+            conversation_id: None,
+            role: MemoryRole::User,
+            timestamp: Utc::now(),
+            tokens: None,
+            importance: None,
+        };
+        MemoryEntry::new(content.to_string(), metadata)
+    }
+
     #[tokio::test]
-    async fn test_migration() {
-        // This would require actual stores to test
+    async fn test_migrate() {
+        let from = InMemoryVectorStore::new();
+        let to = InMemoryVectorStore::new();
+        from.add(make_entry("a", "")).await.unwrap();
+        from.add(make_entry("b", "")).await.unwrap();
+        let count = migrate(&from, &to).await.unwrap();
+        assert_eq!(count, 2);
+        let dest_entries = to.search_by_user("").await.unwrap();
+        assert_eq!(dest_entries.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_backup_returns_empty() {
+        let store = InMemoryVectorStore::new();
+        store.add(make_entry("x", "u1")).await.unwrap();
+        let entries = backup(&store).await.unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_restore() {
+        let store = InMemoryVectorStore::new();
+        let entries = vec![
+            make_entry("one", "u1"),
+            make_entry("two", "u1"),
+        ];
+        let count = restore(&store, entries).await.unwrap();
+        assert_eq!(count, 2);
+        let found = store.search_by_user("u1").await.unwrap();
+        assert_eq!(found.len(), 2);
     }
 }

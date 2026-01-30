@@ -1,7 +1,8 @@
-//! 单元测试目录
+//! Unit test module
 //!
-//! 与代码文件分离，集中放置 middleware 相关单元测试。
-//! 与各 middleware 的交互：通过公开与 pub(crate) 接口进行测试。
+//! Middleware unit tests live here, separate from source files.
+//! Tests interact with middleware via public and pub(crate) APIs.
 
+mod logging_auth_middleware_test;
 mod memory_middleware_test;
 mod persistence_middleware_test;
