@@ -3,12 +3,12 @@ resolver = "2"
 members = [
     "dbot-core",
     "storage",
-    "ai-handlers",
+    "llm-handlers",
     "telegram-bot",
     "dbot-cli",
     "openai-client",
     "telegram-bot-examples",
-    "telegram-bot-ai",
+    "telegram-bot-llm",
     "memory",
     "crates/memory/memory-core",
     "crates/memory/memory-strategies",
@@ -21,7 +21,7 @@ members = [
     "crates/memory/memory-loader",
     "crates/handler-chain",
     "crates/dbot-telegram",
-    "crates/ai-client",
+    "crates/llm-client",
     "crates/middleware",
     "crates/prompt",
 ]

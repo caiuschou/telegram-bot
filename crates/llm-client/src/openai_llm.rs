@@ -62,7 +62,7 @@ impl OpenAILlmClient {
 #[async_trait]
 impl LlmClient for OpenAILlmClient {
     #[instrument(skip(self, messages))]
-    async fn get_ai_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String> {
+    async fn get_llm_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String> {
         let mut openai_messages: Vec<openai_client::ChatCompletionRequestMessage> = vec![
             openai_client::ChatCompletionRequestSystemMessageArgs::default()
                 .content(self.system_content().to_string())
@@ -78,7 +78,7 @@ impl LlmClient for OpenAILlmClient {
     }
 
     #[instrument(skip(self, messages, callback))]
-    async fn get_ai_response_stream_with_messages<F, Fut>(
+    async fn get_llm_response_stream_with_messages<F, Fut>(
         &self,
         messages: Vec<ChatMessage>,
         mut callback: F,

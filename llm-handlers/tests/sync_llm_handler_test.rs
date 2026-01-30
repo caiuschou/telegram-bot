@@ -1,10 +1,10 @@
-//! Unit tests for SyncAIHandler.
+//! Unit tests for SyncLLMHandler.
 //!
 //! Covers: is_bot_mentioned, extract_question, get_question.
 //! Uses in-memory store, MockEmbeddingService, MockBot, and OpenAILlmClient (dummy key); does not call Telegram or OpenAI.
 
-use ai_client::OpenAILlmClient;
-use ai_handlers::SyncAIHandler;
+use llm_client::OpenAILlmClient;
+use llm_handlers::SyncLLMHandler;
 use async_trait::async_trait;
 use chrono::Utc;
 use dbot_core::{Bot as CoreBot, Chat, Message, MessageDirection, Result as DbotResult, User};
@@ -50,8 +50,8 @@ impl CoreBot for MockBot {
     }
 }
 
-/// Builds a minimal SyncAIHandler for unit testing (repo + in-memory store + mock embedding + MockBot + OpenAILlmClient; no real Telegram/OpenAI).
-async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
+/// Builds a minimal SyncLLMHandler for unit testing (repo + in-memory store + mock embedding + MockBot + OpenAILlmClient; no real Telegram/OpenAI).
+async fn test_handler(bot_username: Option<&str>) -> SyncLLMHandler {
     let username = Arc::new(tokio::sync::RwLock::new(
         bot_username.map(String::from),
     ));
@@ -63,7 +63,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
     let memory_store: Arc<dyn MemoryStore> = Arc::new(InMemoryVectorStore::new());
     let embedding_service: Arc<dyn EmbeddingService> = Arc::new(MockEmbeddingService);
 
-    SyncAIHandler::new(
+    SyncLLMHandler::new(
         username,
         llm_client,
         bot,
@@ -178,7 +178,7 @@ async fn test_get_question_mention_only_returns_default() {
     let h = test_handler(Some("bot")).await;
     let msg = make_message("@bot", None, false);
     let q = h.get_question(&msg, Some("bot"));
-    assert_eq!(q.as_deref(), Some(SyncAIHandler::DEFAULT_EMPTY_MENTION_QUESTION));
+    assert_eq!(q.as_deref(), Some(SyncLLMHandler::DEFAULT_EMPTY_MENTION_QUESTION));
 }
 
 #[tokio::test]
@@ -259,7 +259,7 @@ async fn test_reply_to_bot_content_is_preserved() {
 #[tokio::test]
 async fn test_reply_to_non_bot_with_content() {
     let h = test_handler(Some("bot")).await;
-    // 回复非机器人消息时，即使有内容也不应触发 AI
+    // 回复非机器人消息时，即使有内容也不应触发 LLM
     let msg = make_message_with_reply_content(
         "回复用户消息",
         Some("user_msg_789".to_string()),

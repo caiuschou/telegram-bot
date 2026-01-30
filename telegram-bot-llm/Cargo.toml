@@ -1,10 +1,10 @@
 [package]
-name = "telegram-bot-ai"
+name = "telegram-bot-llm"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ai-client = { path = "../crates/ai-client" }
+llm-client = { path = "../crates/llm-client" }
 teloxide = "0.17"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"

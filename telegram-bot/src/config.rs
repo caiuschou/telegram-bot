@@ -8,11 +8,11 @@ pub struct BotConfig {
     pub log_file: String,
     pub openai_api_key: String,
     pub openai_base_url: String,
-    pub ai_model: String,
-    pub ai_use_streaming: bool,
-    pub ai_thinking_message: String,
-    /// AI 系统提示词（人设/行为）；未设置时使用 telegram-bot-ai 内置默认。环境变量：`AI_SYSTEM_PROMPT`。
-    pub ai_system_prompt: Option<String>,
+    pub llm_model: String,
+    pub llm_use_streaming: bool,
+    pub llm_thinking_message: String,
+    /// LLM 系统提示词（人设/行为）；未设置时使用 telegram-bot-llm 内置默认。环境变量：`LLM_SYSTEM_PROMPT`。
+    pub llm_system_prompt: Option<String>,
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
     /// When true, recent messages (RecentMessagesStrategy / UserPreferencesStrategy) use a dedicated SQLite store; semantic search still uses the primary store (e.g. Lance). Env: `MEMORY_RECENT_USE_SQLITE`.
@@ -46,14 +46,14 @@ impl BotConfig {
         let openai_api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
         let openai_base_url =
             env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-        let ai_model = env::var("AI_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
-        let ai_use_streaming = env::var("AI_USE_STREAMING")
+        let llm_model = env::var("LLM_MODEL").unwrap_or_else(|_| "gpt-3.5-turbo".to_string());
+        let llm_use_streaming = env::var("LLM_USE_STREAMING")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(false);
-        let ai_thinking_message =
-            env::var("AI_THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
-        let ai_system_prompt = env::var("AI_SYSTEM_PROMPT").ok();
+        let llm_thinking_message =
+            env::var("LLM_THINKING_MESSAGE").unwrap_or_else(|_| "正在思考...".to_string());
+        let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT").ok();
         let memory_store_type =
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
         let memory_sqlite_path =
@@ -99,10 +99,10 @@ impl BotConfig {
             log_file,
             openai_api_key,
             openai_base_url,
-            ai_model,
-            ai_use_streaming,
-            ai_thinking_message,
-            ai_system_prompt,
+            llm_model,
+            llm_use_streaming,
+            llm_thinking_message,
+            llm_system_prompt,
             memory_store_type,
             memory_sqlite_path,
             memory_recent_use_sqlite,
@@ -133,9 +133,9 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("DATABASE_URL");
         env::remove_var("OPENAI_BASE_URL");
-        env::remove_var("AI_MODEL");
-        env::remove_var("AI_USE_STREAMING");
-        env::remove_var("AI_THINKING_MESSAGE");
+        env::remove_var("LLM_MODEL");
+        env::remove_var("LLM_USE_STREAMING");
+        env::remove_var("LLM_THINKING_MESSAGE");
         env::remove_var("MEMORY_STORE_TYPE");
         env::remove_var("MEMORY_SQLITE_PATH");
         env::remove_var("MEMORY_LANCE_PATH");
@@ -147,7 +147,7 @@ mod tests {
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
         env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
         env::remove_var("TELEGRAM_EDIT_INTERVAL_SECS");
 
@@ -159,9 +159,9 @@ mod tests {
         assert_eq!(config.log_file, "logs/telegram-bot.log");
         assert_eq!(config.openai_api_key, "test_key");
         assert_eq!(config.openai_base_url, "https://api.openai.com/v1");
-        assert_eq!(config.ai_model, "gpt-3.5-turbo");
-        assert_eq!(config.ai_use_streaming, false);
-        assert_eq!(config.ai_thinking_message, "正在思考...");
+        assert_eq!(config.llm_model, "gpt-3.5-turbo");
+        assert_eq!(config.llm_use_streaming, false);
+        assert_eq!(config.llm_thinking_message, "正在思考...");
         assert_eq!(config.memory_store_type, "memory");
         assert_eq!(config.memory_sqlite_path, "./data/memory.db");
         assert_eq!(config.embedding_provider, "openai");
@@ -184,12 +184,12 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "custom_key");
         env::remove_var("OPENAI_BASE_URL");
         env::set_var("OPENAI_BASE_URL", "https://custom.api.com");
-        env::remove_var("AI_MODEL");
-        env::set_var("AI_MODEL", "gpt-4");
-        env::remove_var("AI_USE_STREAMING");
-        env::set_var("AI_USE_STREAMING", "true");
-        env::remove_var("AI_THINKING_MESSAGE");
-        env::set_var("AI_THINKING_MESSAGE", "Thinking...");
+        env::remove_var("LLM_MODEL");
+        env::set_var("LLM_MODEL", "gpt-4");
+        env::remove_var("LLM_USE_STREAMING");
+        env::set_var("LLM_USE_STREAMING", "true");
+        env::remove_var("LLM_THINKING_MESSAGE");
+        env::set_var("LLM_THINKING_MESSAGE", "Thinking...");
         env::remove_var("MEMORY_STORE_TYPE");
         env::set_var("MEMORY_STORE_TYPE", "sqlite");
         env::remove_var("MEMORY_SQLITE_PATH");
@@ -203,7 +203,7 @@ mod tests {
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
         env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
         env::set_var("TELEGRAM_EDIT_INTERVAL_SECS", "10");
 
@@ -214,9 +214,9 @@ mod tests {
         assert_eq!(config.telegram_edit_interval_secs, 10);
         assert_eq!(config.openai_api_key, "custom_key");
         assert_eq!(config.openai_base_url, "https://custom.api.com");
-        assert_eq!(config.ai_model, "gpt-4");
-        assert_eq!(config.ai_use_streaming, true);
-        assert_eq!(config.ai_thinking_message, "Thinking...");
+        assert_eq!(config.llm_model, "gpt-4");
+        assert_eq!(config.llm_use_streaming, true);
+        assert_eq!(config.llm_thinking_message, "Thinking...");
         assert_eq!(config.memory_store_type, "sqlite");
         assert_eq!(config.memory_sqlite_path, "/tmp/memory.db");
         assert_eq!(config.embedding_provider, "openai");
@@ -233,7 +233,7 @@ mod tests {
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("MEMORY_RECENT_LIMIT");
         env::remove_var("MEMORY_RELEVANT_TOP_K");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
         env::remove_var("MEMORY_SEMANTIC_MIN_SCORE");
 
         let config = BotConfig::load(None).unwrap();
@@ -262,7 +262,7 @@ mod tests {
         env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "test_key");
         env::remove_var("MEMORY_RECENT_USE_SQLITE");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
         assert_eq!(config.memory_recent_use_sqlite, false);
@@ -288,7 +288,7 @@ mod tests {
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
 
         let config = BotConfig::load(Some("override_token".to_string())).unwrap();
 
@@ -297,21 +297,21 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_load_config_ai_system_prompt() {
+    fn test_load_config_llm_system_prompt() {
         env::remove_var("BOT_TOKEN");
         env::set_var("BOT_TOKEN", "test_token");
         env::remove_var("OPENAI_API_KEY");
         env::set_var("OPENAI_API_KEY", "test_key");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
-        assert!(config.ai_system_prompt.is_none());
+        assert!(config.llm_system_prompt.is_none());
 
-        env::set_var("AI_SYSTEM_PROMPT", "你是一个测试人设。");
+        env::set_var("LLM_SYSTEM_PROMPT", "你是一个测试人设。");
         let config = BotConfig::load(None).unwrap();
-        assert_eq!(config.ai_system_prompt.as_deref(), Some("你是一个测试人设。"));
+        assert_eq!(config.llm_system_prompt.as_deref(), Some("你是一个测试人设。"));
 
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
     }
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
         env::remove_var("BIGMODEL_API_KEY");
         env::set_var("BIGMODEL_API_KEY", "bigmodel-key");
         env::remove_var("ZHIPUAI_API_KEY");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 
@@ -345,7 +345,7 @@ mod tests {
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
         env::set_var("ZHIPUAI_API_KEY", "zhipu-key");
-        env::remove_var("AI_SYSTEM_PROMPT");
+        env::remove_var("LLM_SYSTEM_PROMPT");
 
         let config = BotConfig::load(None).unwrap();
 

@@ -40,7 +40,7 @@ fn test_memory_config_default() {
     assert_eq!(config.max_recent_messages, 10);
     assert_eq!(config.max_context_tokens, 4096);
     assert!(config.save_user_messages);
-    assert!(config.save_ai_responses);
+    assert!(config.save_llm_responses);
 }
 
 #[test]

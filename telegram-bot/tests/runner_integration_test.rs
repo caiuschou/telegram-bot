@@ -7,7 +7,7 @@
 //!   - 通过 `MockMemoryStore` 在测试中替代真实向量存储。
 //!
 //! 上下文策略参考：`docs/rag/context-retrieval-before-reply.md`（RecentMessagesStrategy、
-//! SemanticSearchStrategy 等）；预写入消息后 AI 会在 build_memory_context 中检索到这些条目再生成回复。
+//! SemanticSearchStrategy 等）；预写入消息后 LLM 会在 build_memory_context 中检索到这些条目再生成回复。
 
 use std::env;
 use std::sync::Once;
@@ -53,16 +53,16 @@ fn setup_test_config(temp_dir: &TempDir) -> BotConfig {
         env::set_var("OPENAI_BASE_URL", "https://api.openai.com/v1");
     }
 
-    if env::var("AI_MODEL").is_err() {
-        env::set_var("AI_MODEL", "gpt-3.5-turbo");
+    if env::var("LLM_MODEL").is_err() {
+        env::set_var("LLM_MODEL", "gpt-3.5-turbo");
     }
 
-    if env::var("AI_USE_STREAMING").is_err() {
-        env::set_var("AI_USE_STREAMING", "false");
+    if env::var("LLM_USE_STREAMING").is_err() {
+        env::set_var("LLM_USE_STREAMING", "false");
     }
 
-    if env::var("AI_THINKING_MESSAGE").is_err() {
-        env::set_var("AI_THINKING_MESSAGE", "Thinking...");
+    if env::var("LLM_THINKING_MESSAGE").is_err() {
+        env::set_var("LLM_THINKING_MESSAGE", "Thinking...");
     }
 
     if env::var("MEMORY_STORE_TYPE").is_err() {
@@ -200,9 +200,9 @@ async fn seed_memory_context(
     Ok(())
 }
 
-/// 主流程集成测试占位：AI 回复完整流程（仅环境与组件初始化）
+/// 主流程集成测试占位：LLM 回复完整流程（仅环境与组件初始化）
 #[tokio::test]
-async fn test_ai_reply_complete_flow_smoke() {
+async fn test_llm_reply_complete_flow_smoke() {
     init_tracing();
     env::set_var("EMBEDDING_PROVIDER", "openai");
 
@@ -231,7 +231,7 @@ async fn test_ai_reply_complete_flow() {
     let _ = dotenvy::from_filename(".env.test").or_else(|_| dotenvy::dotenv());
 
     if env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("SKIP: OPENAI_API_KEY not set, skipping AI reply E2E test");
+        eprintln!("SKIP: OPENAI_API_KEY not set, skipping LLM reply E2E test");
         return;
     }
 
@@ -283,7 +283,7 @@ async fn test_ai_reply_complete_flow() {
         reply_to_message_content: Some("Previous bot response".to_string()),
     };
 
-    // SyncAIHandler 在链内同步执行：before() 存用户消息，handle() 调 AI 并返回 Reply，after() 存 AI 回复。handle_core_message 返回时链已结束。
+    // SyncLLMHandler 在链内同步执行：before() 存用户消息，handle() 调 LLM 并返回 Reply，after() 存 LLM 回复。handle_core_message 返回时链已结束。
     bot.handle_core_message(&msg).await.expect("handle_core_message");
 
     // 预写入 10 条（含向量库中需被查询的内容）+ middleware before() 存 1 条用户消息 + after() 存 1 条 AI 回复；至少应有 11 次 store（10 seed + 1 user）。

@@ -1,4 +1,4 @@
-use ai_handlers::SyncAIHandler;
+use llm_handlers::SyncLLMHandler;
 use anyhow::Result;
 use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
 use dbot_telegram::{run_repl, TelegramMessageWrapper};
@@ -8,7 +8,7 @@ use memory_inmemory::InMemoryVectorStore;
 use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
 use middleware::{MemoryMiddleware, PersistenceMiddleware};
-use ai_client::OpenAILlmClient;
+use llm_client::OpenAILlmClient;
 use bigmodel_embedding::BigModelEmbedding;
 use dbot_telegram::TelegramBotAdapter;
 use openai_embedding::OpenAIEmbedding;
@@ -27,8 +27,8 @@ pub struct BotComponents {
     pub teloxide_bot: Bot,
     /// Bot 的用户名缓存
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    /// 同步 AI 处理器（在链内执行，返回 Reply 供 middleware 存记忆）
-    pub sync_ai_handler: Arc<SyncAIHandler>,
+    /// 同步 LLM 处理器（在链内执行，返回 Reply 供 middleware 存记忆）
+    pub sync_llm_handler: Arc<SyncLLMHandler>,
     /// 向量记忆存储（主存储，用于语义检索与默认读写）
     pub memory_store: Arc<dyn MemoryStore>,
     /// 可选：最近消息专用存储（如 SQLite）。设置时 RecentMessagesStrategy / UserPreferencesStrategy 从此读，middleware 同时写入此处与主存储。
@@ -91,14 +91,14 @@ async fn build_bot_components(
     // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    // 初始化 LLM 客户端（ai-client）与 Bot 适配器（dbot-telegram）
+    // 初始化 LLM 客户端（llm-client）与 Bot 适配器（dbot-telegram）
     let llm_client = Arc::new(
         OpenAILlmClient::with_base_url(
             config.openai_api_key.clone(),
             config.openai_base_url.clone(),
         )
-        .with_model(config.ai_model.clone())
-        .with_system_prompt_opt(config.ai_system_prompt.clone()),
+        .with_model(config.llm_model.clone())
+        .with_system_prompt_opt(config.llm_system_prompt.clone()),
     );
     let bot_adapter: Arc<dyn dbot_core::Bot> =
         Arc::new(TelegramBotAdapter::new(teloxide_bot.clone()));
@@ -121,9 +121,9 @@ async fn build_bot_components(
         }
     };
 
-    // 初始化同步 AI 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 在 after() 中存记忆）
+    // 初始化同步 LLM 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 在 after() 中存记忆）
     // memory_recent_limit / memory_relevant_top_k 用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy
-    let sync_ai_handler = Arc::new(SyncAIHandler::new(
+    let sync_llm_handler = Arc::new(SyncLLMHandler::new(
         bot_username.clone(),
         llm_client,
         bot_adapter,
@@ -131,8 +131,8 @@ async fn build_bot_components(
         memory_store.clone(),
         recent_store.clone(),
         embedding_service.clone(),
-        config.ai_use_streaming,
-        config.ai_thinking_message.clone(),
+        config.llm_use_streaming,
+        config.llm_thinking_message.clone(),
         config.memory_recent_limit as usize,
         config.memory_relevant_top_k as usize,
         config.memory_semantic_min_score,
@@ -143,7 +143,7 @@ async fn build_bot_components(
         repo,
         teloxide_bot,
         bot_username,
-        sync_ai_handler,
+        sync_llm_handler,
         memory_store,
         recent_store,
         embedding_service,
@@ -257,11 +257,11 @@ impl TelegramBot {
             components.recent_store.clone(),
         ));
 
-        // 构建处理器链（SyncAIHandler 在链内同步执行 AI，返回 Reply 供 memory_middleware 在 after() 中存 AI 回复）
+        // 构建处理器链（SyncLLMHandler 在链内同步执行 LLM，返回 Reply 供 memory_middleware 在 after() 中存 LLM 回复）
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
-            .add_handler(components.sync_ai_handler.clone());
+            .add_handler(components.sync_llm_handler.clone());
 
         Ok(Self {
             config,
@@ -292,7 +292,7 @@ impl TelegramBot {
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
-            .add_handler(components.sync_ai_handler.clone());
+            .add_handler(components.sync_llm_handler.clone());
 
         Ok(Self {
             config,
@@ -348,8 +348,8 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
 
     info!(
         database_url = %config.database_url,
-        ai_model = %config.ai_model,
-        ai_use_streaming = config.ai_use_streaming,
+        llm_model = %config.llm_model,
+        llm_use_streaming = config.llm_use_streaming,
         memory_store_type = %config.memory_store_type,
         "Initializing bot"
     );
@@ -362,7 +362,7 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
 
     info!("Bot started successfully");
 
-    // 在启动 repl 前先设置 bot_username，否则首条 @ 消息到达时尚未设置会导致 SyncAIHandler 判定为“非 AI 查询”而不回复
+    // 在启动 repl 前先设置 bot_username，否则首条 @ 消息到达时尚未设置会导致 SyncLLMHandler 判定为“非 LLM 查询”而不回复
     // 使用框架层 REPL：消息转 core::Message 后交给 HandlerChain；run_repl 内会 get_me 并写回 bot_username
     run_repl(teloxide_bot, handler_chain, bot_username).await?;
 

@@ -12,9 +12,9 @@ env_logger = "0.11"
 dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
 dbot-telegram = { path = "../crates/dbot-telegram" }
-ai-handlers = { path = "../ai-handlers" }
+llm-handlers = { path = "../llm-handlers" }
 storage = { path = "../storage" }
-ai-client = { path = "../crates/ai-client" }
+llm-client = { path = "../crates/llm-client" }
 openai-client = { path = "../openai-client" }
 embedding = { path = "../crates/embedding" }
 openai-embedding = { path = "../crates/openai-embedding" }

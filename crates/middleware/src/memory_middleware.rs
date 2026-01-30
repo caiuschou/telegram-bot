@@ -4,8 +4,8 @@
 //!
 //! ## MemoryMiddleware
 //!
-//! Middleware that automatically saves user messages and AI responses to the memory store,
-//! and retrieves relevant context for AI responses.
+//! Middleware that automatically saves user messages and LLM responses to the memory store,
+//! and retrieves relevant context for LLM responses.
 
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, Middleware, Result};
@@ -26,7 +26,7 @@ pub struct MemoryConfig {
     pub store: Arc<dyn MemoryStore>,
     /// Optional store for recent messages only. When set, user messages and AI replies are also written here so RecentMessagesStrategy reads from it; semantic search still uses `store`.
     pub recent_store: Option<Arc<dyn MemoryStore>>,
-    /// Optional embedding service: when set, user messages and AI replies are embedded before saving so they participate in semantic search.
+    /// Optional embedding service: when set, user messages and LLM replies are embedded before saving so they participate in semantic search.
     pub embedding_service: Option<Arc<dyn EmbeddingService>>,
     /// Maximum number of recent messages to include in context
     pub max_recent_messages: usize,
@@ -34,8 +34,8 @@ pub struct MemoryConfig {
     pub max_context_tokens: usize,
     /// Whether to save user messages
     pub save_user_messages: bool,
-    /// Whether to save AI responses
-    pub save_ai_responses: bool,
+    /// Whether to save LLM responses
+    pub save_llm_responses: bool,
 }
 
 impl Default for MemoryConfig {
@@ -47,7 +47,7 @@ impl Default for MemoryConfig {
             max_recent_messages: 10,
             max_context_tokens: 4096,
             save_user_messages: true,
-            save_ai_responses: true,
+            save_llm_responses: true,
         }
     }
 }
@@ -221,32 +221,32 @@ impl Middleware for MemoryMiddleware {
             "step: MemoryMiddleware after"
         );
 
-        // Save AI response to memory when handler returns Reply(text) and config allows.
-        if self.config.save_ai_responses {
+        // Save LLM response to memory when handler returns Reply(text) and config allows.
+        if self.config.save_llm_responses {
             if let HandlerResponse::Reply(text) = response {
                 let mut entry = self.reply_to_memory_entry(message, text);
                 if let Some(ref svc) = self.config.embedding_service {
                     match svc.embed(&entry.content).await {
                         Ok(emb) => entry.embedding = Some(emb),
                         Err(e) => {
-                            error!(error = %e, "Failed to embed AI reply, saving without embedding");
+                            error!(error = %e, "Failed to embed LLM reply, saving without embedding");
                         }
                     }
                 }
                 if let Err(e) = self.config.store.add(entry.clone()).await {
-                    error!(error = %e, "Failed to save AI response to memory");
+                    error!(error = %e, "Failed to save LLM response to memory");
                 } else {
                     info!(
                         user_id = %user_id,
                         conversation_id = %conversation_id,
                         entry_id = %entry.id,
-                        "step: MemoryMiddleware after done, AI reply saved to memory"
+                        "step: MemoryMiddleware after done, LLM reply saved to memory"
                     );
                 }
                 if let Some(ref r) = self.config.recent_store {
                     if !std::ptr::addr_eq(r.as_ref() as *const _, self.config.store.as_ref() as *const _) {
                         if let Err(e) = r.add(entry).await {
-                            error!(error = %e, "Failed to save AI reply to recent store");
+                            error!(error = %e, "Failed to save LLM reply to recent store");
                         }
                     }
                 }
@@ -259,7 +259,7 @@ impl Middleware for MemoryMiddleware {
         } else {
             info!(
                 user_id = %user_id,
-                "step: MemoryMiddleware after done (save_ai_responses=false, skip)"
+                "step: MemoryMiddleware after done (save_llm_responses=false, skip)"
             );
         }
 

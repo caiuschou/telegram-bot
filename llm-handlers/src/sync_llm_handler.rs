@@ -1,6 +1,6 @@
-//! Synchronous AI handler: runs in the handler chain, calls AI and returns `HandlerResponse::Reply(text)` so middleware (e.g. MemoryMiddleware) can save the reply in `after()`.
+//! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so middleware (e.g. MemoryMiddleware) can save the reply in `after()`.
 
-use ai_client::{LlmClient, OpenAILlmClient};
+use llm_client::{LlmClient, OpenAILlmClient};
 use async_trait::async_trait;
 use dbot_core::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
@@ -18,26 +18,26 @@ use tracing::{debug, error, info, instrument};
 // --- User-facing fallback messages (sent to Telegram on errors) ---
 const MSG_SEND_FAILED: &str = "抱歉，发送回复时出错。";
 const MSG_REQUEST_FAILED: &str = "抱歉，处理您的请求时出错，请稍后重试。";
-const MSG_STREAM_FAILED: &str = "抱歉，AI 响应失败。";
+const MSG_STREAM_FAILED: &str = "抱歉，LLM 响应失败。";
 
-/// Logs the exact messages submitted to the AI (role + full content) for debugging.
-fn log_messages_submitted_to_ai(messages: &[ChatMessage]) {
-    info!(count = messages.len(), "submit_to_ai: 提交给 AI 的消息列表");
+/// Logs the exact messages submitted to the LLM (role + full content) for debugging.
+fn log_messages_submitted_to_llm(messages: &[ChatMessage]) {
+    info!(count = messages.len(), "submit_to_llm: 提交给 LLM 的消息列表");
     for (i, m) in messages.iter().enumerate() {
         info!(
             index = i,
             role = ?m.role,
             content = %m.content,
-            "submit_to_ai message"
+            "submit_to_llm message"
         );
     }
 }
 
-/// Synchronous AI handler: when the message is an AI query (user replies to the bot's message, or @mentions the bot), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
+/// Synchronous LLM handler: when the message is an LLM query (user replies to the bot's message, or @mentions the bot), builds context, calls the LLM, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
 ///
 /// **External interactions:** Bot trait (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), LlmClient (LLM).
 #[derive(Clone)]
-pub struct SyncAIHandler {
+pub struct SyncLLMHandler {
     pub(crate) bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     pub(crate) llm_client: Arc<OpenAILlmClient>,
     pub(crate) bot: Arc<dyn CoreBot>,
@@ -58,8 +58,8 @@ pub struct SyncAIHandler {
     pub(crate) edit_interval_secs: u64,
 }
 
-impl SyncAIHandler {
-    /// 当用户仅 @ 提及机器人、未输入具体内容时，作为发给 AI 的默认“问题”提示，使 AI 简短打招呼并邀请用户提问。
+impl SyncLLMHandler {
+    /// 当用户仅 @ 提及机器人、未输入具体内容时，作为发给 LLM 的默认“问题”提示，使 LLM 简短打招呼并邀请用户提问。
     /// 与外部交互：作为 LlmClient 的 user 消息内容传入，由 LLM 生成友好回复。
     pub const DEFAULT_EMPTY_MENTION_QUESTION: &str =
         "用户只是 @ 了你，没有写具体问题。请简短友好地打招呼并邀请用户提问。";
@@ -182,14 +182,14 @@ impl SyncAIHandler {
         })
     }
 
-    /// Returns chat messages (system, user, assistant) for the AI request.
+    /// Returns chat messages (system, user, assistant) for the LLM request.
     ///
     /// When context is available, returns `context.to_messages(true, question)` which already
     /// contains system/user/assistant. When context is missing, returns a minimal user-only list.
     /// If the message is a reply to a bot message, the replied message content is prepended as
     /// assistant context so the AI understands what message the user is replying to.
     /// Callers do not construct messages; they use this method's return value directly.
-    async fn build_messages_for_ai(
+    async fn build_messages_for_llm(
         &self,
         user_id: &str,
         conversation_id: &str,
@@ -202,7 +202,7 @@ impl SyncAIHandler {
         };
 
         // 如果是回复机器人的消息，将被回复的内容作为助手消息插入到用户消息之前，
-        // 让 AI 了解用户在回复哪条消息
+        // 让 LLM 了解用户在回复哪条消息
         if let Some(replied_content) = reply_to_content {
             // 找到最后一条用户消息的位置，在其前面插入被回复的助手消息
             if let Some(last_user_idx) = messages.iter().rposition(|m| matches!(m.role, prompt::MessageRole::User)) {
@@ -227,19 +227,19 @@ impl SyncAIHandler {
                 error!(error = %e, "Failed to send message");
                 dbot_core::DbotError::Bot(e.to_string())
             })?;
-        self.log_ai_response_for_message(message, response).await?;
-        info!(user_id = message.user.id, "AI response sent");
+        self.log_llm_response_for_message(message, response).await?;
+        info!(user_id = message.user.id, "LLM response sent");
         Ok(())
     }
 
-    async fn log_ai_response_for_message(&self, message: &Message, response: &str) -> Result<()> {
+    async fn log_llm_response_for_message(&self, message: &Message, response: &str) -> Result<()> {
         let record = storage::MessageRecord::new(
             message.user.id,
             message.chat.id,
             None,
             None,
             None,
-            "ai_response".to_string(),
+            "llm_response".to_string(),
             response.to_string(),
             "sent".to_string(),
         );
@@ -247,7 +247,7 @@ impl SyncAIHandler {
             .save(&record)
             .await
             .map_err(|e| {
-                error!(error = %e, "Failed to save AI response");
+                error!(error = %e, "Failed to save LLM response");
                 dbot_core::DbotError::Database(e.to_string())
             })?;
         Ok(())
@@ -272,7 +272,7 @@ impl SyncAIHandler {
     async fn process_normal(&self, message: &Message, question: &str) -> Result<HandlerResponse> {
         let (user_id, conversation_id) = Self::message_ids(message);
         let messages = self
-            .build_messages_for_ai(
+            .build_messages_for_llm(
                 &user_id,
                 &conversation_id,
                 question,
@@ -283,14 +283,14 @@ impl SyncAIHandler {
         info!(
             message_count = messages.len(),
             question = %question,
-            "Submitting to AI (non-streaming)"
+            "Submitting to LLM (non-streaming)"
         );
-        log_messages_submitted_to_ai(&messages);
+        log_messages_submitted_to_llm(&messages);
 
-        let response = match self.llm_client.get_ai_response_with_messages(messages).await {
+        let response = match self.llm_client.get_llm_response_with_messages(messages).await {
             Ok(r) => r,
             Err(e) => {
-                Self::log_error_chain(&e, "Failed to get AI response");
+                Self::log_error_chain(&e, "Failed to get LLM response");
                 let err_str = e.to_string();
                 if err_str.contains("401") || err_str.contains("令牌") {
                     error!(
@@ -302,7 +302,7 @@ impl SyncAIHandler {
         };
 
         if let Err(e) = self.send_response_for_message(message, &response).await {
-            error!(error = %e, "Failed to send AI response");
+            error!(error = %e, "Failed to send LLM response");
             return self.send_fallback_and_stop(message, MSG_SEND_FAILED).await;
         }
         Ok(HandlerResponse::Reply(response))
@@ -316,10 +316,10 @@ impl SyncAIHandler {
             user_id = %user_id,
             conversation_id = %conversation_id,
             question = %question,
-            "Processing AI query (streaming)"
+            "Processing LLM query (streaming)"
         );
         let messages = self
-            .build_messages_for_ai(
+            .build_messages_for_llm(
                 &user_id,
                 &conversation_id,
                 question,
@@ -330,9 +330,9 @@ impl SyncAIHandler {
         info!(
             message_count = messages.len(),
             question = %question,
-            "Submitting to AI (streaming)"
+            "Submitting to LLM (streaming)"
         );
-        log_messages_submitted_to_ai(&messages);
+        log_messages_submitted_to_llm(&messages);
 
         // Send "thinking" placeholder; on failure notify user and stop.
         let message_id = match self
@@ -356,7 +356,7 @@ impl SyncAIHandler {
         // On each stream chunk: append to full_content and edit via Bot trait. Throttle edits so we do not exceed Telegram rate limits.
         match self
             .llm_client
-            .get_ai_response_stream_with_messages(messages, |chunk| {
+            .get_llm_response_stream_with_messages(messages, |chunk| {
                 let bot = bot.clone();
                 let chat = chat.clone();
                 let message_id = message_id.clone();
@@ -390,11 +390,11 @@ impl SyncAIHandler {
             .await
         {
             Ok(full_response) => {
-                let _ = self.log_ai_response_for_message(message, &full_response).await;
+                let _ = self.log_llm_response_for_message(message, &full_response).await;
                 Ok(HandlerResponse::Reply(full_response))
             }
             Err(e) => {
-                Self::log_error_chain(&e, "AI stream response failed");
+                Self::log_error_chain(&e, "LLM stream response failed");
                 let _ = self
                     .bot
                     .edit_message(&message.chat, &message_id, MSG_STREAM_FAILED)
@@ -406,13 +406,13 @@ impl SyncAIHandler {
 }
 
 #[async_trait]
-impl Handler for SyncAIHandler {
+impl Handler for SyncLLMHandler {
     #[instrument(skip(self, message))]
     async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
         info!(
             user_id = message.user.id,
             chat_id = message.chat.id,
-            "step: SyncAIHandler handle start"
+            "step: SyncLLMHandler handle start"
         );
 
         let bot_username = self.get_bot_username().await;
@@ -420,9 +420,9 @@ impl Handler for SyncAIHandler {
             Some(q) => q,
             None => {
                 if bot_username.is_none() && message.content.contains('@') {
-                    info!(user_id = message.user.id, "step: SyncAIHandler bot_username not set yet; skip");
+                    info!(user_id = message.user.id, "step: SyncLLMHandler bot_username not set yet; skip");
                 } else {
-                    info!(user_id = message.user.id, "step: SyncAIHandler not AI query (no reply-to-bot, no @mention), skip");
+                    info!(user_id = message.user.id, "step: SyncLLMHandler not LLM query (no reply-to-bot, no @mention), skip");
                 }
                 return Ok(HandlerResponse::Continue);
             }
@@ -431,7 +431,7 @@ impl Handler for SyncAIHandler {
             user_id = message.user.id,
             reply_to = ?message.reply_to_message_id,
             question = %question,
-            "Processing AI query (reply-to-bot or @mention)"
+            "Processing LLM query (reply-to-bot or @mention)"
         );
 
         if self.use_streaming {

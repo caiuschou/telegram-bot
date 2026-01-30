@@ -1,10 +1,10 @@
 [package]
-name = "ai-handlers"
+name = "llm-handlers"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ai-client = { path = "../crates/ai-client" }
+llm-client = { path = "../crates/llm-client" }
 dbot-core = { path = "../dbot-core" }
 storage = { path = "../storage" }
 memory = { path = "../memory" }
@@ -19,5 +19,5 @@ serde = "1.0"
 tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
-ai-client = { path = "../crates/ai-client" }
+llm-client = { path = "../crates/llm-client" }
 dbot-core = { path = "../dbot-core" }

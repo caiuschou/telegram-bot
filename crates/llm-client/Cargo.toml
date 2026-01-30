@@ -1,5 +1,5 @@
 [package]
-name = "ai-client"
+name = "llm-client"
 version = "0.1.0"
 edition = "2021"
 description = "LLM client abstraction: LlmClient trait + OpenAI implementation"

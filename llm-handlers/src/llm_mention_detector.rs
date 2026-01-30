@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tracing::{info, instrument};
 
 #[derive(Debug, Clone)]
-pub struct AIQuery {
+pub struct LLMQuery {
     pub chat_id: i64,
     pub user_id: i64,
     pub question: String,
@@ -12,15 +12,15 @@ pub struct AIQuery {
 }
 
 #[derive(Clone)]
-pub struct AIDetectionHandler {
+pub struct LLMDetectionHandler {
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    query_sender: Arc<tokio::sync::mpsc::UnboundedSender<AIQuery>>,
+    query_sender: Arc<tokio::sync::mpsc::UnboundedSender<LLMQuery>>,
 }
 
-impl AIDetectionHandler {
+impl LLMDetectionHandler {
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-        query_sender: Arc<tokio::sync::mpsc::UnboundedSender<AIQuery>>,
+        query_sender: Arc<tokio::sync::mpsc::UnboundedSender<LLMQuery>>,
     ) -> Self {
         Self {
             bot_username,
@@ -44,18 +44,18 @@ impl AIDetectionHandler {
 }
 
     #[async_trait]
-    impl Handler for AIDetectionHandler {
+    impl Handler for LLMDetectionHandler {
         #[instrument(skip(self, message))]
         async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
-            // 优先：回复机器人的消息时触发 AI
+            // 优先：回复机器人的消息时触发 LLM
             if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
                 info!(
                     user_id = message.user.id,
                     reply_to = ?message.reply_to_message_id,
-                    "Replying to bot message, sending to AI queue"
+                    "Replying to bot message, sending to LLM queue"
                 );
 
-                let query = AIQuery {
+                let query = LLMQuery {
                     chat_id: message.chat.id,
                     user_id: message.user.id,
                     question: message.content.clone(),
@@ -63,13 +63,13 @@ impl AIDetectionHandler {
                 };
 
                 self.query_sender.send(query).map_err(|e| {
-                    dbot_core::DbotError::Bot(format!("Failed to send AI query: {}", e))
+                    dbot_core::DbotError::Bot(format!("Failed to send LLM query: {}", e))
                 })?;
 
                 return Ok(HandlerResponse::Stop);
             }
 
-            // 其次：@ 提及机器人且问题非空时触发 AI
+            // 其次：@ 提及机器人且问题非空时触发 LLM
             if let Some(bot_username) = self.get_bot_username().await {
                 if self.is_bot_mentioned(&message.content, &bot_username) {
                     let question = self.extract_question(&message.content, &bot_username);
@@ -77,10 +77,10 @@ impl AIDetectionHandler {
                         info!(
                             user_id = message.user.id,
                             question = %question,
-                            "Bot mentioned, sending to AI queue"
+                            "Bot mentioned, sending to LLM queue"
                         );
 
-                        let query = AIQuery {
+                        let query = LLMQuery {
                             chat_id: message.chat.id,
                             user_id: message.user.id,
                             question,
@@ -88,7 +88,7 @@ impl AIDetectionHandler {
                         };
 
                         self.query_sender.send(query).map_err(|e| {
-                            dbot_core::DbotError::Bot(format!("Failed to send AI query: {}", e))
+                            dbot_core::DbotError::Bot(format!("Failed to send LLM query: {}", e))
                         })?;
 
                         return Ok(HandlerResponse::Stop);
@@ -106,8 +106,8 @@ mod tests {
     use dbot_core::{Chat, Message, MessageDirection, User};
 
     #[test]
-    fn test_ai_query_creation() {
-        let query = AIQuery {
+    fn test_llm_query_creation() {
+        let query = LLMQuery {
             chat_id: 123,
             user_id: 456,
             question: "What is the weather?".to_string(),
@@ -121,8 +121,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ai_query_without_reply_to() {
-        let query = AIQuery {
+    fn test_llm_query_without_reply_to() {
+        let query = LLMQuery {
             chat_id: 123,
             user_id: 456,
             question: "Hello".to_string(),
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_is_bot_mentioned() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_extract_question() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
@@ -171,7 +171,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_with_bot_mention() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
@@ -210,7 +210,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_without_bot_mention() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
@@ -243,7 +243,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_with_empty_bot_username() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(None)),
             Arc::new(tx),
         );
@@ -276,7 +276,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_with_reply_to_bot_message() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(None)),
             Arc::new(tx),
         );
@@ -315,7 +315,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_reply_to_non_bot_does_not_trigger() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
@@ -348,7 +348,7 @@ mod tests {
     #[tokio::test]
     async fn test_handler_reply_to_bot_takes_priority_over_mention() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let handler = AIDetectionHandler::new(
+        let handler = LLMDetectionHandler::new(
             Arc::new(tokio::sync::RwLock::new(Some("mybot".to_string()))),
             Arc::new(tx),
         );
