@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let token = std::env::var("BOT_TOKEN").expect("BOT_TOKEN not set");
     let bot = Bot::new(token);
 
-    let openai_client = openai_client::OpenAIClient::with_base_url(
+    let llm_client = ai_client::OpenAILlmClient::with_base_url(
         std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set"),
         std::env::var("OPENAI_BASE_URL")
             .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bot_username =
         std::env::var("TELEGRAM_BOT_USERNAME").unwrap_or_else(|_| "AI_BOT".to_string());
 
-    let bot_ai = telegram_bot_ai::TelegramBotAI::new(bot_username, openai_client);
+    let bot_ai = telegram_bot_ai::TelegramBotAI::new(bot_username, llm_client);
 
     info!("AI Bot started successfully");
 

@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **框架层 dbot-telegram（P0）**
+  - 新增 crate `crates/dbot-telegram`：Telegram 接入与消息链运行，最小配置（token、api_url、log_file）。
+  - 提供：`TelegramMessageWrapper`、`TelegramUserWrapper`（teloxide→core）、`TelegramBotAdapter`（实现 dbot_core::Bot）、`TelegramConfig`、`run_repl(bot, handler_chain, bot_username)`。
+  - **telegram-bot** 改为依赖 dbot-telegram：移除本地 `adapters.rs`，从 dbot_telegram 再导出 Wrapper；`run_bot` 内调用 `dbot_telegram::run_repl` 启动 REPL，行为与重构前一致。
+  - 文档：CRATES.md 新增 dbot-telegram 条目并更新 telegram-bot 描述；README 项目结构可引用 dbot-telegram。
+- **AI 抽象层 ai-client + Bot 扩展（P1）**
+  - 新增 crate `crates/ai-client`：仅依赖 openai-client、prompt；定义 `LlmClient` trait（get_ai_response_with_messages、get_ai_response_stream_with_messages）、`StreamChunk`、`OpenAILlmClient` 实现（从 telegram-bot-ai 迁出 LLM 调用逻辑）。
+  - **dbot-core**：Bot trait 新增 `edit_message(chat, message_id, text)`、`send_message_and_return_id(chat, text)`，用于流式回复「先发一条再编辑」。
+  - **dbot-telegram**：TelegramBotAdapter 实现上述两方法，委托 teloxide 的 edit_message_text / send_message。
+  - **telegram-bot**：TelegramBot（telegram_impl）同样实现 edit_message、send_message_and_return_id。
+  - 文档：CRATES.md 新增 ai-client 条目。
+- **应用与 Handler 重构（P2）**
+  - **ai-handlers**：SyncAIHandler 改为持有 `Arc<OpenAILlmClient>`、`Arc<dyn dbot_core::Bot>`，不再依赖 telegram-bot-ai、teloxide；发消息统一用 `Bot::send_message`，流式用 `Bot::send_message_and_return_id` + `Bot::edit_message`；构造处接收 llm_client + bot。
+  - **telegram-bot**：移除 telegram-bot-ai 依赖，增加 ai-client；runner 内构造 `OpenAILlmClient`（用 config 的 AI 字段）与 `TelegramBotAdapter`，将 `Arc<OpenAILlmClient>`、`Arc<dyn Bot>` 传入 SyncAIHandler::new；主应用 RAG + 流式/非流式行为不变。
+  - **telegram-bot-ai**：改为依赖 ai-client（移除对 openai-client、prompt 的直接依赖）；TelegramBotAI 内部持有 `OpenAILlmClient`，get_ai_response / stream 等方法委托 llm_client；main 仍为独立 REPL 二进制。
+  - 测试：ai-handlers 单元测试使用 MockBot + anyhow::Result（EmbeddingService mock），避免与 dbot_core::Result 冲突；全 workspace 构建与测试通过。
 - **回复消息内容作为 AI 上下文**
   - **dbot-core**：`Message` 新增字段 `reply_to_message_content: Option<String>`，存储被回复消息的文本内容。
   - **telegram-bot adapters**：`TelegramMessageWrapper::to_core()` 新增 `get_reply_to_message_content()` 方法，从 Telegram 的 `reply_to_message.text` 提取被回复消息内容。

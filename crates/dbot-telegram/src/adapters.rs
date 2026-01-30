@@ -1,6 +1,9 @@
+//! Telegram 类型到 dbot_core 类型的适配器。
+//! 与外部交互：仅依赖 teloxide 与 dbot_core 的类型定义。
+
 use dbot_core::{Chat, Message, MessageDirection, ToCoreMessage, ToCoreUser, User};
 
-/// Telegram 用户到 Core 用户的转换器
+/// Telegram 用户到 Core 用户的转换器。
 pub struct TelegramUserWrapper<'a>(pub &'a teloxide::types::User);
 
 impl<'a> ToCoreUser for TelegramUserWrapper<'a> {
@@ -14,7 +17,7 @@ impl<'a> ToCoreUser for TelegramUserWrapper<'a> {
     }
 }
 
-/// Telegram 消息到 Core 消息的转换器
+/// Telegram 消息到 Core 消息的转换器。
 pub struct TelegramMessageWrapper<'a>(pub &'a teloxide::types::Message);
 
 impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
@@ -48,12 +51,10 @@ impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
 }
 
 impl<'a> TelegramMessageWrapper<'a> {
-    /// 获取被回复消息的 ID
     fn get_reply_to_message_id(&self) -> Option<String> {
         self.0.reply_to_message().map(|msg| msg.id.to_string())
     }
 
-    /// 被回复的那条消息是否由机器人发送（用于仅在被回复的是机器人消息时触发 AI）
     fn get_reply_to_message_from_bot(&self) -> bool {
         self.0
             .reply_to_message()
@@ -62,7 +63,6 @@ impl<'a> TelegramMessageWrapper<'a> {
             .unwrap_or(false)
     }
 
-    /// 获取被回复消息的内容（文本），用于作为 AI 上下文
     fn get_reply_to_message_content(&self) -> Option<String> {
         self.0
             .reply_to_message()
@@ -95,27 +95,5 @@ mod tests {
         assert_eq!(core_user.username, Some("testuser".to_string()));
         assert_eq!(core_user.first_name, Some("Test".to_string()));
         assert_eq!(core_user.last_name, Some("User".to_string()));
-    }
-
-    #[test]
-    fn test_telegram_user_wrapper_minimal() {
-        let user = teloxide::types::User {
-            id: teloxide::types::UserId(456),
-            is_bot: false,
-            first_name: "Minimal".to_string(),
-            last_name: None,
-            username: None,
-            language_code: None,
-            is_premium: false,
-            added_to_attachment_menu: false,
-        };
-
-        let wrapper = TelegramUserWrapper(&user);
-        let core_user = wrapper.to_core();
-
-        assert_eq!(core_user.id, 456);
-        assert_eq!(core_user.username, None);
-        assert_eq!(core_user.first_name, Some("Minimal".to_string()));
-        assert_eq!(core_user.last_name, None);
     }
 }

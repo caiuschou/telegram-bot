@@ -1,21 +1,19 @@
+//! 对 teloxide::Bot 的封装，实现 dbot_core::Bot trait。
+//! 与外部交互：生产代码中向 Telegram 发送消息；测试中可替换为其他 Bot 实现。
+
 use async_trait::async_trait;
 use dbot_core::{Bot as CoreBot, Chat, Message, Result};
 use teloxide::{prelude::*, types::ChatId, types::MessageId};
 
 /// 对 teloxide::Bot 的简单封装，实现 dbot-core 的 Bot trait。
-///
-/// - 在生产代码中用于真正向 Telegram 发送消息。
-/// - 在测试中可以通过实现 dbot-core::Bot trait 的其他类型进行替换。
-pub struct TelegramBot {
+pub struct TelegramBotAdapter {
     bot: teloxide::Bot,
 }
 
-impl TelegramBot {
-    /// 使用 Telegram Bot Token 创建新的 TelegramBot 实例。
-    pub fn new(token: String) -> Self {
-        Self {
-            bot: teloxide::Bot::new(token),
-        }
+impl TelegramBotAdapter {
+    /// 使用已有的 teloxide Bot 创建适配器。
+    pub fn new(bot: teloxide::Bot) -> Self {
+        Self { bot }
     }
 
     /// 暴露底层 teloxide::Bot，便于在需要时直接使用 Teloxide API。
@@ -25,7 +23,7 @@ impl TelegramBot {
 }
 
 #[async_trait]
-impl CoreBot for TelegramBot {
+impl CoreBot for TelegramBotAdapter {
     async fn send_message(&self, chat: &Chat, text: &str) -> Result<()> {
         self.bot
             .send_message(ChatId(chat.id), text.to_string())

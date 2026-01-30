@@ -20,6 +20,8 @@ members = [
     "crates/memory-lance",
     "crates/memory-loader",
     "crates/handler-chain",
+    "crates/dbot-telegram",
+    "crates/ai-client",
     "crates/middleware",
     "crates/prompt",
 ]

@@ -1,0 +1,12 @@
+[package]
+name = "ai-client"
+version = "0.1.0"
+edition = "2021"
+description = "LLM client abstraction: LlmClient trait + OpenAI implementation"
+
+[dependencies]
+openai-client = { path = "../../openai-client" }
+prompt = { path = "../prompt" }
+anyhow = "1.0"
+async-trait = "0.1"
+tracing = "0.1"

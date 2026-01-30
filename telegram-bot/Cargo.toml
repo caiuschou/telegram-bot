@@ -11,9 +11,10 @@ log = "0.4"
 env_logger = "0.11"
 dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
+dbot-telegram = { path = "../crates/dbot-telegram" }
 ai-handlers = { path = "../ai-handlers" }
 storage = { path = "../storage" }
-telegram-bot-ai = { path = "../telegram-bot-ai" }
+ai-client = { path = "../crates/ai-client" }
 openai-client = { path = "../openai-client" }
 embedding = { path = "../crates/embedding" }
 openai-embedding = { path = "../crates/openai-embedding" }

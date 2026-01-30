@@ -1,46 +1,62 @@
 //! Unit tests for SyncAIHandler.
 //!
 //! Covers: is_bot_mentioned, extract_question, get_question.
-//! Uses in-memory SQLite, MockEmbeddingService, and dummy Bot/TelegramBotAI; does not call Telegram or OpenAI.
+//! Uses in-memory store, MockEmbeddingService, MockBot, and OpenAILlmClient (dummy key); does not call Telegram or OpenAI.
 
+use ai_client::OpenAILlmClient;
 use ai_handlers::SyncAIHandler;
 use async_trait::async_trait;
 use chrono::Utc;
-use dbot_core::{Chat, Message, MessageDirection, User};
+use dbot_core::{Bot as CoreBot, Chat, Message, MessageDirection, Result as DbotResult, User};
 use embedding::EmbeddingService;
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
-use openai_client::OpenAIClient;
 use std::sync::Arc;
 use storage::MessageRepository;
-use telegram_bot_ai::TelegramBotAI;
-use teloxide::Bot;
 
 /// Mock embedding service for tests: returns fixed-dimension vectors, no external API.
 struct MockEmbeddingService;
 
 #[async_trait]
 impl EmbeddingService for MockEmbeddingService {
-    async fn embed(&self, _text: &str) -> Result<Vec<f32>, anyhow::Error> {
+    async fn embed(&self, _text: &str) -> anyhow::Result<Vec<f32>> {
         Ok(vec![0.0; 1536])
     }
 
-    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error> {
+    async fn embed_batch(&self, texts: &[String]) -> anyhow::Result<Vec<Vec<f32>>> {
         Ok(texts.iter().map(|_| vec![0.0; 1536]).collect())
     }
 }
 
-/// Builds a minimal SyncAIHandler for unit testing (repo + in-memory store + mock embedding; no real Telegram/OpenAI).
+/// Mock Bot for tests: no network, returns Ok / dummy id.
+struct MockBot;
+
+#[async_trait]
+impl CoreBot for MockBot {
+    async fn send_message(&self, _chat: &Chat, _text: &str) -> DbotResult<()> {
+        Ok(())
+    }
+
+    async fn reply_to(&self, _message: &Message, _text: &str) -> DbotResult<()> {
+        Ok(())
+    }
+
+    async fn edit_message(&self, _chat: &Chat, _message_id: &str, _text: &str) -> DbotResult<()> {
+        Ok(())
+    }
+
+    async fn send_message_and_return_id(&self, _chat: &Chat, _text: &str) -> DbotResult<String> {
+        Ok("1".to_string())
+    }
+}
+
+/// Builds a minimal SyncAIHandler for unit testing (repo + in-memory store + mock embedding + MockBot + OpenAILlmClient; no real Telegram/OpenAI).
 async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
     let username = Arc::new(tokio::sync::RwLock::new(
         bot_username.map(String::from),
     ));
-    let openai = OpenAIClient::new("dummy_key".to_string());
-    let ai_bot = TelegramBotAI::new(
-        bot_username.unwrap_or("test_bot").to_string(),
-        openai,
-    );
-    let bot = Bot::new("dummy_telegram_token");
+    let llm_client = Arc::new(OpenAILlmClient::new("dummy_key".to_string()));
+    let bot: Arc<dyn CoreBot> = Arc::new(MockBot);
     let repo = MessageRepository::new("sqlite::memory:")
         .await
         .expect("in-memory repo");
@@ -49,7 +65,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncAIHandler {
 
     SyncAIHandler::new(
         username,
-        ai_bot,
+        llm_client,
         bot,
         repo,
         memory_store,

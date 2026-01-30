@@ -1,7 +1,8 @@
 //! Synchronous AI handler: runs in the handler chain, calls AI and returns `HandlerResponse::Reply(text)` so middleware (e.g. MemoryMiddleware) can save the reply in `after()`.
 
+use ai_client::{LlmClient, OpenAILlmClient};
 use async_trait::async_trait;
-use dbot_core::{Handler, HandlerResponse, Message, Result};
+use dbot_core::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
 use memory::{
     Context, ContextBuilder, MemoryStore, RecentMessagesStrategy, SemanticSearchStrategy,
@@ -10,8 +11,6 @@ use memory::{
 use prompt::ChatMessage;
 use std::sync::Arc;
 use storage::MessageRepository;
-use telegram_bot_ai::TelegramBotAI;
-use teloxide::{prelude::*, Bot};
 use tracing::{debug, error, info, instrument};
 
 // --- User-facing fallback messages (sent to Telegram on errors) ---
@@ -34,12 +33,12 @@ fn log_messages_submitted_to_ai(messages: &[ChatMessage]) {
 
 /// Synchronous AI handler: when the message is an AI query (user replies to the bot's message, or @mentions the bot), builds context, calls the AI, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
 ///
-/// **External interactions:** Telegram Bot API (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), TelegramBotAI (LLM).
+/// **External interactions:** Bot trait (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), LlmClient (LLM).
 #[derive(Clone)]
 pub struct SyncAIHandler {
     pub(crate) bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    pub(crate) ai_bot: TelegramBotAI,
-    pub(crate) bot: Arc<Bot>,
+    pub(crate) llm_client: Arc<OpenAILlmClient>,
+    pub(crate) bot: Arc<dyn CoreBot>,
     pub(crate) repo: MessageRepository,
     pub(crate) memory_store: Arc<dyn MemoryStore>,
     /// When set, RecentMessagesStrategy and UserPreferencesStrategy use this store (e.g. SQLite); semantic search still uses `memory_store`.
@@ -60,8 +59,8 @@ impl SyncAIHandler {
 
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-        ai_bot: TelegramBotAI,
-        bot: Bot,
+        llm_client: Arc<OpenAILlmClient>,
+        bot: Arc<dyn CoreBot>,
         repo: MessageRepository,
         memory_store: Arc<dyn MemoryStore>,
         recent_store: Option<Arc<dyn MemoryStore>>,
@@ -74,8 +73,8 @@ impl SyncAIHandler {
     ) -> Self {
         Self {
             bot_username,
-            ai_bot,
-            bot: Arc::new(bot),
+            llm_client,
+            bot,
             repo,
             memory_store,
             recent_store,
@@ -207,9 +206,8 @@ impl SyncAIHandler {
     // ---------- Sending & logging ----------
 
     async fn send_response_for_message(&self, message: &Message, response: &str) -> Result<()> {
-        let chat_id = ChatId(message.chat.id);
         self.bot
-            .send_message(chat_id, response)
+            .send_message(&message.chat, response)
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to send message");
@@ -275,7 +273,7 @@ impl SyncAIHandler {
         );
         log_messages_submitted_to_ai(&messages);
 
-        let response = match self.ai_bot.get_ai_response_with_messages(messages).await {
+        let response = match self.llm_client.get_ai_response_with_messages(messages).await {
             Ok(r) => r,
             Err(e) => {
                 Self::log_error_chain(&e, "Failed to get AI response");
@@ -322,32 +320,36 @@ impl SyncAIHandler {
         );
         log_messages_submitted_to_ai(&messages);
 
-        let chat_id = ChatId(message.chat.id);
-
         // Send "thinking" placeholder; on failure notify user and stop.
-        let sent_msg = match self.bot.send_message(chat_id, &self.thinking_message).await {
-            Ok(m) => m,
+        let message_id = match self
+            .bot
+            .send_message_and_return_id(&message.chat, &self.thinking_message)
+            .await
+        {
+            Ok(id) => id,
             Err(e) => {
                 error!(error = %e, "Failed to send thinking message");
                 return self.send_fallback_and_stop(message, MSG_REQUEST_FAILED).await;
             }
         };
 
-        let message_id = sent_msg.id;
         let bot = self.bot.clone();
+        let chat = message.chat.clone();
         let full_content = Arc::new(tokio::sync::Mutex::new(String::new()));
 
-        // On each stream chunk: append to full_content and edit the Telegram message.
+        // On each stream chunk: append to full_content and edit via Bot trait.
         match self
-            .ai_bot
+            .llm_client
             .get_ai_response_stream_with_messages(messages, |chunk| {
                 let bot = bot.clone();
+                let chat = chat.clone();
+                let message_id = message_id.clone();
                 let full_content = full_content.clone();
                 async move {
                     if !chunk.content.is_empty() {
                         let mut content = full_content.lock().await;
                         content.push_str(&chunk.content);
-                        bot.edit_message_text(chat_id, message_id, &*content)
+                        bot.edit_message(&chat, &message_id, &*content)
                             .await
                             .map_err(|e| anyhow::anyhow!("Failed to edit message: {}", e))?;
                     }
@@ -364,7 +366,7 @@ impl SyncAIHandler {
                 Self::log_error_chain(&e, "AI stream response failed");
                 let _ = self
                     .bot
-                    .edit_message_text(chat_id, message_id, MSG_STREAM_FAILED)
+                    .edit_message(&message.chat, &message_id, MSG_STREAM_FAILED)
                     .await;
                 Ok(HandlerResponse::Stop)
             }

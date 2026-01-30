@@ -26,17 +26,19 @@ dbot-core/src/
 
 ### 1. Bot Abstraction (`bot.rs`)
 
-The `Bot` trait defines the interface for sending messages:
+The `Bot` trait defines the interface for sending messages (and editing for streaming):
 
 ```rust
 #[async_trait]
 pub trait Bot {
     async fn send_message(&self, chat: &Chat, text: &str) -> Result<()>;
     async fn reply_to(&self, message: &Message, text: &str) -> Result<()>;
+    async fn edit_message(&self, chat: &Chat, message_id: &str, text: &str) -> Result<()>;
+    async fn send_message_and_return_id(&self, chat: &Chat, text: &str) -> Result<String>;
 }
 ```
 
-**TelegramBot** - Concrete implementation using teloxide:
+**TelegramBot** (in telegram-bot) and **TelegramBotAdapter** (in dbot-telegram) - Concrete implementations using teloxide:
 - Wraps `teloxide::Bot` internally
 - Converts core types to teloxide types (e.g., `ChatId`)
 - Maps teloxide errors to `DbotError::Bot`
@@ -187,20 +189,21 @@ pub fn init_tracing(log_file_path: &str) -> anyhow::Result<()>
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                      telegram-bot                         │
-│  (Bot implementation, teloxide integration)               │
+│  telegram-bot / dbot-telegram (TelegramBotAdapter)        │
+│  Bot implementation: send_message, reply_to,             │
+│  edit_message, send_message_and_return_id (teloxide)      │
 └────────────────────────┬─────────────────────────────────┘
                          │ implements Bot
                          ▼
 ┌──────────────────────────────────────────────────────────┐
 │                       dbot-core                           │
-│  (Core types, traits, errors, logging)                    │
+│  (Core types, Bot trait, Handler/Middleware, errors)      │
 └────────────────────────┬─────────────────────────────────┘
-                         │ provides
+                         │ used by
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│                      bot-runtime                          │
-│  (Handler/Middleware implementations, dispatcher)         │
+│  ai-handlers (SyncAIHandler: Arc<dyn Bot> + LlmClient)    │
+│  handler-chain, middleware, telegram-bot runner           │
 └──────────────────────────────────────────────────────────┘
 ```
 

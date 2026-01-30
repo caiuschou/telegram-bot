@@ -35,14 +35,19 @@ dbot/
 │   ├── src/
 │   │   └── lib.rs             # ChatCompletion 和流式响应
 │   └── Cargo.toml
-├── telegram-bot/              # Telegram Bot 库 ⭐
+├── telegram-bot/              # Telegram Bot 主应用 ⭐
 │   ├── src/
-│   │   ├── lib.rs             # 库入口
+│   │   ├── lib.rs             # 库入口（再导出 dbot-telegram Wrapper）
 │   │   ├── config.rs          # 配置管理
-│   │   ├── adapters.rs        # Telegram/Core 类型转换
-│   │   ├── runner.rs          # Bot 运行时
+│   │   ├── runner.rs          # Bot 运行时（组装链 + dbot_telegram::run_repl）
 │   │   └── telegram_impl.rs   # TelegramBot 实现 Bot trait
 │   └── Cargo.toml
+├── crates/
+│   ├── ai-client/             # AI 层抽象（LlmClient、OpenAILlmClient）
+│   ├── dbot-telegram/         # Telegram 框架层（适配器、run_repl、最小配置）
+│   ├── memory-inmemory/       # 内存存储实现
+│   ├── memory-sqlite/         # SQLite 内存存储
+│   └── memory-lance/          # Lance 向量存储
 ├── memory/                     # 内存管理 ⭐
 │   ├── src/
 │   │   ├── types.rs           # 内存类型定义
@@ -50,19 +55,13 @@ dbot/
 │   │   ├── context.rs         # 上下文构建
 │   │   └── strategies.rs      # 上下文策略
 │   └── Cargo.toml
-├── crates/
-│   ├── memory-inmemory/       # 内存存储实现
-│   ├── memory-sqlite/         # SQLite 内存存储
-│   └── memory-lance/          # Lance 向量存储
 ├── telegram-bot-ai/           # AI Bot 库
 │   ├── src/
 │   │   ├── lib.rs             # AI Bot 库
 │   └── Cargo.toml
-├── telegram-bot-examples/     # 示例项目
+├── telegram-bot-examples/     # 示例占位（可在此添加新示例）
 │   ├── src/
-│   │   ├── echo.rs            # Echo 示例
-│   │   └── clock.rs           # 时钟示例
-│   ├── examples/
+│   │   └── lib.rs
 │   └── Cargo.toml
 └── dbot-cli/                  # 统一 CLI 工具 ⭐
     ├── src/
@@ -280,6 +279,8 @@ let logger = LoggingMiddleware;
 ## 📖 详细文档
 
 - [项目设置指南](SETUP.md)
+- [Crate 与文件索引](docs/CRATES.md) - 每个 crate 及对应文件与描述，遵循「每个 crate 尽量简单」
+- [开发计划（框架与 Bot/AI 拆分）](docs/refactoring/DEVELOPMENT_PLAN.md) - 按阶段与任务表执行的详细开发计划
 - [Memory 记忆管理](MEMORY.md) - 对话记忆、语义搜索、存储后端
 - [dbot-cli 使用文档](dbot-cli/README.md)
 - [telegram-bot 文档](telegram-bot/README.md) - 包含配置管理、类型转换、运行时等详细说明

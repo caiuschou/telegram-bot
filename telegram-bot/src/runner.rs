@@ -1,22 +1,22 @@
 use ai_handlers::SyncAIHandler;
 use anyhow::Result;
 use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
+use dbot_telegram::{run_repl, TelegramMessageWrapper};
 use handler_chain::HandlerChain;
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
 use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
 use middleware::{MemoryMiddleware, PersistenceMiddleware};
-use openai_client::OpenAIClient;
+use ai_client::OpenAILlmClient;
 use bigmodel_embedding::BigModelEmbedding;
+use dbot_telegram::TelegramBotAdapter;
 use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
 use storage::MessageRepository;
-use telegram_bot_ai::TelegramBotAI;
 use teloxide::prelude::*;
 use tracing::{error, info, instrument};
 
-use super::adapters::TelegramMessageWrapper;
 use super::config::BotConfig;
 
 /// Bot 组件集合，封装 run_bot / TelegramBot 所需的核心依赖，便于测试与复用。
@@ -91,14 +91,17 @@ async fn build_bot_components(
     // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    // 初始化 OpenAI 客户端
-    let openai_client = OpenAIClient::with_base_url(
-        config.openai_api_key.clone(),
-        config.openai_base_url.clone(),
-    );
-    let ai_bot = TelegramBotAI::new("bot".to_string(), openai_client)
+    // 初始化 LLM 客户端（ai-client）与 Bot 适配器（dbot-telegram）
+    let llm_client = Arc::new(
+        OpenAILlmClient::with_base_url(
+            config.openai_api_key.clone(),
+            config.openai_base_url.clone(),
+        )
         .with_model(config.ai_model.clone())
-        .with_system_prompt_opt(config.ai_system_prompt.clone());
+        .with_system_prompt_opt(config.ai_system_prompt.clone()),
+    );
+    let bot_adapter: Arc<dyn dbot_core::Bot> =
+        Arc::new(TelegramBotAdapter::new(teloxide_bot.clone()));
 
     // 初始化 Embedding 服务（用于用户提问在向量库中的语义搜索）
     let embedding_service: Arc<dyn embedding::EmbeddingService> = match config.embedding_provider.as_str() {
@@ -122,8 +125,8 @@ async fn build_bot_components(
     // memory_recent_limit / memory_relevant_top_k 用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy
     let sync_ai_handler = Arc::new(SyncAIHandler::new(
         bot_username.clone(),
-        ai_bot,
-        teloxide_bot.clone(),
+        llm_client,
+        bot_adapter,
         repo.as_ref().clone(),
         memory_store.clone(),
         recent_store.clone(),
@@ -359,62 +362,8 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
     info!("Bot started successfully");
 
     // 在启动 repl 前先设置 bot_username，否则首条 @ 消息到达时尚未设置会导致 SyncAIHandler 判定为“非 AI 查询”而不回复
-    if let Ok(me) = teloxide_bot.get_me().await {
-        if let Some(username) = &me.user.username {
-            *bot_username.write().await = Some(username.clone());
-            info!(username = %username, "Bot username set before repl");
-        }
-    }
-
-    // 启动 bot 监听：单次运行 repl，long polling 退出后进程结束（无外层循环、无自动重连）。
-    let chain = handler_chain.clone();
-    teloxide::repl(
-        teloxide_bot.clone(),
-        move |_bot: Bot, msg: teloxide::types::Message| {
-            let handler_chain = chain.clone();
-
-            async move {
-                let wrapper = TelegramMessageWrapper(&msg);
-                let core_msg = wrapper.to_core();
-
-                // 每条收到的消息都打日志；仅文本消息带 message_content，非文本（图/贴纸等）不打 content 避免空字段
-                match msg.text() {
-                    Some(text) => {
-                        info!(
-                            user_id = core_msg.user.id,
-                            chat_id = core_msg.chat.id,
-                            message_content = %text,
-                            "Received message"
-                        );
-                    }
-                    None => {
-                        info!(
-                            user_id = core_msg.user.id,
-                            chat_id = core_msg.chat.id,
-                            "Received non-text message"
-                        );
-                    }
-                }
-
-                // 在新任务中处理消息，避免长时间处理（如 AI 调用）阻塞轮询收下一条消息
-                let chain_for_task = handler_chain.clone();
-                tokio::spawn(async move {
-                    info!(
-                        user_id = core_msg.user.id,
-                        chat_id = core_msg.chat.id,
-                        message_id = %core_msg.id,
-                        "step: processing message (handler chain started)"
-                    );
-                    if let Err(e) = chain_for_task.handle(&core_msg).await {
-                        error!(error = %e, user_id = core_msg.user.id, "Handler chain failed");
-                    }
-                });
-
-                Ok(())
-            }
-        },
-    )
-    .await;
+    // 使用框架层 REPL：消息转 core::Message 后交给 HandlerChain；run_repl 内会 get_me 并写回 bot_username
+    run_repl(teloxide_bot, handler_chain, bot_username).await?;
 
     Ok(())
 }
