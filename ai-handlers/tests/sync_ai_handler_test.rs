@@ -173,11 +173,11 @@ async fn test_get_question_mention_with_non_empty_question() {
 }
 
 #[tokio::test]
-async fn test_get_question_mention_only_returns_none() {
+async fn test_get_question_mention_only_returns_default() {
     let h = test_handler(Some("bot")).await;
     let msg = make_message("@bot", None, false);
     let q = h.get_question(&msg, Some("bot"));
-    assert_eq!(q, None);
+    assert_eq!(q.as_deref(), Some(SyncAIHandler::DEFAULT_EMPTY_MENTION_QUESTION));
 }
 
 #[tokio::test]

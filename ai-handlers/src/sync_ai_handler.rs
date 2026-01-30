@@ -55,6 +55,11 @@ pub struct SyncAIHandler {
 }
 
 impl SyncAIHandler {
+    /// 当用户仅 @ 提及机器人、未输入具体内容时，作为发给 AI 的默认“问题”提示，使 AI 简短打招呼并邀请用户提问。
+    /// 与外部交互：作为 LlmClient 的 user 消息内容传入，由 LLM 生成友好回复。
+    pub const DEFAULT_EMPTY_MENTION_QUESTION: &str =
+        "用户只是 @ 了你，没有写具体问题。请简短友好地打招呼并邀请用户提问。";
+
     // ---------- Construction ----------
 
     pub fn new(
@@ -107,7 +112,8 @@ impl SyncAIHandler {
             .to_string()
     }
 
-    /// Resolves the user question: 回复机器人的消息时用当前内容；@ 提及且问题非空时用提取后的内容；否则 None。
+    /// Resolves the user question: 回复机器人时用当前内容；@ 提及且问题非空时用提取后的内容；
+    /// @ 提及但内容为空时用 DEFAULT_EMPTY_MENTION_QUESTION，使机器人仍会回复；否则 None。
     /// External: uses Message (dbot_core) fields only. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
         if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
@@ -119,6 +125,8 @@ impl SyncAIHandler {
                 if !q.is_empty() {
                     return Some(q);
                 }
+                // 仅 @ 提及、无内容时仍触发回复，使用默认提示让 AI 打招呼并邀请用户提问
+                return Some(Self::DEFAULT_EMPTY_MENTION_QUESTION.to_string());
             }
         }
         None

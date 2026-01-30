@@ -41,11 +41,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **文档**：`.env.example`、`.env.test.example` 增加 `MEMORY_RECENT_USE_SQLITE` 与相关说明；config 单测 `test_load_config_memory_recent_use_sqlite`。
 
 ### Documentation
+- **文档整理与简化**
+  - 新增 `docs/README.md` 作为文档索引（根目录、RAG、CLI、测试、重构等入口）。
+  - 新增 `docs/refactoring/README.md` 作为重构文档索引。
+  - 根目录 `MEMORY.md` 简化为概述与链接，详细内容指向 `docs/rag/` 与 `docs/rag/memory/`。
+  - `docs/RAG_SOLUTION.md` 简化为跳转到 `docs/rag/`。
+  - `docs/rag/README.md` 移除末尾重复的「相关文档」小节。
+  - 向量搜索准确度评审结论并入 `docs/rag/vector-search-accuracy-plan.md`；`vector-search-accuracy-plan-review.md` 改为简短重定向。
+  - 根目录 `README.md` 增加「文档索引」链接。
 - **策略与 SQLite：最近消息来自 SQLite，仍执行向量检索**
   - **memory-strategies**：crate 文档说明 RecentMessagesStrategy 从 store（如 SQLite）取最近消息，SemanticSearchStrategy 仍做向量检索；使用 SQLite 时二者均由同一 SQLite 存储提供。
   - **docs/rag/memory/storage.md**：SQLiteVectorStore 说明补充：支持 `search_by_*`（最近消息）与 `semantic_search`（向量检索）。
 
 ### Fixed
+- **用户仅 @ 提及机器人、无内容时机器人无响应**
+  - **ai-handlers**：`SyncAIHandler::get_question()` 在检测到 @ 提及但提取内容为空时，改为返回默认提示 `DEFAULT_EMPTY_MENTION_QUESTION`（让 AI 简短打招呼并邀请用户提问），不再返回 `None`，从而触发回复。
+  - 新增关联常量 `SyncAIHandler::DEFAULT_EMPTY_MENTION_QUESTION`；单元测试 `test_get_question_mention_only_returns_none` 更名为 `test_get_question_mention_only_returns_default` 并断言返回该默认值。
 - **最近消息上下文出现大量 "User: " / "Assistant: " 无内容行**
   - **原因**：Lance 查询返回的 RecordBatch 列序可能与代码假设不一致，或历史存在 content 为空的条目。
   - **memory-lance**：`batch_to_entry` 改为按**列名**（schema.index_of）读取列，不依赖列序，避免误读 content。
