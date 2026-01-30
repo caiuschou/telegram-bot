@@ -21,6 +21,7 @@ pub struct MessageRecord {
 }
 
 impl MessageRecord {
+    /// Creates a new record with a generated UUID and current timestamp.
     pub fn new(
         user_id: i64,
         chat_id: i64,

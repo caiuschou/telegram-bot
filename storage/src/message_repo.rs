@@ -8,12 +8,14 @@ use crate::sqlite_pool::SqlitePoolManager;
 use chrono::{DateTime, Local, Utc};
 use tracing::info;
 
+/// SQLite-backed message persistence and queries (save, get_message_by_id, get_recent_messages_by_chat, get_messages, get_stats).
 #[derive(Clone)]
 pub struct MessageRepository {
     pool_manager: SqlitePoolManager,
 }
 
 impl MessageRepository {
+    /// Creates a repository and initializes the messages table and indexes.
     pub async fn new(database_url: &str) -> Result<Self, sqlx::Error> {
         let pool_manager = SqlitePoolManager::new(database_url).await?;
         let repo = Self { pool_manager };

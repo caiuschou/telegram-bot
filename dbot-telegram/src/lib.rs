@@ -1,7 +1,7 @@
 //! # dbot-telegram
 //!
-//! Telegram Bot 框架层：适配器、Bot trait 实现、最小配置、REPL 运行。
-//! 仅负责 Telegram 接入与消息链执行，不包含持久化、记忆、AI 等业务逻辑。
+//! Telegram bot framework layer: adapters, [`dbot_core::Bot`] implementation, minimal config, REPL runner.
+//! Handles only Telegram connectivity and handler-chain execution; no persistence, memory, or AI logic.
 
 mod adapters;
 mod bot_adapter;

@@ -19,46 +19,33 @@ use tracing::{error, info, instrument};
 
 use super::config::BotConfig;
 
-/// Bot 组件集合，封装 run_bot / TelegramBot 所需的核心依赖，便于测试与复用。
+/// Core dependencies for run_bot / TelegramBot; shared for tests and reuse.
 pub struct BotComponents {
-    /// 消息持久化仓库
     pub repo: Arc<MessageRepository>,
-    /// Teloxide Bot 实例
     pub teloxide_bot: Bot,
-    /// Bot 的用户名缓存
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    /// 同步 LLM 处理器（在链内执行，返回 Reply 供 middleware 存记忆）
     pub sync_llm_handler: Arc<SyncLLMHandler>,
-    /// 向量记忆存储（主存储，用于语义检索与默认读写）
     pub memory_store: Arc<dyn MemoryStore>,
-    /// 可选：最近消息专用存储（如 SQLite）。设置时 RecentMessagesStrategy / UserPreferencesStrategy 从此读，middleware 同时写入此处与主存储。
+    /// When set, RecentMessagesStrategy / UserPreferencesStrategy read from here; middleware writes to both main store and recent_store.
     pub recent_store: Option<Arc<dyn MemoryStore>>,
-    /// Embedding 服务（用于语义检索与写入记忆时生成向量）
     pub embedding_service: Arc<dyn embedding::EmbeddingService>,
 }
 
-/// 可测试的 TelegramBot 结构，封装 Bot 配置与依赖。
+/// TelegramBot: config, components, and handler chain. Testable via handle_message / handle_core_message.
 pub struct TelegramBot {
-    /// 运行所需的配置
     pub config: BotConfig,
-    /// 封装后的 Bot 组件
     pub components: BotComponents,
-    /// 处理消息的中间件链
     pub handler_chain: HandlerChain,
 }
 
-/// 使用给定的 `MemoryStore` 构建 Bot 组件。
-///
-/// 注意：此函数假设传入的 `memory_store` 已根据配置选择好具体实现，
-/// 因此不会再根据 `config.memory_store_type` 做分支判断。
-/// 当 `recent_store` 为 Some 时，最近消息策略使用它，middleware 同时写入主存储与 recent_store。
+/// Builds BotComponents with the given memory_store and optional recent_store. Does not branch on config.memory_store_type.
 #[instrument(skip(config, memory_store, recent_store))]
 async fn build_bot_components(
     config: &BotConfig,
     memory_store: Arc<dyn MemoryStore>,
     recent_store: Option<Arc<dyn MemoryStore>>,
 ) -> Result<BotComponents> {
-    // 初始化存储
+    // Message persistence
     let repo = Arc::new(
         MessageRepository::new(&config.database_url)
             .await
@@ -72,7 +59,7 @@ async fn build_bot_components(
             })?,
     );
 
-    // 初始化 Telegram Bot；若配置了 TELEGRAM_API_URL / TELOXIDE_API_URL（如测试 mock 服务器），则指向该 URL
+    // Telegram Bot; if TELEGRAM_API_URL / TELOXIDE_API_URL is set (e.g. mock server), use it
     let teloxide_bot = {
         let bot = Bot::new(config.bot_token.clone());
         if let Some(ref url_str) = config.telegram_api_url {
@@ -88,10 +75,9 @@ async fn build_bot_components(
         }
     };
 
-    // 存储 bot username
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    // 初始化 LLM 客户端（llm-client）与 Bot 适配器（dbot-telegram）
+    // LLM client and Bot adapter
     let llm_client = Arc::new(
         OpenAILlmClient::with_base_url(
             config.openai_api_key.clone(),
@@ -103,7 +89,7 @@ async fn build_bot_components(
     let bot_adapter: Arc<dyn dbot_core::Bot> =
         Arc::new(TelegramBotAdapter::new(teloxide_bot.clone()));
 
-    // 初始化 Embedding 服务（用于用户提问在向量库中的语义搜索）
+    // Embedding service for RAG semantic search
     let embedding_service: Arc<dyn embedding::EmbeddingService> = match config.embedding_provider.as_str() {
         "zhipuai" => {
             if config.bigmodel_api_key.is_empty() {
@@ -121,8 +107,7 @@ async fn build_bot_components(
         }
     };
 
-    // 初始化同步 LLM 处理器（在链内执行，返回 Reply 供 MemoryMiddleware 在 after() 中存记忆）
-    // memory_recent_limit / memory_relevant_top_k 用于构造 ContextBuilder 的 RecentMessagesStrategy / SemanticSearchStrategy
+    // Sync LLM handler (returns Reply so MemoryMiddleware can save in after())
     let sync_llm_handler = Arc::new(SyncLLMHandler::new(
         bot_username.clone(),
         llm_client,
@@ -150,27 +135,16 @@ async fn build_bot_components(
     })
 }
 
-/// 初始化 Bot 的核心组件。
-///
-/// - 初始化消息存储（SQLite / 其他）。
-/// - 初始化 Telegram Bot。
-/// - 初始化 AI 查询通道与处理器。
-/// - 初始化向量记忆存储。
-///
-/// 该函数不负责：
-/// - 日志目录创建与 tracing 初始化（由 `run_bot` 调用方负责）。
-/// - 启动 AI 查询处理器任务。
+/// Initializes core bot components: message repo, Telegram Bot, LLM handler, memory store. Does not create log dir or init tracing (caller does); does not start REPL.
 #[instrument(skip(config))]
 pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponents> {
-    // 初始化内存存储
     let memory_store: Arc<dyn MemoryStore> = match config.memory_store_type.as_str() {
         "lance" => {
             let lance_path = config
                 .memory_lance_path
                 .clone()
                 .unwrap_or_else(|| "./data/lance_db".to_string());
-            // 与 embedding 服务维度一致：智谱 embedding-2 为 1024，OpenAI text-embedding-3-small 为 1536。
-            // 若切换 provider，需删除已有 Lance 目录或确保表按新维度重建，否则 semantic_search 会报错。
+            // Embedding dim must match provider (Zhipu 1024, OpenAI 1536). If switching provider, recreate Lance DB or table.
             let embedding_dim = match config.embedding_provider.as_str() {
                 "zhipuai" => 1024,
                 _ => 1536,
@@ -229,10 +203,7 @@ pub async fn initialize_bot_components(config: &BotConfig) -> Result<BotComponen
     build_bot_components(config, memory_store, recent_store).await
 }
 
-/// 使用自定义 `MemoryStore` 初始化 Bot 组件。
-///
-/// - 不会根据 `config.memory_store_type` 再次选择实现，而是完全使用传入的 `memory_store`。
-/// - 主要用于测试场景下注入 `MockMemoryStore` 等自定义实现。
+/// Initializes BotComponents with a custom MemoryStore (e.g. MockMemoryStore for tests). Ignores config.memory_store_type.
 #[instrument(skip(config, memory_store))]
 pub async fn initialize_bot_components_with_store(
     config: &BotConfig,
@@ -242,11 +213,10 @@ pub async fn initialize_bot_components_with_store(
 }
 
 impl TelegramBot {
-    /// 使用配置初始化一个新的 TelegramBot。
+    /// Creates a TelegramBot from config (repo, memory, LLM, middleware chain).
     pub async fn new(config: BotConfig) -> Result<Self> {
         let components = initialize_bot_components(&config).await?;
 
-        // 初始化持久化中间件
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
@@ -257,7 +227,6 @@ impl TelegramBot {
             components.recent_store.clone(),
         ));
 
-        // 构建处理器链（SyncLLMHandler 在链内同步执行 LLM，返回 Reply 供 memory_middleware 在 after() 中存 LLM 回复）
         let handler_chain = HandlerChain::new()
             .add_middleware(persistence_middleware)
             .add_middleware(memory_middleware)
@@ -270,18 +239,16 @@ impl TelegramBot {
         })
     }
 
-    /// 使用自定义 MemoryStore 初始化 TelegramBot（主要用于测试）。
+    /// Creates TelegramBot with a custom MemoryStore (for tests).
     pub async fn new_with_memory_store(
         config: BotConfig,
         memory_store: Arc<dyn MemoryStore>,
     ) -> Result<Self> {
         let components = initialize_bot_components_with_store(&config, memory_store).await?;
 
-        // 初始化持久化中间件
         let persistence_middleware =
             Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
 
-        // 初始化记忆中间件（带 embedding 服务，写入时算向量以参与语义检索）
         let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
             components.memory_store.clone(),
             components.embedding_service.clone(),
@@ -301,7 +268,7 @@ impl TelegramBot {
         })
     }
 
-    /// 处理一条来自 Telegram 的消息（可在单元测试中直接调用）。
+    /// Handles one Telegram message (callable from tests).
     pub async fn handle_message(&self, msg: &teloxide::types::Message) -> Result<()> {
         if let Some(text) = msg.text() {
             let wrapper = TelegramMessageWrapper(msg);
@@ -339,10 +306,9 @@ impl TelegramBot {
 
 }
 
-/// 运行 Telegram Bot 的主入口
+/// Main entry: init logging, create TelegramBot, then run REPL.
 #[instrument(skip(config))]
 pub async fn run_bot(config: BotConfig) -> Result<()> {
-    // 初始化日志
     std::fs::create_dir_all("logs").expect("Failed to create logs directory");
     init_tracing(&config.log_file)?;
 
@@ -362,8 +328,7 @@ pub async fn run_bot(config: BotConfig) -> Result<()> {
 
     info!("Bot started successfully");
 
-    // 在启动 repl 前先设置 bot_username，否则首条 @ 消息到达时尚未设置会导致 SyncLLMHandler 判定为“非 LLM 查询”而不回复
-    // 使用框架层 REPL：消息转 core::Message 后交给 HandlerChain；run_repl 内会 get_me 并写回 bot_username
+    // run_repl calls get_me and sets bot_username before handling messages
     run_repl(teloxide_bot, handler_chain, bot_username).await?;
 
     Ok(())

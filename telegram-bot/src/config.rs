@@ -1,7 +1,9 @@
+//! Bot configuration loaded from environment variables.
+
 use anyhow::Result;
 use std::env;
 
-/// Telegram Bot 配置，从环境变量加载
+/// Telegram bot config: token, DB, LLM, memory, embedding, and optional Telegram API URL. Loaded from env.
 pub struct BotConfig {
     pub bot_token: String,
     pub database_url: String,
@@ -11,33 +13,31 @@ pub struct BotConfig {
     pub llm_model: String,
     pub llm_use_streaming: bool,
     pub llm_thinking_message: String,
-    /// LLM 系统提示词（人设/行为）；未设置时使用 telegram-bot-llm 内置默认。环境变量：`LLM_SYSTEM_PROMPT`。
+    /// LLM system prompt (persona/behavior); when unset, uses default. Env: `LLM_SYSTEM_PROMPT`.
     pub llm_system_prompt: Option<String>,
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
-    /// When true, recent messages (RecentMessagesStrategy / UserPreferencesStrategy) use a dedicated SQLite store; semantic search still uses the primary store (e.g. Lance). Env: `MEMORY_RECENT_USE_SQLITE`.
+    /// When true, recent messages use a dedicated SQLite store; semantic search still uses the primary store (e.g. Lance). Env: `MEMORY_RECENT_USE_SQLITE`.
     pub memory_recent_use_sqlite: bool,
     pub memory_lance_path: Option<String>,
-    /// Embedding 服务提供商：`openai` | `zhipuai`。用于 RAG 语义检索的向量化。
+    /// Embedding provider: `openai` | `zhipuai`. Used for RAG semantic search vectorization.
     pub embedding_provider: String,
-    /// 智谱 / BigModel API Key。当 `embedding_provider == "zhipuai"` 时必填。
+    /// BigModel (Zhipu) API key; required when `embedding_provider == "zhipuai"`.
     pub bigmodel_api_key: String,
-    /// 可选：Telegram Bot API 基础 URL。设置后 Bot 请求将发往该 URL（用于测试时指向 mock 服务器）。
-    /// 环境变量：`TELEGRAM_API_URL` 或 `TELOXIDE_API_URL`。
+    /// Optional Telegram Bot API base URL; when set, bot requests go there (e.g. mock server for tests). Env: `TELEGRAM_API_URL` or `TELOXIDE_API_URL`.
     pub telegram_api_url: Option<String>,
-    /// 近期消息条数上限，用于 RAG 上下文中的 RecentMessagesStrategy。环境变量：`MEMORY_RECENT_LIMIT`，默认 10。
+    /// Max recent messages for RAG context (RecentMessagesStrategy). Env: `MEMORY_RECENT_LIMIT`, default 10.
     pub memory_recent_limit: u32,
-    /// 语义检索返回条数上限（Top-K），用于 RAG 上下文中的 SemanticSearchStrategy。环境变量：`MEMORY_RELEVANT_TOP_K`，默认 5。
+    /// Top-K for semantic search in RAG context (SemanticSearchStrategy). Env: `MEMORY_RELEVANT_TOP_K`, default 5.
     pub memory_relevant_top_k: u32,
-    /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤。环境变量：`MEMORY_SEMANTIC_MIN_SCORE`，默认 0.0。推荐范围 0.6–0.8。
+    /// Min similarity score for semantic results; entries below are excluded; 0.0 = no filter. Env: `MEMORY_SEMANTIC_MIN_SCORE`, default 0.0. Recommended 0.6–0.8.
     pub memory_semantic_min_score: f32,
-    /// 流式回复时，两次编辑同一条消息的最小间隔（秒），用于控制 Telegram 编辑请求频率，避免触发限流。环境变量：`TELEGRAM_EDIT_INTERVAL_SECS`，默认 5。
+    /// Min interval (seconds) between edits of the same message when streaming; limits Telegram edit rate. Env: `TELEGRAM_EDIT_INTERVAL_SECS`, default 5.
     pub telegram_edit_interval_secs: u64,
 }
 
 impl BotConfig {
-    /// 从环境变量加载配置
-    /// 如果未指定 token，则从环境变量读取，否则使用传入的值
+    /// Loads config from environment variables. If `token` is provided it overrides `BOT_TOKEN`.
     pub fn load(token: Option<String>) -> Result<Self> {
         let bot_token = token.unwrap_or_else(|| env::var("BOT_TOKEN").expect("BOT_TOKEN not set"));
         let database_url =

@@ -1,9 +1,9 @@
-//! Telegram 类型到 dbot_core 类型的适配器。
-//! 与外部交互：仅依赖 teloxide 与 dbot_core 的类型定义。
+//! Adapters from Telegram (teloxide) types to dbot_core types.
+//! Depends only on teloxide and dbot_core type definitions.
 
 use dbot_core::{Chat, Message, MessageDirection, ToCoreMessage, ToCoreUser, User};
 
-/// Telegram 用户到 Core 用户的转换器。
+/// Wraps a teloxide User for conversion to core [`User`].
 pub struct TelegramUserWrapper<'a>(pub &'a teloxide::types::User);
 
 impl<'a> ToCoreUser for TelegramUserWrapper<'a> {
@@ -17,7 +17,7 @@ impl<'a> ToCoreUser for TelegramUserWrapper<'a> {
     }
 }
 
-/// Telegram 消息到 Core 消息的转换器。
+/// Wraps a teloxide Message for conversion to core [`Message`].
 pub struct TelegramMessageWrapper<'a>(pub &'a teloxide::types::Message);
 
 impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
@@ -51,10 +51,12 @@ impl<'a> ToCoreMessage for TelegramMessageWrapper<'a> {
 }
 
 impl<'a> TelegramMessageWrapper<'a> {
+    /// Returns the id of the replied-to message if present.
     fn get_reply_to_message_id(&self) -> Option<String> {
         self.0.reply_to_message().map(|msg| msg.id.to_string())
     }
 
+    /// Returns true if the replied-to message was sent by a bot.
     fn get_reply_to_message_from_bot(&self) -> bool {
         self.0
             .reply_to_message()
@@ -63,6 +65,7 @@ impl<'a> TelegramMessageWrapper<'a> {
             .unwrap_or(false)
     }
 
+    /// Returns the text of the replied-to message if present.
     fn get_reply_to_message_content(&self) -> Option<String> {
         self.0
             .reply_to_message()
@@ -75,6 +78,7 @@ impl<'a> TelegramMessageWrapper<'a> {
 mod tests {
     use super::*;
 
+    /// **Test: TelegramUserWrapper converts teloxide User to core User with correct id, username, first_name, last_name.**
     #[test]
     fn test_telegram_user_wrapper_to_core() {
         let user = teloxide::types::User {

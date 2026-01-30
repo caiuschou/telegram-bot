@@ -1,14 +1,18 @@
+//! Persists incoming messages to storage in middleware before(). No after() logic.
+
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, MessageDirection, Middleware, Result};
 use storage::MessageRepository;
 use tracing::{error, info, instrument};
 
+/// Middleware that saves each incoming message to the given [`MessageRepository`] in before(); always continues.
 #[derive(Clone)]
 pub struct PersistenceMiddleware {
     repo: MessageRepository,
 }
 
 impl PersistenceMiddleware {
+    /// Creates middleware that persists messages with the given repository.
     pub fn new(repo: MessageRepository) -> Self {
         Self { repo }
     }

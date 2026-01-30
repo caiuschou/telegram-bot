@@ -1,5 +1,4 @@
-//! REPL 运行：将 teloxide 消息转为 core::Message 后交给 HandlerChain 处理。
-//! 与外部交互：调用 teloxide REPL、dbot_core::HandlerChain、可选 get_me 写回 bot_username。
+//! REPL runner: converts teloxide messages to core::Message and passes them to HandlerChain. Calls teloxide REPL and optional get_me to populate bot_username.
 
 use anyhow::Result;
 use dbot_core::ToCoreMessage;
@@ -10,8 +9,8 @@ use tracing::{error, info, instrument};
 
 use super::adapters::TelegramMessageWrapper;
 
-/// 使用给定的 teloxide Bot、HandlerChain 和 bot_username 缓存启动 REPL。
-/// 启动前会调用 get_me() 并写入 bot_username；每条消息转为 core::Message 后交给 chain.handle。
+/// Starts the REPL with the given teloxide Bot, HandlerChain, and bot_username cache.
+/// Calls get_me() before starting and writes username into bot_username; each message is converted to core::Message and passed to chain.handle (spawned per message).
 #[instrument(skip(bot, handler_chain, bot_username))]
 pub async fn run_repl(
     bot: teloxide::Bot,
@@ -53,6 +52,7 @@ pub async fn run_repl(
                     }
                 }
 
+                // Run handler chain in a spawned task so REPL returns immediately
                 let chain_for_task = chain.clone();
                 tokio::spawn(async move {
                     info!(

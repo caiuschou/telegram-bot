@@ -1,4 +1,4 @@
-//! 日志初始化：控制台与文件均使用 tracing_subscriber 的 fmt layer 完整格式（级别、target、span、所有字段）。
+//! Logging initialization: both console and file use tracing_subscriber's fmt layer with full format (level, target, span, all fields).
 
 use std::fs::OpenOptions;
 use std::io;
@@ -11,11 +11,11 @@ use tracing_subscriber::{
     EnvFilter, Registry,
 };
 
-/// 初始化全局 tracing 订阅者。
-/// 控制台与日志文件均使用 fmt layer 的完整格式（级别、target、span、所有字段），输出一致。
-/// 通过 Tee 将同一份输出同时写入 stdout 与日志文件。
-/// 从环境变量 RUST_LOG 读取日志级别（如 info、debug、trace）；未设置则默认为 info。
-/// 注意：需在调用本函数前加载 .env（如 dotenvy::dotenv()），否则 RUST_LOG 不会生效。
+/// Initializes the global tracing subscriber.
+/// Console and log file both use the fmt layer with full format (level, target, span, all fields); output is identical.
+/// Uses a tee to write the same output to stdout and the log file.
+/// Log level is read from the `RUST_LOG` environment variable (e.g. info, debug, trace); defaults to info if unset.
+/// Load `.env` (e.g. `dotenvy::dotenv()`) before calling this so `RUST_LOG` takes effect.
 pub fn init_tracing(log_file_path: &str) -> anyhow::Result<()> {
     let file = OpenOptions::new()
         .create(true)
@@ -26,7 +26,7 @@ pub fn init_tracing(log_file_path: &str) -> anyhow::Result<()> {
     let env_filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // 信息更多的 layer：fmt 完整格式（级别、target、span、所有字段），同时写入控制台与文件
+    // Single fmt layer (full format) teed to stdout and file
     use tracing_subscriber::fmt::writer::MakeWriterExt;
     let writer = io::stdout.and(file);
 

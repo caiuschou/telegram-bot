@@ -48,24 +48,24 @@ pub struct SyncLLMHandler {
     pub(crate) embedding_service: Arc<dyn EmbeddingService>,
     pub(crate) use_streaming: bool,
     pub(crate) thinking_message: String,
-    /// 近期消息条数上限，用于 ContextBuilder 的 RecentMessagesStrategy（对应配置 MEMORY_RECENT_LIMIT）。
+    /// Max number of recent messages for ContextBuilder's RecentMessagesStrategy (config MEMORY_RECENT_LIMIT).
     pub(crate) memory_recent_limit: usize,
-    /// 语义检索 Top-K，用于 ContextBuilder 的 SemanticSearchStrategy（对应配置 MEMORY_RELEVANT_TOP_K）。
+    /// Top-K for semantic search in ContextBuilder's SemanticSearchStrategy (config MEMORY_RELEVANT_TOP_K).
     pub(crate) memory_relevant_top_k: usize,
-    /// 语义检索最低相似度阈值，低于此分数的条目不进入上下文；0.0 表示不过滤（对应配置 MEMORY_SEMANTIC_MIN_SCORE）。
+    /// Min similarity score for semantic results; entries below this are excluded from context; 0.0 = no filter (config MEMORY_SEMANTIC_MIN_SCORE).
     pub(crate) memory_semantic_min_score: f32,
-    /// 流式回复时，两次编辑同一条消息的最小间隔（秒），用于控制 Telegram 编辑请求频率；由配置 TELEGRAM_EDIT_INTERVAL_SECS 传入，默认 5。
+    /// Min interval (seconds) between edits of the same message when streaming; limits Telegram edit rate (config TELEGRAM_EDIT_INTERVAL_SECS, default 5).
     pub(crate) edit_interval_secs: u64,
 }
 
 impl SyncLLMHandler {
-    /// 当用户仅 @ 提及机器人、未输入具体内容时，作为发给 LLM 的默认“问题”提示，使 LLM 简短打招呼并邀请用户提问。
-    /// 与外部交互：作为 LlmClient 的 user 消息内容传入，由 LLM 生成友好回复。
+    /// Default "question" when the user only @-mentions with no text; LLM is asked to greet and invite a question.
     pub const DEFAULT_EMPTY_MENTION_QUESTION: &str =
         "用户只是 @ 了你，没有写具体问题。请简短友好地打招呼并邀请用户提问。";
 
     // ---------- Construction ----------
 
+    /// Builds a SyncLLMHandler with the given dependencies and config (limits, streaming, edit interval).
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         llm_client: Arc<OpenAILlmClient>,

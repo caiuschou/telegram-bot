@@ -1,11 +1,10 @@
-//! Repository trait for generic storage operations.
-//!
-//! Implementations (e.g. MessageRepository) provide concrete persistence.
+//! Repository trait for generic storage operations. Implementations (e.g. [`MessageRepository`]) provide concrete persistence.
 
 use async_trait::async_trait;
 
 use crate::error::StorageError;
 
+/// Generic async repository: save, find_by_id, find_all, delete.
 #[async_trait]
 pub trait Repository<T> {
     async fn save(&self, entity: &T) -> Result<(), StorageError>;

@@ -1,3 +1,5 @@
+//! dbot CLI: run Telegram bot, load messages to vector DB, list vectors. Config from env and optional CLI args.
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use memory_lance::{LanceConfig, LanceVectorStore};
@@ -6,7 +8,7 @@ use telegram_bot::{BotConfig, run_bot};
 
 #[derive(Parser)]
 #[command(name = "dbot")]
-#[command(about = "Telegram Bot 工具", long_about = None)]
+#[command(about = "Telegram Bot CLI: run, load, list-vectors", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -15,24 +17,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 运行 Telegram Bot
+    /// Run the Telegram bot (config from env; token can override BOT_TOKEN).
     Run {
-        /// Bot token（覆盖环境变量）
         #[arg(short, long)]
         token: Option<String>,
     },
-    /// 加载消息到向量数据库
+    /// Load messages from SQLite to vector DB (Lance); embedding and DB URLs from env.
     Load {
-        /// 批量处理大小
         #[arg(short, long, default_value = "50")]
         batch_size: usize,
     },
-    /// 查询向量数据库最近 N 条记录（按时间倒序）
+    /// List recent N records from vector DB (Lance), ordered by time descending.
     ListVectors {
-        /// 返回条数
         #[arg(short, long, default_value = "100")]
         limit: usize,
-        /// LanceDB 路径（覆盖环境变量 LANCE_DB_PATH）
         #[arg(long)]
         lance_db_path: Option<String>,
     },
@@ -58,9 +56,7 @@ async fn main() -> Result<()> {
     }
 }
 
-/// 从 .env 读取词向量配置
-/// 
-/// 环境变量：EMBEDDING_PROVIDER、EMBEDDING_MODEL、OPENAI_API_KEY、BIGMODEL_API_KEY。
+/// Loads embedding config from env: EMBEDDING_PROVIDER, EMBEDDING_MODEL, OPENAI_API_KEY, BIGMODEL_API_KEY.
 fn load_embedding_config() -> Result<EmbeddingConfig> {
     let provider = match std::env::var("EMBEDDING_PROVIDER").as_deref() {
         Ok("zhipuai") => EmbeddingProvider::Zhipuai,

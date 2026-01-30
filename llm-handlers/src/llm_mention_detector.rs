@@ -1,8 +1,11 @@
+//! Detects when the user triggers an LLM query (reply-to-bot or @-mention) and sends an [`LLMQuery`] on a channel for another handler (e.g. SyncLLMHandler) to process.
+
 use async_trait::async_trait;
 use dbot_core::{Handler, HandlerResponse, Message, Result};
 use std::sync::Arc;
 use tracing::{info, instrument};
 
+/// One LLM query to process: chat, user, question text, and optional reply-to message id.
 #[derive(Debug, Clone)]
 pub struct LLMQuery {
     pub chat_id: i64,
@@ -11,6 +14,7 @@ pub struct LLMQuery {
     pub reply_to_message_id: Option<String>,
 }
 
+/// Handler that detects reply-to-bot or @bot_username mention and sends [`LLMQuery`] to `query_sender`.
 #[derive(Clone)]
 pub struct LLMDetectionHandler {
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
@@ -18,6 +22,7 @@ pub struct LLMDetectionHandler {
 }
 
 impl LLMDetectionHandler {
+    /// Creates a handler that sends detected queries to the given channel.
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         query_sender: Arc<tokio::sync::mpsc::UnboundedSender<LLMQuery>>,
@@ -28,14 +33,17 @@ impl LLMDetectionHandler {
         }
     }
 
+    /// Returns the current bot username (from get_me), if set.
     async fn get_bot_username(&self) -> Option<String> {
         self.bot_username.read().await.clone()
     }
 
+    /// Returns true if `text` contains @bot_username.
     fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
         text.contains(&format!("@{}", bot_username))
     }
 
+    /// Removes @bot_username from `text` and trims; used as the question for the LLM.
     fn extract_question(&self, text: &str, bot_username: &str) -> String {
         text.replace(&format!("@{}", bot_username), "")
             .trim()
@@ -47,7 +55,7 @@ impl LLMDetectionHandler {
     impl Handler for LLMDetectionHandler {
         #[instrument(skip(self, message))]
         async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
-            // 优先：回复机器人的消息时触发 LLM
+            // Priority 1: replying to a bot message triggers LLM
             if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
                 info!(
                     user_id = message.user.id,
@@ -69,7 +77,7 @@ impl LLMDetectionHandler {
                 return Ok(HandlerResponse::Stop);
             }
 
-            // 其次：@ 提及机器人且问题非空时触发 LLM
+            // Priority 2: @-mention with non-empty question triggers LLM
             if let Some(bot_username) = self.get_bot_username().await {
                 if self.is_bot_mentioned(&message.content, &bot_username) {
                     let question = self.extract_question(&message.content, &bot_username);
@@ -105,6 +113,7 @@ mod tests {
     use super::*;
     use dbot_core::{Chat, Message, MessageDirection, User};
 
+    /// **Test: LLMQuery fields match constructed values.**
     #[test]
     fn test_llm_query_creation() {
         let query = LLMQuery {
@@ -120,6 +129,7 @@ mod tests {
         assert_eq!(query.reply_to_message_id, Some("msg123".to_string()));
     }
 
+    /// **Test: reply_to_message_id can be None.**
     #[test]
     fn test_llm_query_without_reply_to() {
         let query = LLMQuery {
@@ -132,6 +142,7 @@ mod tests {
         assert!(query.reply_to_message_id.is_none());
     }
 
+    /// **Test: is_bot_mentioned true when text contains @mybot; false for no mention or @otherbot.**
     #[test]
     fn test_is_bot_mentioned() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -146,6 +157,7 @@ mod tests {
         assert!(!handler.is_bot_mentioned("@otherbot hello", "mybot"));
     }
 
+    /// **Test: extract_question strips @mybot and trims; empty when only mention and spaces.**
     #[test]
     fn test_extract_question() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -168,6 +180,7 @@ mod tests {
         );
     }
 
+    /// **Test: Message with @mybot and non-empty question sends one LLMQuery and returns Stop.**
     #[tokio::test]
     async fn test_handler_with_bot_mention() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -207,6 +220,7 @@ mod tests {
         assert_eq!(received_query.reply_to_message_id, None);
     }
 
+    /// **Test: Message without @-mention returns Continue and no query is sent.**
     #[tokio::test]
     async fn test_handler_without_bot_mention() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -240,6 +254,7 @@ mod tests {
         assert!(matches!(result, Ok(HandlerResponse::Continue)));
     }
 
+    /// **Test: When bot_username is None, @bot mention does not trigger; returns Continue.**
     #[tokio::test]
     async fn test_handler_with_empty_bot_username() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -273,6 +288,7 @@ mod tests {
         assert!(matches!(result, Ok(HandlerResponse::Continue)));
     }
 
+    /// **Test: Reply to bot message (reply_to_message_from_bot=true) sends query and returns Stop.**
     #[tokio::test]
     async fn test_handler_with_reply_to_bot_message() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -312,6 +328,7 @@ mod tests {
         assert_eq!(received_query.reply_to_message_id, Some("bot_msg_456".to_string()));
     }
 
+    /// **Test: Reply to non-bot message does not trigger; returns Continue.**
     #[tokio::test]
     async fn test_handler_reply_to_non_bot_does_not_trigger() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -345,6 +362,7 @@ mod tests {
         assert!(matches!(result, Ok(HandlerResponse::Continue)));
     }
 
+    /// **Test: When both reply-to-bot and @-mention apply, reply-to-bot wins; question is full content.**
     #[tokio::test]
     async fn test_handler_reply_to_bot_takes_priority_over_mention() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();

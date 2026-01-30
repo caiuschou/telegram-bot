@@ -1,10 +1,9 @@
-//! 框架最小配置：仅 token、API URL、日志路径。
-//! 与外部交互：从环境变量 BOT_TOKEN、TELEGRAM_API_URL、LOG_FILE 加载。
+//! Minimal framework config: token, optional API URL and log file path. Loaded from env: BOT_TOKEN, TELEGRAM_API_URL (or TELOXIDE_API_URL), LOG_FILE.
 
 use anyhow::Result;
 use std::env;
 
-/// Telegram Bot 框架最小配置（仅 Telegram 接入与日志）。
+/// Minimal Telegram bot config (connectivity and logging only).
 pub struct TelegramConfig {
     pub bot_token: String,
     pub telegram_api_url: Option<String>,
@@ -12,7 +11,7 @@ pub struct TelegramConfig {
 }
 
 impl TelegramConfig {
-    /// 从环境变量加载：BOT_TOKEN 必填，TELEGRAM_API_URL、LOG_FILE 可选。
+    /// Loads from env: BOT_TOKEN required; TELEGRAM_API_URL and LOG_FILE optional.
     pub fn from_env() -> Result<Self> {
         let bot_token = env::var("BOT_TOKEN").map_err(|_| anyhow::anyhow!("BOT_TOKEN not set"))?;
         let telegram_api_url = env::var("TELEGRAM_API_URL")
@@ -26,7 +25,7 @@ impl TelegramConfig {
         })
     }
 
-    /// 使用给定 token 构造，其余为 None。
+    /// Builds config with the given token; other fields None.
     pub fn with_token(bot_token: String) -> Self {
         Self {
             bot_token,
@@ -40,6 +39,7 @@ impl TelegramConfig {
 mod tests {
     use super::*;
 
+    /// **Test: with_token sets bot_token; telegram_api_url and log_file are None.**
     #[test]
     fn test_with_token() {
         let config = TelegramConfig::with_token("test_token".to_string());

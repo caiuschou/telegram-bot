@@ -1,7 +1,10 @@
+//! Generic middleware: logging and optional auth (allowlist).
+
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, Middleware, Result};
 use tracing::{debug, error, info, instrument};
 
+/// Logs each message in before() and the response in after(); always continues.
 pub struct LoggingMiddleware;
 
 #[async_trait]
@@ -28,11 +31,13 @@ impl Middleware for LoggingMiddleware {
     }
 }
 
+/// Stops the chain with Unauthorized if message.user.id is not in the allowlist.
 pub struct AuthMiddleware {
     allowed_users: Vec<i64>,
 }
 
 impl AuthMiddleware {
+    /// Creates middleware that allows only the given user ids.
     pub fn new(allowed_users: Vec<i64>) -> Self {
         Self { allowed_users }
     }
