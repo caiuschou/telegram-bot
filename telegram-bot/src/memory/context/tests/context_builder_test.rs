@@ -1,11 +1,5 @@
-//! Unit tests for `ContextBuilder`.
-//!
-//! Tests builder creation, configuration (user, conversation, query, strategies, system message),
-//! and build() aggregation with MockStore and MockStrategy.
-//! External interactions: MemoryStore, ContextStrategy, memory_core::StrategyResult.
-
-use crate::context::*;
-use crate::{ContextStrategy, MemoryEntry, MemoryStore};
+use crate::memory::context::*;
+use crate::memory::{ContextStrategy, MemoryEntry, MemoryStore, MessageCategory, StrategyResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -95,9 +89,9 @@ impl ContextStrategy for MockStrategy {
         _user_id: &Option<String>,
         _conversation_id: &Option<String>,
         _query: &Option<String>,
-    ) -> Result<crate::StrategyResult, anyhow::Error> {
-        Ok(crate::StrategyResult::Messages {
-            category: crate::MessageCategory::Recent,
+    ) -> Result<StrategyResult, anyhow::Error> {
+        Ok(StrategyResult::Messages {
+            category: MessageCategory::Recent,
             messages: vec![
                 "User: Hello".to_string(),
                 "Assistant: Hi there!".to_string(),

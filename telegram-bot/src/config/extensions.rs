@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use embedding::{EmbeddingConfig, EnvEmbeddingConfig};
-use memory::{EnvMemoryConfig, MemoryConfig};
+use crate::memory::{EnvMemoryConfig, MemoryConfig};
 
 /// Application extension config. Implement this trait to inject custom config.
 /// LLM config is not included; implement externally.

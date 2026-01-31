@@ -13,7 +13,7 @@ use chrono::{Duration, Utc};
 use tempfile::TempDir;
 use uuid::Uuid;
 
-use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use memory_lance::LanceVectorStore;
 
 /// Lance vector store verification test

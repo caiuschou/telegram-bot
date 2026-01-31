@@ -9,6 +9,7 @@ pub mod components;
 pub mod config;
 pub mod core;
 pub mod handlers;
+pub mod memory;
 pub mod runner;
 pub mod telegram;
 pub mod telegram_impl;

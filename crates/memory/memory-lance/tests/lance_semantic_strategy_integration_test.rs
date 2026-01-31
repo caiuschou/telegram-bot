@@ -15,10 +15,8 @@ use uuid::Uuid;
 
 use bigmodel_embedding::BigModelEmbedding;
 use embedding::EmbeddingService;
-use memory::{
-    ContextStrategy, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, SemanticSearchStrategy,
-    StrategyResult,
-};
+use memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, StrategyResult};
+use memory_strategies::{ContextStrategy, SemanticSearchStrategy};
 use memory_lance::{LanceConfig, LanceVectorStore};
 
 /// Zhipu embedding-2 model dimension

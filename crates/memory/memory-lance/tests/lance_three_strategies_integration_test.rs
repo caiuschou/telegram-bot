@@ -16,10 +16,11 @@ use uuid::Uuid;
 
 use bigmodel_embedding::BigModelEmbedding;
 use embedding::EmbeddingService;
-use memory::{
-    ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, RecentMessagesStrategy,
-    SemanticSearchStrategy, UserPreferencesStrategy,
+use memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use memory_strategies::{
+    RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
 };
+use telegram_bot::memory::ContextBuilder;
 use memory_lance::{LanceConfig, LanceVectorStore};
 
 /// Zhipu embedding-2 model dimension

@@ -5,11 +5,9 @@ use bigmodel_embedding::BigModelEmbedding;
 use crate::chain::HandlerChain;
 use crate::core::Handler;
 use crate::handlers::{MemoryHandler, PersistenceHandler};
-use memory::MemoryStore;
-use memory_inmemory::InMemoryVectorStore;
+use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
 #[cfg(feature = "lance")]
 use memory_lance::{LanceConfig, LanceVectorStore};
-use memory_sqlite::SQLiteVectorStore;
 use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
 use storage::MessageRepository;

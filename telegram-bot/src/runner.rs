@@ -2,7 +2,7 @@ use anyhow::Result;
 use crate::core::{Handler, init_tracing, Message as CoreMessage, ToCoreMessage};
 use crate::telegram::{run_repl, TelegramMessageWrapper};
 use crate::chain::HandlerChain;
-use memory::MemoryStore;
+use crate::memory::MemoryStore;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
 

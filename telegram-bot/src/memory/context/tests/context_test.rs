@@ -1,9 +1,4 @@
-//! Unit tests for `Context` and `ContextMetadata`.
-//!
-//! Tests context formatting for AI model input and token limit checks.
-//! External interactions: AI model APIs (format_for_model output), token limits.
-
-use crate::context::*;
+use crate::memory::context::*;
 use chrono::Utc;
 
 fn make_context(
@@ -135,7 +130,6 @@ fn test_to_messages_returns_chat_messages_with_different_roles() {
         50,
     );
     let msgs = ctx.to_messages(true, "What about cats?");
-    // System, one User(context: preferences + recent + semantic), User(question)
     assert!(msgs.len() >= 3);
     let first = &msgs[0];
     assert!(matches!(first.role, MessageRole::System));

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use lancedb::query::{ExecutableQuery, QueryBase};
 use futures::TryStreamExt;
 use anyhow::{anyhow, Result};
