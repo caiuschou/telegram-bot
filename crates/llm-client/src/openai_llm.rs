@@ -85,15 +85,11 @@ impl LlmClient for OpenAILlmClient {
     }
 
     #[instrument(skip(self, messages, callback))]
-    async fn get_llm_response_stream_with_messages<F, Fut>(
+    async fn get_llm_response_stream_with_messages(
         &self,
         messages: Vec<ChatMessage>,
-        mut callback: F,
-    ) -> Result<String>
-    where
-        F: FnMut(StreamChunk) -> Fut + Send,
-        Fut: std::future::Future<Output = Result<()>> + Send,
-    {
+        callback: &mut super::StreamChunkCallback,
+    ) -> Result<String> {
         // Same as non-stream: system first, then converted messages.
         let mut openai_messages: Vec<openai_client::ChatCompletionRequestMessage> = vec![
             openai_client::ChatCompletionRequestSystemMessageArgs::default()

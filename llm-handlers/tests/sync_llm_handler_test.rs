@@ -3,7 +3,7 @@
 //! Covers: is_bot_mentioned, extract_question, get_question.
 //! Uses in-memory store, MockEmbeddingService, MockBot, and OpenAILlmClient (dummy key); does not call Telegram or OpenAI.
 
-use llm_client::OpenAILlmClient;
+use llm_client::{LlmClient, OpenAILlmClient};
 use llm_handlers::SyncLLMHandler;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -55,7 +55,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncLLMHandler {
     let username = Arc::new(tokio::sync::RwLock::new(
         bot_username.map(String::from),
     ));
-    let llm_client = Arc::new(OpenAILlmClient::new("dummy_key".to_string()));
+    let llm_client: Arc<dyn LlmClient> = Arc::new(OpenAILlmClient::new("dummy_key".to_string()));
     let bot: Arc<dyn CoreBot> = Arc::new(MockBot);
     let repo = MessageRepository::new("sqlite::memory:")
         .await

@@ -65,7 +65,7 @@ fn test_message_to_memory_entry() {
     assert_eq!(entry.metadata.conversation_id, Some("456".to_string()));
 }
 
-/// **Test: before() saves incoming message to store; search_by_user returns one entry.**
+/// **Test: before() saves incoming user message to store; search_by_user returns one entry with User role.**
 #[tokio::test]
 async fn test_memory_middleware_saves_user_messages() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
@@ -77,6 +77,7 @@ async fn test_memory_middleware_saves_user_messages() {
     let entries = store.search_by_user("123").await.unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].content, "Hello");
+    assert_eq!(entries[0].metadata.role, memory::MemoryRole::User);
 }
 
 /// **Test: after() with HandlerResponse::Continue does not save any entry (no reply text).**
@@ -111,17 +112,3 @@ async fn test_memory_middleware_after_saves_reply_to_memory() {
     assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
 }
 
-/// **Test: build_context(user_id, conversation_id) returns context string containing saved message.**
-#[tokio::test]
-async fn test_memory_middleware_builds_context() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store.clone());
-
-    let message = create_test_message("Hello");
-    middleware.before(&message).await.unwrap();
-
-    let context = middleware.build_context("123", "456").await.unwrap();
-
-    assert!(context.is_some());
-    assert!(context.unwrap().contains("Hello"));
-}

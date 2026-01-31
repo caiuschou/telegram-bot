@@ -116,6 +116,22 @@ impl BotConfig {
             telegram_edit_interval_secs,
         })
     }
+
+    /// Validates config combinations (e.g. EMBEDDING_PROVIDER=zhipuai requires BIGMODEL_API_KEY).
+    /// Call after load() to fail fast on invalid config before initializing components.
+    pub fn validate(&self) -> Result<()> {
+        if self.embedding_provider.eq_ignore_ascii_case("zhipuai") && self.bigmodel_api_key.is_empty() {
+            anyhow::bail!(
+                "EMBEDDING_PROVIDER=zhipuai (or zhipuai) requires BIGMODEL_API_KEY or ZHIPUAI_API_KEY to be set"
+            );
+        }
+        if let Some(ref url_str) = self.telegram_api_url {
+            if reqwest::Url::parse(url_str).is_err() {
+                anyhow::bail!("TELEGRAM_API_URL (or TELOXIDE_API_URL) is set but not a valid URL: {}", url_str);
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -350,5 +366,46 @@ mod tests {
         let config = BotConfig::load(None).unwrap();
 
         assert_eq!(config.bigmodel_api_key, "zhipu-key");
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_zhipuai_requires_bigmodel_key() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::set_var("EMBEDDING_PROVIDER", "zhipuai");
+        env::remove_var("BIGMODEL_API_KEY");
+        env::remove_var("ZHIPUAI_API_KEY");
+        env::remove_var("LLM_SYSTEM_PROMPT");
+
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.validate().is_err());
+
+        env::set_var("BIGMODEL_API_KEY", "key");
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.validate().is_ok());
+
+        env::remove_var("EMBEDDING_PROVIDER");
+        env::remove_var("BIGMODEL_API_KEY");
+    }
+
+    #[test]
+    #[serial]
+    fn test_validate_telegram_api_url_invalid() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("TELEGRAM_API_URL");
+        env::set_var("TELEGRAM_API_URL", "not-a-valid-url");
+        env::remove_var("LLM_SYSTEM_PROMPT");
+
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.validate().is_err());
+
+        env::remove_var("TELEGRAM_API_URL");
     }
 }

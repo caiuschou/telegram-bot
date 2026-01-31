@@ -10,10 +10,7 @@
 use async_trait::async_trait;
 use dbot_core::{HandlerResponse, Message, Middleware, Result};
 use embedding::EmbeddingService;
-use memory::{
-    ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore,
-    RecentMessagesStrategy, UserPreferencesStrategy,
-};
+use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
@@ -121,34 +118,6 @@ impl MemoryMiddleware {
         };
 
         MemoryEntry::new(reply_text.to_string(), metadata)
-    }
-
-    /// Builds conversation context for a message.
-    /// pub(crate) for unit tests in memory_middleware_test.
-    #[allow(dead_code)]
-    pub(crate) async fn build_context(
-        &self,
-        user_id: &str,
-        conversation_id: &str,
-    ) -> Result<Option<String>> {
-        let builder = ContextBuilder::new(self.config.store.clone())
-            .with_strategy(Box::new(RecentMessagesStrategy::new(
-                self.config.max_recent_messages,
-            )))
-            .with_strategy(Box::new(UserPreferencesStrategy::new()))
-            .with_token_limit(self.config.max_context_tokens)
-            .for_user(user_id)
-            .for_conversation(conversation_id);
-
-        let context = builder.build().await
-            .map_err(|e| dbot_core::DbotError::Unknown(e.to_string()))?;
-
-        if context.is_empty() {
-            Ok(None)
-        } else {
-            let formatted = context.format_for_model(false);
-            Ok(Some(formatted))
-        }
     }
 }
 

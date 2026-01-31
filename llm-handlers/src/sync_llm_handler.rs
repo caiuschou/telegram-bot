@@ -1,6 +1,6 @@
 //! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so middleware (e.g. MemoryMiddleware) can save the reply in `after()`.
 
-use llm_client::{LlmClient, OpenAILlmClient};
+use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use async_trait::async_trait;
 use dbot_core::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
@@ -39,7 +39,7 @@ fn log_messages_submitted_to_llm(messages: &[ChatMessage]) {
 #[derive(Clone)]
 pub struct SyncLLMHandler {
     pub(crate) bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-    pub(crate) llm_client: Arc<OpenAILlmClient>,
+    pub(crate) llm_client: Arc<dyn LlmClient>,
     pub(crate) bot: Arc<dyn CoreBot>,
     pub(crate) repo: MessageRepository,
     pub(crate) memory_store: Arc<dyn MemoryStore>,
@@ -68,7 +68,7 @@ impl SyncLLMHandler {
     /// Builds a SyncLLMHandler with the given dependencies and config (limits, streaming, edit interval).
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
-        llm_client: Arc<OpenAILlmClient>,
+        llm_client: Arc<dyn LlmClient>,
         bot: Arc<dyn CoreBot>,
         repo: MessageRepository,
         memory_store: Arc<dyn MemoryStore>,
@@ -349,44 +349,47 @@ impl SyncLLMHandler {
 
         let bot = self.bot.clone();
         let chat = message.chat.clone();
+        let message_id_for_callback = message_id.clone();
         let full_content = Arc::new(tokio::sync::Mutex::new(String::new()));
         let edit_interval_secs = self.edit_interval_secs;
         let last_edit = Arc::new(tokio::sync::Mutex::new(None::<Instant>));
 
         // On each stream chunk: append to full_content and edit via Bot trait. Throttle edits so we do not exceed Telegram rate limits.
-        match self
-            .llm_client
-            .get_llm_response_stream_with_messages(messages, |chunk| {
-                let bot = bot.clone();
-                let chat = chat.clone();
-                let message_id = message_id.clone();
-                let full_content = full_content.clone();
-                let last_edit = last_edit.clone();
-                async move {
-                    if !chunk.content.is_empty() {
-                        if edit_interval_secs > 0 {
-                            let last = last_edit.lock().await;
-                            if let Some(prev) = *last {
-                                let elapsed = prev.elapsed();
-                                let interval = std::time::Duration::from_secs(edit_interval_secs);
-                                if elapsed < interval {
-                                    drop(last);
-                                    sleep(interval - elapsed).await;
-                                }
+        // Boxed callback for dyn LlmClient compatibility; move clones so the closure is 'static.
+        let mut stream_callback: Box<StreamChunkCallback> = Box::new(move |chunk: StreamChunk| {
+            let bot = bot.clone();
+            let chat = chat.clone();
+            let message_id = message_id_for_callback.clone();
+            let full_content = full_content.clone();
+            let last_edit = last_edit.clone();
+            Box::pin(async move {
+                if !chunk.content.is_empty() {
+                    if edit_interval_secs > 0 {
+                        let last = last_edit.lock().await;
+                        if let Some(prev) = *last {
+                            let elapsed = prev.elapsed();
+                            let interval = std::time::Duration::from_secs(edit_interval_secs);
+                            if elapsed < interval {
+                                drop(last);
+                                sleep(interval - elapsed).await;
                             }
                         }
-                        let mut content = full_content.lock().await;
-                        content.push_str(&chunk.content);
-                        bot.edit_message(&chat, &message_id, &*content)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("Failed to edit message: {}", e))?;
-                        if edit_interval_secs > 0 {
-                            *last_edit.lock().await = Some(Instant::now());
-                        }
                     }
-                    Ok(())
+                    let mut content = full_content.lock().await;
+                    content.push_str(&chunk.content);
+                    bot.edit_message(&chat, &message_id, &*content)
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to edit message: {}", e))?;
+                    if edit_interval_secs > 0 {
+                        *last_edit.lock().await = Some(Instant::now());
+                    }
                 }
+                Ok(())
             })
+        });
+        match self
+            .llm_client
+            .get_llm_response_stream_with_messages(messages, stream_callback.as_mut())
             .await
         {
             Ok(full_response) => {

@@ -2,6 +2,7 @@
 //!
 //! Wires dbot-telegram, handler-chain, llm-handlers, middleware, and storage. Loads config from env and runs the REPL.
 
+pub mod components;
 pub mod config;
 pub mod runner;
 pub mod telegram_impl;
