@@ -17,7 +17,6 @@ members = [
     "crates/memory/memory-inmemory",
     "crates/memory/memory-sqlite",
     "crates/memory/memory-lance",
-    "crates/memory/memory-loader",
     "handler-chain",
     "dbot-telegram",
     "crates/llm-client",
