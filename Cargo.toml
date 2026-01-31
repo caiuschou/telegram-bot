@@ -7,7 +7,7 @@ members = [
     "crates/llm/telegram-bot-llm",
     "crates/memory/memory-core",
     "crates/memory/memory-strategies",
-    "crates/embedding/embedding",
+    "telegram-bot/embedding",
     "crates/embedding/openai-embedding",
     "crates/embedding/bigmodel-embedding",
     "crates/llm-client",

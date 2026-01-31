@@ -1,5 +1,5 @@
 [package]
-name = "telegram-llm-bot"
+name = "dbot-llm-cli"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,11 +8,11 @@ default = []
 lance = ["telegram-bot/lance"]
 
 [lib]
-name = "telegram_llm_bot"
+name = "dbot_llm"
 path = "src/lib.rs"
 
 [[bin]]
-name = "telegram-llm-bot"
+name = "dbot"
 path = "src/main.rs"
 
 [dependencies]

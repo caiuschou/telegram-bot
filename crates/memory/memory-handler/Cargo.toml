@@ -7,7 +7,7 @@ edition = "2021"
 async-trait = "0.1"
 chrono = "0.4"
 telegram-bot = { path = "../../../telegram-bot" }
-embedding = { path = "../../embedding/embedding" }
+embedding = { path = "../../../telegram-bot/embedding" }
 memory = { path = "../../../telegram-bot/memory" }
 memory-inmemory = { path = "../memory-inmemory" }
 tracing = "0.1"
