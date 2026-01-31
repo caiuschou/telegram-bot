@@ -1,14 +1,14 @@
-//! Generic middleware: logging and optional auth (allowlist).
+//! Handlers for logging and optional auth (allowlist).
 
 use async_trait::async_trait;
-use dbot_core::{HandlerResponse, Message, Middleware, Result};
+use dbot_core::{HandlerResponse, Message, Handler, Result};
 use tracing::{debug, error, info, instrument};
 
 /// Logs each message in before() and the response in after(); always continues.
-pub struct LoggingMiddleware;
+pub struct LoggingHandler;
 
 #[async_trait]
-impl Middleware for LoggingMiddleware {
+impl Handler for LoggingHandler {
     #[instrument(skip(self, message))]
     async fn before(&self, message: &Message) -> Result<bool> {
         info!(
@@ -32,19 +32,19 @@ impl Middleware for LoggingMiddleware {
 }
 
 /// Stops the chain with Unauthorized if message.user.id is not in the allowlist.
-pub struct AuthMiddleware {
+pub struct AuthHandler {
     allowed_users: Vec<i64>,
 }
 
-impl AuthMiddleware {
-    /// Creates middleware that allows only the given user ids.
+impl AuthHandler {
+    /// Creates a handler that allows only the given user ids.
     pub fn new(allowed_users: Vec<i64>) -> Self {
         Self { allowed_users }
     }
 }
 
 #[async_trait]
-impl Middleware for AuthMiddleware {
+impl Handler for AuthHandler {
     #[instrument(skip(self, message))]
     async fn before(&self, message: &Message) -> Result<bool> {
         let user_id = message.user.id;
@@ -55,10 +55,5 @@ impl Middleware for AuthMiddleware {
             error!(user_id = user_id, "Unauthorized access attempt");
             Err(dbot_core::HandlerError::Unauthorized.into())
         }
-    }
-
-    #[instrument(skip(self))]
-    async fn after(&self, _message: &Message, _response: &HandlerResponse) -> Result<()> {
-        Ok(())
     }
 }

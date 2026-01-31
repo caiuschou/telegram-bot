@@ -1,14 +1,9 @@
-//! # Memory Middleware
+//! # Memory handler
 //!
-//! This module provides middleware for managing conversation memory in the bot runtime.
-//!
-//! ## MemoryMiddleware
-//!
-//! Middleware that automatically saves user messages and LLM responses to the memory store,
-//! and retrieves relevant context for LLM responses.
+//! Handler that saves user messages and LLM responses to the memory store (before/after).
 
 use async_trait::async_trait;
-use dbot_core::{HandlerResponse, Message, Middleware, Result};
+use dbot_core::{HandlerResponse, Message, Handler, Result};
 use embedding::EmbeddingService;
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use memory_inmemory::InMemoryVectorStore;
@@ -16,10 +11,10 @@ use std::sync::Arc;
 use tracing::{error, info, instrument};
 use chrono::Utc;
 
-/// Configuration for MemoryMiddleware.
+/// Configuration for MemoryHandler.
 #[derive(Clone)]
 pub struct MemoryConfig {
-    /// Memory store instance (used by middleware and by tests for assertions). Primary store for semantic search and general persistence.
+    /// Memory store instance (used by handler and by tests for assertions). Primary store for semantic search and general persistence.
     pub store: Arc<dyn MemoryStore>,
     /// Optional store for recent messages only. When set, user messages and AI replies are also written here so RecentMessagesStrategy reads from it; semantic search still uses `store`.
     pub recent_store: Option<Arc<dyn MemoryStore>>,
@@ -49,19 +44,19 @@ impl Default for MemoryConfig {
     }
 }
 
-/// Middleware for managing conversation memory.
-pub struct MemoryMiddleware {
-    /// Config exposed as pub(crate) for unit tests in memory_middleware_test.
+/// Handler for managing conversation memory.
+pub struct MemoryHandler {
+    /// Config exposed as pub(crate) for unit tests in memory_handler_test.
     pub(crate) config: MemoryConfig,
 }
 
-impl MemoryMiddleware {
-    /// Creates a new MemoryMiddleware with given config.
+impl MemoryHandler {
+    /// Creates a new MemoryHandler with given config.
     pub fn new(config: MemoryConfig) -> Self {
         Self { config }
     }
 
-    /// Creates a new MemoryMiddleware with default config.
+    /// Creates a new MemoryHandler with default config.
     pub fn with_store(store: Arc<dyn MemoryStore>) -> Self {
         Self::new(MemoryConfig {
             store,
@@ -69,7 +64,7 @@ impl MemoryMiddleware {
         })
     }
 
-    /// Creates a new MemoryMiddleware with store and embedding service so saved messages get embeddings and participate in semantic search.
+    /// Creates a new MemoryHandler with store and embedding service so saved messages get embeddings and participate in semantic search.
     /// When `recent_store` is set, user messages and AI replies are also written there so recent-message strategies read from it.
     pub fn with_store_and_embedding(
         store: Arc<dyn MemoryStore>,
@@ -85,7 +80,7 @@ impl MemoryMiddleware {
     }
 
     /// Creates a memory entry from a bot message (user role).
-    /// pub(crate) for unit tests in memory_middleware_test.
+    /// pub(crate) for unit tests in memory_handler_test.
     pub(crate) fn message_to_memory_entry(&self, message: &Message) -> MemoryEntry {
         let user_id = Some(message.user.id.to_string());
         let conversation_id = Some(message.chat.id.to_string());
@@ -103,7 +98,7 @@ impl MemoryMiddleware {
     }
 
     /// Creates a memory entry for an assistant reply (e.g. from HandlerResponse::Reply(text)).
-    /// pub(crate) for unit tests in memory_middleware_test.
+    /// pub(crate) for unit tests in memory_handler_test.
     pub(crate) fn reply_to_memory_entry(&self, message: &Message, reply_text: &str) -> MemoryEntry {
         let user_id = Some(message.user.id.to_string());
         let conversation_id = Some(message.chat.id.to_string());
@@ -122,7 +117,7 @@ impl MemoryMiddleware {
 }
 
 #[async_trait]
-impl Middleware for MemoryMiddleware {
+impl Handler for MemoryHandler {
     #[instrument(skip(self, message))]
     async fn before(&self, message: &Message) -> Result<bool> {
         let user_id = message.user.id.to_string();
@@ -132,7 +127,7 @@ impl Middleware for MemoryMiddleware {
             user_id = %user_id,
             conversation_id = %conversation_id,
             message_id = %message.id,
-            "step: MemoryMiddleware before, saving user message to memory"
+            "step: MemoryHandler before, saving user message to memory"
         );
 
         // Save user message to memory
@@ -154,7 +149,7 @@ impl Middleware for MemoryMiddleware {
                     user_id = %user_id,
                     conversation_id = %conversation_id,
                     entry_id = %entry.id,
-                    "step: MemoryMiddleware before done, user message saved to memory"
+                    "step: MemoryHandler before done, user message saved to memory"
                 );
             }
             if let Some(ref r) = self.config.recent_store {
@@ -167,7 +162,7 @@ impl Middleware for MemoryMiddleware {
         } else {
             info!(
                 user_id = %user_id,
-                "step: MemoryMiddleware before done (save_user_messages=false, skip)"
+                "step: MemoryHandler before done (save_user_messages=false, skip)"
             );
         }
 
@@ -187,7 +182,7 @@ impl Middleware for MemoryMiddleware {
             user_id = %user_id,
             conversation_id = %conversation_id,
             has_reply = matches!(response, HandlerResponse::Reply(_)),
-            "step: MemoryMiddleware after"
+            "step: MemoryHandler after"
         );
 
         // Save LLM response to memory when handler returns Reply(text) and config allows.
@@ -209,7 +204,7 @@ impl Middleware for MemoryMiddleware {
                         user_id = %user_id,
                         conversation_id = %conversation_id,
                         entry_id = %entry.id,
-                        "step: MemoryMiddleware after done, LLM reply saved to memory"
+                        "step: MemoryHandler after done, LLM reply saved to memory"
                     );
                 }
                 if let Some(ref r) = self.config.recent_store {
@@ -222,13 +217,13 @@ impl Middleware for MemoryMiddleware {
             } else {
                 info!(
                     user_id = %user_id,
-                    "step: MemoryMiddleware after done (no Reply, skip save)"
+                    "step: MemoryHandler after done (no Reply, skip save)"
                 );
             }
         } else {
             info!(
                 user_id = %user_id,
-                "step: MemoryMiddleware after done (save_llm_responses=false, skip)"
+                "step: MemoryHandler after done (save_llm_responses=false, skip)"
             );
         }
 

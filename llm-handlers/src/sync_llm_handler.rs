@@ -1,4 +1,4 @@
-//! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so middleware (e.g. MemoryMiddleware) can save the reply in `after()`.
+//! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so later handlers (e.g. memory) can save the reply in `after()`.
 
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use async_trait::async_trait;
@@ -33,7 +33,7 @@ fn log_messages_submitted_to_llm(messages: &[ChatMessage]) {
     }
 }
 
-/// Synchronous LLM handler: when the message is an LLM query (user replies to the bot's message, or @mentions the bot), builds context, calls the LLM, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so middleware can persist it (e.g. MemoryMiddleware in `after()`).
+/// Synchronous LLM handler: when the message is an LLM query (user replies to the bot's message, or @mentions the bot), builds context, calls the LLM, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so later handlers can persist it in `after()` (e.g. memory handler).
 ///
 /// **External interactions:** Bot trait (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), LlmClient (LLM).
 #[derive(Clone)]

@@ -276,7 +276,7 @@ async fn test_ai_reply_complete_flow() {
     // SyncLLMHandler runs in chain: before() stores user msg, handle() calls LLM and returns Reply, after() stores LLM reply. Chain done when handle_core_message returns.
     bot.handle_core_message(&msg).await.expect("handle_core_message");
 
-    // 10 seeded entries (including vector-store content) + middleware before() 1 user msg + after() 1 AI reply; at least 11 store calls (10 seed + 1 user).
+    // 10 seeded entries (including vector-store content) + handler before() 1 user msg + after() 1 AI reply; at least 11 store calls (10 seed + 1 user).
     assert!(
         mock_store.get_store_call_count() >= 11,
         "Memory store should have at least 11 adds (10 seeded + 1 user message), got {}",

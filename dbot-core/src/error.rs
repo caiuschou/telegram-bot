@@ -1,6 +1,6 @@
 //! Error types for the bot core.
 //!
-//! [`DbotError`] is the top-level error; [`HandlerError`] is used for handler/middleware failures.
+//! [`DbotError`] is the top-level error; [`HandlerError`] is used for handler failures.
 
 use thiserror::Error;
 
@@ -26,7 +26,7 @@ pub enum DbotError {
     Unknown(String),
 }
 
-/// Errors produced by handlers or middleware (no text, invalid command, auth, state, empty content).
+/// Errors produced by handlers (no text, invalid command, auth, state, empty content).
 #[derive(Error, Debug)]
 pub enum HandlerError {
     #[error("No text in message")]

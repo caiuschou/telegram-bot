@@ -40,7 +40,7 @@
 //!
 //! The memory crate interacts with external services:
 //! - **Storage backends**: SQLite, Lance, or in-memory storage via `MemoryStore`
-//! - **Bot runtime**: Integrates with bot middleware for conversation memory management
+//! - **Bot runtime**: Integrates with bot handlers for conversation memory management
 //! - **Embedding services**: Strategies use the `embedding` crate trait for semantic search
 //!
 //! ## Embedding Integration

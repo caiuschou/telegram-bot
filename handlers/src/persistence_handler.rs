@@ -1,25 +1,25 @@
-//! Persists incoming messages to storage in middleware before(). No after() logic.
+//! Handler that persists incoming messages to storage in before().
 
 use async_trait::async_trait;
-use dbot_core::{HandlerResponse, Message, MessageDirection, Middleware, Result};
+use dbot_core::{HandlerResponse, Message, MessageDirection, Handler, Result};
 use storage::MessageRepository;
 use tracing::{error, info, instrument};
 
-/// Middleware that saves each incoming message to the given [`MessageRepository`] in before(); always continues.
+/// Saves each incoming message to the given [`MessageRepository`] in before(); always continues.
 #[derive(Clone)]
-pub struct PersistenceMiddleware {
+pub struct PersistenceHandler {
     repo: MessageRepository,
 }
 
-impl PersistenceMiddleware {
-    /// Creates middleware that persists messages with the given repository.
+impl PersistenceHandler {
+    /// Creates a handler that persists messages with the given repository.
     pub fn new(repo: MessageRepository) -> Self {
         Self { repo }
     }
 }
 
 #[async_trait]
-impl Middleware for PersistenceMiddleware {
+impl Handler for PersistenceHandler {
     #[instrument(skip(self, message))]
     async fn before(&self, message: &Message) -> Result<bool> {
         info!(
@@ -27,7 +27,7 @@ impl Middleware for PersistenceMiddleware {
             chat_id = message.chat.id,
             message_id = %message.id,
             message_type = %message.message_type,
-            "step: PersistenceMiddleware before, saving message"
+            "step: PersistenceHandler before, saving message"
         );
 
         let record = storage::MessageRecord::new(
@@ -53,7 +53,7 @@ impl Middleware for PersistenceMiddleware {
         info!(
             user_id = message.user.id,
             message_id = %message.id,
-            "step: PersistenceMiddleware before done, message saved"
+            "step: PersistenceHandler before done, message saved"
         );
 
         Ok(true)
@@ -64,7 +64,7 @@ impl Middleware for PersistenceMiddleware {
         info!(
             user_id = message.user.id,
             chat_id = message.chat.id,
-            "step: PersistenceMiddleware after"
+            "step: PersistenceHandler after"
         );
         Ok(())
     }

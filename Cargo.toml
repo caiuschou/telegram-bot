@@ -22,6 +22,6 @@ members = [
     "handler-chain",
     "dbot-telegram",
     "crates/llm-client",
-    "middleware",
+    "handlers",
     "crates/prompt",
 ]

@@ -65,7 +65,7 @@ impl Context {
     /// Returns context as a single string for AI models (no current question).
     ///
     /// Delegates to `prompt::format_for_model`. Used when only the context block is needed
-    /// (e.g. middleware returning context string). External: output sent to LLM APIs.
+    /// (e.g. handler returning context string). External: output sent to LLM APIs.
     pub fn format_for_model(&self, include_system: bool) -> String {
         prompt::format_for_model(
             include_system,

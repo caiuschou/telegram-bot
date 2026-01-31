@@ -15,7 +15,7 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 
 ```
 telegram-bot/
-├── dbot-core/          # Core types and traits (Bot, Handler, Middleware)
+├── dbot-core/          # Core types and traits (Bot, Handler)
 ├── dbot-telegram/      # Telegram adapter
 ├── dbot-cli/           # CLI base (arg parsing, config loading)
 ├── telegram-bot/       # Bot framework (Telegram, handler chain, memory)
@@ -23,7 +23,7 @@ telegram-bot/
 ├── dbot-llm-cli/       # Full integration and entry point (`dbot run`)
 ├── handler-chain/      # Handler chain implementation
 ├── llm-handlers/       # LLM handlers (@mention detection, sync processing)
-├── middleware/         # Middleware (memory, persistence)
+├── handlers/           # Handlers (logging, auth, memory, persistence)
 ├── storage/            # Message persistence storage (SQLite)
 ├── memory/             # Memory system and context building
 ├── crates/
@@ -146,7 +146,7 @@ cargo test --test '*_integration_test'
 
 ### Code Structure
 
-- **dbot-core**: Defines core `Bot`, `Handler`, `Middleware` traits
+- **dbot-core**: Defines core `Bot`, `Handler` traits
 - **handler-chain**: Handler chain pattern implementation
 - **llm-handlers**: LLM detection and processing
 - **memory**: Memory management and context building

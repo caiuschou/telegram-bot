@@ -1,13 +1,13 @@
 //! Integration tests for [`handler_chain::HandlerChain`].
 //!
-//! Covers: middleware before/after order, middleware stopping the chain, handler Reply stopping the chain
-//! and being passed to middleware after, and multiple middleware executed in order (before first→last, after last→first).
+//! Covers: handler before/after order, handler before stopping the chain, Reply stopping the chain
+//! and being passed to handler after, and multiple handlers executed in order (before first→last, after last→first).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use chrono::Utc;
-use dbot_core::{Chat, Handler, HandlerResponse, Message, MessageDirection, Middleware, User};
+use dbot_core::{Chat, Handler, HandlerResponse, Message, MessageDirection, User};
 use handler_chain::HandlerChain;
 
 fn create_test_message(content: &str) -> Message {
@@ -33,23 +33,23 @@ fn create_test_message(content: &str) -> Message {
     }
 }
 
-/// **Test: Middleware before and after run; handler runs once.**
+/// **Test: Handler before and after run; handle runs once.**
 ///
-/// **Setup:** One middleware (counts before/after), one handler (counts handle).
+/// **Setup:** One handler (counts before/after), one handler (counts handle).
 /// **Action:** `chain.handle(&message)`.
 /// **Expected:** before_count=1, handle_count=1, after_count=1; response is Continue.
 #[tokio::test]
-async fn test_handler_chain_with_middleware() {
+async fn test_handler_chain_with_handler() {
     let before_count = Arc::new(AtomicUsize::new(0));
     let after_count = Arc::new(AtomicUsize::new(0));
     let handle_count = Arc::new(AtomicUsize::new(0));
 
-    let middleware = Arc::new(TestMiddleware::new(before_count.clone(), after_count.clone()));
-    let handler = Arc::new(TestHandler::new(handle_count.clone()));
+    let before_after_handler = Arc::new(TestBeforeAfterHandler::new(before_count.clone(), after_count.clone()));
+    let handle_only = Arc::new(TestHandler::new(handle_count.clone()));
 
     let chain = HandlerChain::new()
-        .add_middleware(middleware)
-        .add_handler(handler);
+        .add_handler(before_after_handler)
+        .add_handler(handle_only);
 
     let message = create_test_message("test");
     chain.handle(&message).await.unwrap();
@@ -59,23 +59,19 @@ async fn test_handler_chain_with_middleware() {
     assert_eq!(after_count.load(Ordering::SeqCst), 1);
 }
 
-/// **Test: Middleware before returns false stops the chain; handler is not run.**
+/// **Test: Handler before returns false stops the chain; handle is not run.**
 ///
-/// **Setup:** One blocking middleware (before returns false), one handler.
+/// **Setup:** One blocking handler (before returns false), one handler.
 /// **Action:** `chain.handle(&message)`.
 /// **Expected:** result is Stop; handle_count=0.
 #[tokio::test]
-async fn test_middleware_stops_chain() {
-    struct BlockingMiddleware;
+async fn test_handler_stops_chain() {
+    struct BlockingHandler;
 
     #[async_trait::async_trait]
-    impl Middleware for BlockingMiddleware {
+    impl Handler for BlockingHandler {
         async fn before(&self, _message: &Message) -> dbot_core::Result<bool> {
             Ok(false)
-        }
-
-        async fn after(&self, _message: &Message, _response: &HandlerResponse) -> dbot_core::Result<()> {
-            Ok(())
         }
     }
 
@@ -83,7 +79,7 @@ async fn test_middleware_stops_chain() {
     let handler = Arc::new(TestHandler::new(handle_count.clone()));
 
     let chain = HandlerChain::new()
-        .add_middleware(Arc::new(BlockingMiddleware))
+        .add_handler(Arc::new(BlockingHandler))
         .add_handler(handler);
 
     let message = create_test_message("test");
@@ -93,11 +89,11 @@ async fn test_middleware_stops_chain() {
     assert_eq!(handle_count.load(Ordering::SeqCst), 0);
 }
 
-/// **Test: Handler returns Reply; chain stops and Reply is passed to middleware after.**
+/// **Test: Handler returns Reply; chain stops and Reply is passed to handler after.**
 ///
-/// **Setup:** One middleware that in after() asserts Reply content; one handler that returns Reply("AI reply.").
+/// **Setup:** One handler that in after() asserts Reply content; one handler that returns Reply("AI reply.").
 /// **Action:** `chain.handle(&message)`.
-/// **Expected:** result is Reply("AI reply."); after_count=1 and middleware sees the reply text.
+/// **Expected:** result is Reply("AI reply."); after_count=1 and handler sees the reply text.
 #[tokio::test]
 async fn test_handler_reply_stops_chain_and_passes_to_after() {
     struct ReplyHandler;
@@ -111,12 +107,12 @@ async fn test_handler_reply_stops_chain_and_passes_to_after() {
 
     let after_count = Arc::new(AtomicUsize::new(0));
 
-    struct CaptureResponseMiddleware {
+    struct CaptureResponseHandler {
         after_count: Arc<AtomicUsize>,
     }
 
     #[async_trait::async_trait]
-    impl Middleware for CaptureResponseMiddleware {
+    impl Handler for CaptureResponseHandler {
         async fn before(&self, _message: &Message) -> dbot_core::Result<bool> {
             Ok(true)
         }
@@ -131,7 +127,7 @@ async fn test_handler_reply_stops_chain_and_passes_to_after() {
     }
 
     let chain = HandlerChain::new()
-        .add_middleware(Arc::new(CaptureResponseMiddleware {
+        .add_handler(Arc::new(CaptureResponseHandler {
             after_count: after_count.clone(),
         }))
         .add_handler(Arc::new(ReplyHandler));
@@ -143,22 +139,22 @@ async fn test_handler_reply_stops_chain_and_passes_to_after() {
     assert_eq!(after_count.load(Ordering::SeqCst), 1);
 }
 
-/// **Test: Multiple middleware run before in order (first, second), after in reverse (second, first).**
+/// **Test: Multiple handlers run before in order (first, second), after in reverse (second, first).**
 ///
-/// **Setup:** Two middleware that push "before_NAME" and "after_NAME" to a shared vec.
-/// **Action:** `chain.handle(&message)` (no handlers so no Reply/Stop from handler).
+/// **Setup:** Two handlers that push "before_NAME" and "after_NAME" to a shared vec.
+/// **Action:** `chain.handle(&message)` (handle phase returns Continue).
 /// **Expected:** Order is before_first, before_second, after_second, after_first.
 #[tokio::test]
-async fn test_multiple_middleware_executed_in_order() {
+async fn test_multiple_handlers_executed_in_order() {
     let order = Arc::new(std::sync::Mutex::new(Vec::new()));
 
-    struct OrderMiddleware {
+    struct OrderHandler {
         name: String,
         order: Arc<std::sync::Mutex<Vec<String>>>,
     }
 
     #[async_trait::async_trait]
-    impl Middleware for OrderMiddleware {
+    impl Handler for OrderHandler {
         async fn before(&self, _message: &Message) -> dbot_core::Result<bool> {
             self.order.lock().unwrap().push(format!("before_{}", self.name));
             Ok(true)
@@ -171,11 +167,11 @@ async fn test_multiple_middleware_executed_in_order() {
     }
 
     let chain = HandlerChain::new()
-        .add_middleware(Arc::new(OrderMiddleware {
+        .add_handler(Arc::new(OrderHandler {
             name: "first".to_string(),
             order: order.clone(),
         }))
-        .add_middleware(Arc::new(OrderMiddleware {
+        .add_handler(Arc::new(OrderHandler {
             name: "second".to_string(),
             order: order.clone(),
         }));
@@ -197,19 +193,19 @@ async fn test_multiple_middleware_executed_in_order() {
 
 // --- Helpers used by tests ---
 
-struct TestMiddleware {
+struct TestBeforeAfterHandler {
     before_count: Arc<AtomicUsize>,
     after_count: Arc<AtomicUsize>,
 }
 
-impl TestMiddleware {
+impl TestBeforeAfterHandler {
     fn new(before_count: Arc<AtomicUsize>, after_count: Arc<AtomicUsize>) -> Self {
         Self { before_count, after_count }
     }
 }
 
 #[async_trait::async_trait]
-impl Middleware for TestMiddleware {
+impl Handler for TestBeforeAfterHandler {
     async fn before(&self, _message: &Message) -> dbot_core::Result<bool> {
         self.before_count.fetch_add(1, Ordering::SeqCst);
         Ok(true)

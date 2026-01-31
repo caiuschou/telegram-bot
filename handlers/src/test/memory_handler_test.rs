@@ -1,10 +1,10 @@
-//! Unit tests for MemoryMiddleware: config, saving user messages and LLM replies to memory, context building.
+//! Unit tests for MemoryHandler: config, saving user messages and LLM replies to memory.
 //!
-//! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryMiddleware public/pub(crate) APIs.
+//! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryHandler public/pub(crate) APIs.
 
-use crate::memory_middleware::{MemoryConfig, MemoryMiddleware};
+use crate::memory_handler::{MemoryConfig, MemoryHandler};
 use chrono::Utc;
-use dbot_core::{HandlerResponse, Message, Middleware, User, Chat};
+use dbot_core::{HandlerResponse, Message, Handler, User, Chat};
 use memory::MemoryRole;
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
@@ -43,21 +43,21 @@ fn test_memory_config_default() {
     assert!(config.save_llm_responses);
 }
 
-/// **Test: MemoryMiddleware::with_store(store) creates middleware with save_user_messages true.**
+/// **Test: MemoryHandler::with_store(store) creates handler with save_user_messages true.**
 #[test]
-fn test_memory_middleware_creation() {
+fn test_memory_handler_creation() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store);
-    assert!(middleware.config.save_user_messages);
+    let handler = MemoryHandler::with_store(store);
+    assert!(handler.config.save_user_messages);
 }
 
 #[test]
 fn test_message_to_memory_entry() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store);
+    let handler = MemoryHandler::with_store(store);
     let message = create_test_message("Test message");
 
-    let entry = middleware.message_to_memory_entry(&message);
+    let entry = handler.message_to_memory_entry(&message);
 
     assert_eq!(entry.content, "Test message");
     assert_eq!(entry.metadata.role, MemoryRole::User);
@@ -67,12 +67,12 @@ fn test_message_to_memory_entry() {
 
 /// **Test: before() saves incoming user message to store; search_by_user returns one entry with User role.**
 #[tokio::test]
-async fn test_memory_middleware_saves_user_messages() {
+async fn test_memory_handler_saves_user_messages() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store.clone());
+    let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 
-    middleware.before(&message).await.unwrap();
+    handler.before(&message).await.unwrap();
 
     let entries = store.search_by_user("123").await.unwrap();
     assert_eq!(entries.len(), 1);
@@ -82,14 +82,14 @@ async fn test_memory_middleware_saves_user_messages() {
 
 /// **Test: after() with HandlerResponse::Continue does not save any entry (no reply text).**
 #[tokio::test]
-async fn test_memory_middleware_after_handler_response() {
+async fn test_memory_handler_after_handler_response() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store.clone());
+    let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 
     let response = HandlerResponse::Continue;
 
-    middleware.after(&message, &response).await.unwrap();
+    handler.after(&message, &response).await.unwrap();
 
     // Continue carries no reply text, so nothing is saved
     let entries = store.search_by_user("123").await.unwrap();
@@ -97,18 +97,17 @@ async fn test_memory_middleware_after_handler_response() {
 }
 
 #[tokio::test]
-async fn test_memory_middleware_after_saves_reply_to_memory() {
+async fn test_memory_handler_after_saves_reply_to_memory() {
     let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
-    let middleware = MemoryMiddleware::with_store(store.clone());
+    let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 
     let response = HandlerResponse::Reply("AI reply here.".to_string());
 
-    middleware.after(&message, &response).await.unwrap();
+    handler.after(&message, &response).await.unwrap();
 
     let entries = store.search_by_user("123").await.unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].content, "AI reply here.");
     assert_eq!(entries[0].metadata.role, MemoryRole::Assistant);
 }
-

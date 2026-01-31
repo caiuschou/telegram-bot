@@ -20,7 +20,7 @@ memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory/memory-sqlite" }
 memory-lance = { path = "../crates/memory/memory-lance" }
-middleware = { path = "../middleware" }
+handlers = { path = "../handlers" }
 handler-chain = { path = "../handler-chain" }
 async-trait = "0.1"
 chrono = "0.4"

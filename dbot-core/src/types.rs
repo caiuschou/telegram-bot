@@ -1,4 +1,4 @@
-//! Core types: user, chat, message, handler response, and traits for handlers/middleware.
+//! Core types: user, chat, message, handler response, and Handler trait.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -44,7 +44,7 @@ pub enum MessageDirection {
     Outgoing,
 }
 
-/// Handler result for the chain. `Reply(text)` carries the response body so middleware (e.g. memory) can use it in `after()`.
+/// Handler result for the chain. `Reply(text)` carries the response body so later handlers can use it in `after()`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HandlerResponse {
     /// Pass to next handler.
@@ -53,7 +53,7 @@ pub enum HandlerResponse {
     Stop,
     /// Skip this handler, try next.
     Ignore,
-    /// Stop the chain and attach reply text for middleware (e.g. save AI response to memory in `after()`).
+    /// Stop the chain and attach reply text (e.g. save AI response in a handler's `after()`).
     Reply(String),
 }
 
@@ -67,19 +67,23 @@ pub trait ToCoreMessage: Send + Sync {
     fn to_core(&self) -> Message;
 }
 
-/// Handler in the chain: processes a message and returns Continue, Stop, Ignore, or Reply(text).
+/// Single handler concept: optional before / handle / after. Chain runs all before → handle until Stop/Reply → all after (reverse).
 #[async_trait]
 pub trait Handler: Send + Sync {
-    async fn handle(&self, message: &Message) -> crate::error::Result<HandlerResponse>;
-}
-
-/// Middleware: runs before handlers (can stop the chain) and after (with final response).
-#[async_trait]
-pub trait Middleware: Send + Sync {
-    async fn before(&self, message: &Message) -> crate::error::Result<bool>;
+    /// Runs before the handle phase. Return false to stop the chain.
+    async fn before(&self, _message: &Message) -> crate::error::Result<bool> {
+        Ok(true)
+    }
+    /// Processes the message. Return Stop or Reply to end the handle phase. Default: Continue.
+    async fn handle(&self, _message: &Message) -> crate::error::Result<HandlerResponse> {
+        Ok(HandlerResponse::Continue)
+    }
+    /// Runs after the handle phase (reverse order), with the final response.
     async fn after(
         &self,
-        message: &Message,
-        response: &HandlerResponse,
-    ) -> crate::error::Result<()>;
+        _message: &Message,
+        _response: &HandlerResponse,
+    ) -> crate::error::Result<()> {
+        Ok(())
+    }
 }

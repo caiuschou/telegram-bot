@@ -8,7 +8,7 @@ use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
 use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
-use middleware::{MemoryMiddleware, PersistenceMiddleware};
+use handlers::{MemoryHandler, PersistenceHandler};
 use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
 use storage::MessageRepository;
@@ -177,20 +177,19 @@ pub async fn build_bot_components(
     })
 }
 
-/// Builds the handler chain (persistence → memory → handler). Handler is injected from outside.
+/// Builds the handler chain (persistence → memory → LLM handler). LLM handler is injected from outside.
 pub fn build_handler_chain(
     components: &BotComponents,
     handler: Arc<dyn Handler>,
 ) -> HandlerChain {
-    let persistence_middleware =
-        Arc::new(PersistenceMiddleware::new(components.repo.as_ref().clone()));
-    let memory_middleware = Arc::new(MemoryMiddleware::with_store_and_embedding(
+    let persistence = Arc::new(PersistenceHandler::new(components.repo.as_ref().clone()));
+    let memory = Arc::new(MemoryHandler::with_store_and_embedding(
         components.memory_store.clone(),
         components.embedding_service.clone(),
         components.recent_store.clone(),
     ));
     HandlerChain::new()
-        .add_middleware(persistence_middleware)
-        .add_middleware(memory_middleware)
+        .add_handler(persistence)
+        .add_handler(memory)
         .add_handler(handler)
 }
