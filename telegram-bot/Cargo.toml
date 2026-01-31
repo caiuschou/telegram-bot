@@ -23,7 +23,7 @@ tokio = { version = "1.35", features = ["full"] }
 log = "0.4"
 env_logger = "0.11"
 dotenvy = "0.15"
-embedding = { path = "./embedding" }
+embedding = { path = "../crates/embedding/embedding" }
 openai-embedding = { path = "../crates/embedding/openai-embedding" }
 bigmodel-embedding = { path = "../crates/embedding/bigmodel-embedding" }
 memory-core = { path = "../crates/memory/memory-core" }

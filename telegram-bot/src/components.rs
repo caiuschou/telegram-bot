@@ -24,7 +24,7 @@ pub struct BotComponents {
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     pub memory_store: Arc<dyn MemoryStore>,
     pub recent_store: Option<Arc<dyn MemoryStore>>,
-    pub embedding_service: Arc<dyn embedding::EmbeddingService>,
+    pub embedding_service: Arc<dyn crate::embedding::EmbeddingService>,
 }
 
 /// Creates the primary memory store and optional recent store from config.
@@ -64,7 +64,7 @@ pub async fn create_memory_stores(
                     .unwrap_or("./data/lance_db")
                     .to_string();
                 let embedding_dim = if emb_cfg
-                    .map_or(false, |e: &dyn embedding::EmbeddingConfig| e.provider().eq_ignore_ascii_case("zhipuai"))
+                    .map_or(false, |e: &dyn crate::embedding::EmbeddingConfig| e.provider().eq_ignore_ascii_case("zhipuai"))
                 {
                     1024
                 } else {
@@ -167,7 +167,7 @@ pub async fn build_bot_components(
 
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
 
-    let embedding_service: Arc<dyn embedding::EmbeddingService> = match emb_cfg.provider() {
+    let embedding_service: Arc<dyn crate::embedding::EmbeddingService> = match emb_cfg.provider() {
         "zhipuai" => {
             if emb_cfg.bigmodel_api_key().is_empty() {
                 error!("EMBEDDING_PROVIDER=zhipuai but BIGMODEL_API_KEY / ZHIPUAI_API_KEY not set");

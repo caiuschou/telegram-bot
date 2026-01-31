@@ -2,7 +2,7 @@
 //! LLM config is implemented externally.
 
 use anyhow::Result;
-use embedding::{EmbeddingConfig, EnvEmbeddingConfig};
+use crate::embedding::{EmbeddingConfig, EnvEmbeddingConfig};
 use crate::memory::{EnvMemoryConfig, MemoryConfig};
 
 /// Application extension config. Implement this trait to inject custom config.

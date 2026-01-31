@@ -8,6 +8,7 @@ pub mod cli;
 pub mod components;
 pub mod config;
 pub mod core;
+pub mod embedding;
 pub mod handlers;
 pub mod memory;
 pub mod runner;

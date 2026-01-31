@@ -5,7 +5,7 @@
 use crate::core::{Handler, HandlerResponse, Message, Result};
 use async_trait::async_trait;
 use chrono::Utc;
-use embedding::EmbeddingService;
+use crate::embedding::EmbeddingService;
 use crate::memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use crate::memory::InMemoryVectorStore;
 use std::sync::Arc;
