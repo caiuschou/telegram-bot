@@ -45,9 +45,19 @@ pub async fn create_memory_stores(
         "lance" => {
             #[cfg(not(feature = "lance"))]
             {
-                return Err(anyhow::anyhow!(
-                    "Memory store type 'lance' is configured but telegram-bot was built without the 'lance' feature. Build with --features lance."
-                ));
+                tracing::warn!(
+                    "Memory store type 'lance' is configured but telegram-bot was built without the 'lance' feature. \
+                     Falling back to 'sqlite'. To use Lance, build with --features lance."
+                );
+                info!(db_path = %mem_cfg.sqlite_path(), "Using SQLite vector store (fallback from lance)");
+                Arc::new(
+                    SQLiteVectorStore::new(mem_cfg.sqlite_path())
+                        .await
+                        .map_err(|e| {
+                            error!(error = %e, "Failed to initialize SQLite store (fallback from lance)");
+                            anyhow::anyhow!("Failed to initialize SQLite store: {}", e)
+                        })?,
+                )
             }
             #[cfg(feature = "lance")]
             {
