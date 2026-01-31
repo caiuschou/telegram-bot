@@ -13,12 +13,13 @@ pub struct BotConfig {
     pub llm_model: String,
     pub llm_use_streaming: bool,
     pub llm_thinking_message: String,
-    /// LLM system prompt (persona/behavior); when unset, uses default. Env: `LLM_SYSTEM_PROMPT`.
+    /// LLM system prompt (persona/behavior); when unset or empty, uses default. Env: `LLM_SYSTEM_PROMPT`.
     pub llm_system_prompt: Option<String>,
     pub memory_store_type: String,
     pub memory_sqlite_path: String,
     /// When true, recent messages use a dedicated SQLite store; semantic search still uses the primary store (e.g. Lance). Env: `MEMORY_RECENT_USE_SQLITE`.
     pub memory_recent_use_sqlite: bool,
+    /// LanceDB path when `memory_store_type == "lance"`. Env: `MEMORY_LANCE_PATH` or `LANCE_DB_PATH` (fallback).
     pub memory_lance_path: Option<String>,
     /// Embedding provider: `openai` | `zhipuai`. Used for RAG semantic search vectorization.
     pub embedding_provider: String,
@@ -53,7 +54,9 @@ impl BotConfig {
             .unwrap_or(false);
         let llm_thinking_message =
             env::var("THINKING_MESSAGE").unwrap_or_else(|_| "Thinking...".to_string());
-        let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT").ok();
+        let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         let memory_store_type =
             env::var("MEMORY_STORE_TYPE").unwrap_or_else(|_| "memory".to_string());
         let memory_sqlite_path =
@@ -65,7 +68,9 @@ impl BotConfig {
                 _ => s.parse().ok(),
             })
             .unwrap_or(false);
-        let memory_lance_path = env::var("MEMORY_LANCE_PATH").ok();
+        let memory_lance_path = env::var("MEMORY_LANCE_PATH")
+            .or_else(|_| env::var("LANCE_DB_PATH"))
+            .ok();
         let embedding_provider =
             env::var("EMBEDDING_PROVIDER").unwrap_or_else(|_| "openai".to_string());
         let bigmodel_api_key = env::var("BIGMODEL_API_KEY")
@@ -155,6 +160,7 @@ mod tests {
         env::remove_var("MEMORY_STORE_TYPE");
         env::remove_var("MEMORY_SQLITE_PATH");
         env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("LANCE_DB_PATH");
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
@@ -211,6 +217,7 @@ mod tests {
         env::remove_var("MEMORY_SQLITE_PATH");
         env::set_var("MEMORY_SQLITE_PATH", "/tmp/memory.db");
         env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("LANCE_DB_PATH");
         env::remove_var("EMBEDDING_PROVIDER");
         env::remove_var("BIGMODEL_API_KEY");
         env::remove_var("ZHIPUAI_API_KEY");
@@ -327,7 +334,44 @@ mod tests {
         let config = BotConfig::load(None).unwrap();
         assert_eq!(config.llm_system_prompt.as_deref(), Some("You are a test persona."));
 
+        // Empty or whitespace-only string → treat as unset (use default)
+        env::set_var("LLM_SYSTEM_PROMPT", "");
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.llm_system_prompt.is_none());
+
+        env::set_var("LLM_SYSTEM_PROMPT", "   ");
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.llm_system_prompt.is_none());
+
         env::remove_var("LLM_SYSTEM_PROMPT");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_memory_lance_path_fallback() {
+        env::remove_var("BOT_TOKEN");
+        env::set_var("BOT_TOKEN", "test_token");
+        env::remove_var("OPENAI_API_KEY");
+        env::set_var("OPENAI_API_KEY", "test_key");
+        env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("LANCE_DB_PATH");
+        env::remove_var("LLM_SYSTEM_PROMPT");
+
+        let config = BotConfig::load(None).unwrap();
+        assert!(config.memory_lance_path.is_none());
+
+        // LANCE_DB_PATH fallback when MEMORY_LANCE_PATH is unset
+        env::set_var("LANCE_DB_PATH", "./data/lancedb");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_lance_path.as_deref(), Some("./data/lancedb"));
+
+        // MEMORY_LANCE_PATH takes precedence over LANCE_DB_PATH
+        env::set_var("MEMORY_LANCE_PATH", "./data/custom_lance");
+        let config = BotConfig::load(None).unwrap();
+        assert_eq!(config.memory_lance_path.as_deref(), Some("./data/custom_lance"));
+
+        env::remove_var("MEMORY_LANCE_PATH");
+        env::remove_var("LANCE_DB_PATH");
     }
 
     #[test]
