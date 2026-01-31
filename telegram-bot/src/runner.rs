@@ -88,6 +88,22 @@ pub async fn run_bot<F>(config: BotConfig, make_handler: F) -> Result<()>
 where
     F: FnOnce(&BotConfig, BotComponents) -> Arc<dyn Handler>,
 {
+    let (memory_store, recent_store) = create_memory_stores(&config).await?;
+    run_bot_with_memory_stores(config, memory_store, recent_store, make_handler).await
+}
+
+/// Runs the bot with pre-built memory stores.
+/// Use this when the caller (e.g. telegram-llm-bot) injects custom stores such as Lance.
+#[instrument(skip(config, memory_store, recent_store, make_handler))]
+pub async fn run_bot_with_memory_stores<F>(
+    config: BotConfig,
+    memory_store: Arc<dyn MemoryStore>,
+    recent_store: Option<Arc<dyn MemoryStore>>,
+    make_handler: F,
+) -> Result<()>
+where
+    F: FnOnce(&BotConfig, BotComponents) -> Arc<dyn Handler>,
+{
     config.validate()?;
     std::fs::create_dir_all("logs").expect("Failed to create logs directory");
     init_tracing(config.base().log_file.as_str())?;
@@ -103,7 +119,6 @@ where
         "Initializing bot"
     );
 
-    let (memory_store, recent_store) = create_memory_stores(&config).await?;
     let components = build_bot_components(&config, memory_store, recent_store).await?;
     let handler = make_handler(&config, components.clone());
     let handler_chain = build_handler_chain(&components, handler);

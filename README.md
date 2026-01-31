@@ -19,8 +19,7 @@ telegram-bot/
 │   └── src/
 │       ├── embedding/      # Embedding trait + OpenAI/BigModel implementations
 │       ├── memory_core/    # Memory core types and MemoryStore trait
-│       ├── memory_strategies/  # Context strategies (recent, semantic, user preferences)
-│       └── memory_lance/   # LanceDB vector store (optional, feature "lance")
+│       └── memory_strategies/  # Context strategies (recent, semantic, user preferences)
 ├── telegram-llm-bot/   # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
 │   └── (llm_handlers module in src)
 ├── storage/            # Message persistence storage (SQLite)
@@ -125,15 +124,12 @@ Records and retrieves user preference settings.
 
 ### Enabling Lance (LanceDB)
 
-LanceDB is **optional** and not compiled by default (to avoid pulling in lancedb, arrow, datafusion and related dependencies). To use Lance as memory storage:
+LanceDB is **optional** and is injected by `telegram-llm-bot` when the `lance` feature is enabled. The framework crate (`telegram-bot`) does not depend on Lance; the LLM CLI entry point (`telegram-llm-bot`) creates and injects the Lance store.
 
 1. **Build or run with the `lance` feature:**
 
    ```bash
-   # Run with Lance support
-   cargo run --release -p telegram-bot --features lance -- run
-
-   # Or for the LLM CLI entry point
+   # Run with Lance support (telegram-llm-bot only)
    cargo run --release -p telegram-llm-bot --features lance -- run
    ```
 
@@ -144,14 +140,13 @@ LanceDB is **optional** and not compiled by default (to avoid pulling in lancedb
    LANCE_DB_PATH=./data/lancedb
    ```
 
-3. **Run tests with Lance** (when needed):
+3. **Run tests:**
 
    ```bash
-   cargo test -p telegram-bot --features lance
    cargo test -p memory-lance
    ```
 
-Without the `lance` feature, `cargo build --workspace` and normal `cargo run` do not compile the `memory-lance` crate.
+The `memory-lance` crate is a workspace member and is built when running `cargo build --workspace`. Lance support in `telegram-llm-bot` requires `--features lance`.
 
 ## Documentation
 

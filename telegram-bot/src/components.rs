@@ -6,8 +6,6 @@ use crate::core::Handler;
 use crate::embedding::{BigModelEmbedding, OpenAIEmbedding};
 use crate::handlers::{MemoryHandler, PersistenceHandler};
 use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
-#[cfg(feature = "lance")]
-use crate::memory_lance::{LanceConfig, LanceVectorStore};
 use std::sync::Arc;
 use crate::storage::MessageRepository;
 use teloxide::prelude::*;
@@ -35,55 +33,13 @@ pub async fn create_memory_stores(
         .extensions()
         .memory_config()
         .ok_or_else(|| anyhow::anyhow!("Memory config required"))?;
-    #[cfg_attr(not(feature = "lance"), allow(unused_variables))]
-    let emb_cfg = config.extensions().embedding_config();
 
     let memory_store: Arc<dyn MemoryStore> = match mem_cfg.store_type() {
         "lance" => {
-            #[cfg(not(feature = "lance"))]
-            {
-                tracing::warn!(
-                    "Memory store type 'lance' is configured but telegram-bot was built without the 'lance' feature. \
-                     Falling back to 'sqlite'. To use Lance, build with --features lance."
-                );
-                info!(db_path = %mem_cfg.sqlite_path(), "Using SQLite vector store (fallback from lance)");
-                Arc::new(
-                    SQLiteVectorStore::new(mem_cfg.sqlite_path())
-                        .await
-                        .map_err(|e| {
-                            error!(error = %e, "Failed to initialize SQLite store (fallback from lance)");
-                            anyhow::anyhow!("Failed to initialize SQLite store: {}", e)
-                        })?,
-                )
-            }
-            #[cfg(feature = "lance")]
-            {
-                let lance_path = mem_cfg
-                    .lance_path()
-                    .unwrap_or("./data/lance_db")
-                    .to_string();
-                let embedding_dim = if emb_cfg
-                    .map_or(false, |e: &dyn crate::embedding::EmbeddingConfig| e.provider().eq_ignore_ascii_case("zhipuai"))
-                {
-                    1024
-                } else {
-                    1536
-                };
-                let lance_config = LanceConfig {
-                    db_path: lance_path.clone(),
-                    embedding_dim,
-                    ..Default::default()
-                };
-                info!(
-                    db_path = %lance_path,
-                    embedding_dim = embedding_dim,
-                    "Using Lance vector store"
-                );
-                Arc::new(LanceVectorStore::with_config(lance_config).await.map_err(|e| {
-                    error!(error = %e, "Failed to initialize Lance store");
-                    anyhow::anyhow!("Failed to initialize Lance store: {}", e)
-                })?)
-            }
+            return Err(anyhow::anyhow!(
+                "MEMORY_STORE_TYPE=lance is not supported by telegram-bot directly. \
+                 Use run_bot_with_memory_stores and pass a Lance store from telegram-llm-bot (build with --features lance)."
+            ));
         }
         "sqlite" => {
             info!(db_path = %mem_cfg.sqlite_path(), "Using SQLite vector store");

@@ -13,8 +13,6 @@ pub mod handlers;
 pub mod memory;
 pub mod memory_core;
 pub mod memory_strategies;
-#[cfg(feature = "lance")]
-pub mod memory_lance;
 pub mod runner;
 pub mod storage;
 pub mod telegram;
@@ -38,7 +36,7 @@ pub use telegram::{
 };
 
 pub use config::{AppExtensions, BotConfig};
-pub use runner::run_bot;
+pub use runner::{run_bot, run_bot_with_memory_stores};
 
 pub use components::{build_bot_components, create_memory_stores, BotComponents};
 pub use handlers::{

@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = []
-lance = ["telegram-bot/lance"]
+lance = ["dep:memory-lance"]
 
 [lib]
 name = "telegram_llm_bot"
@@ -26,5 +26,6 @@ openai-client = { path = "../crates/llm/openai-client" }
 prompt = { path = "../crates/prompt" }
 serde = "1.0"
 telegram-bot = { path = "../telegram-bot" }
+memory-lance = { path = "../crates/memory/memory-lance", optional = true }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
