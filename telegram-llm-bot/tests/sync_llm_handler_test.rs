@@ -3,8 +3,8 @@
 //! Covers: is_bot_mentioned, extract_question, get_question.
 //! Uses in-memory store, MockEmbeddingService, MockBot, and OpenAILlmClient (dummy key); does not call Telegram or OpenAI.
 
+use telegram_llm_bot::llm_handlers::SyncLLMHandler;
 use llm_client::{LlmClient, OpenAILlmClient};
-use llm_handlers::SyncLLMHandler;
 use async_trait::async_trait;
 use chrono::Utc;
 use embedding::EmbeddingService;

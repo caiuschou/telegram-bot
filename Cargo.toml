@@ -1,9 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "llm-handlers",
     "telegram-bot",
-    "dbot-llm-cli",
+    "telegram-llm-bot",
     "crates/llm/openai-client",
     "crates/llm/telegram-bot-llm",
     "crates/memory/memory-core",

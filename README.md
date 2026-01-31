@@ -16,8 +16,8 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 ```
 telegram-bot/
 ├── telegram-bot/       # Bot framework (core, handler chain, telegram adapter, handlers, config, CLI)
-├── dbot-llm-cli/       # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
-├── llm-handlers/       # LLM handlers (@mention detection, sync processing)
+├── telegram-llm-bot/   # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
+│   └── (llm_handlers module in src)
 ├── storage/            # Message persistence storage (SQLite)
 ├── memory/             # Memory system and context building
 ├── crates/
@@ -95,7 +95,7 @@ RUST_LOG=info
 ### Running
 
 ```bash
-cargo run --release -p dbot-llm-cli -- run
+cargo run --release -p telegram-llm-bot -- run
 ```
 
 To use LanceDB as memory storage, add the `lance` feature: see [Enabling Lance (LanceDB)](#enabling-lance-lancedb).
@@ -132,7 +132,7 @@ LanceDB is **optional** and not compiled by default (to avoid pulling in lancedb
    cargo run --release -p telegram-bot --features lance -- run
 
    # Or for the LLM CLI entry point
-   cargo run --release -p dbot-llm-cli --features lance -- run
+   cargo run --release -p telegram-llm-bot --features lance -- run
    ```
 
 2. **Set memory store type to `lance`** in `.env`:
@@ -173,7 +173,7 @@ cargo test --test '*_integration_test'
 ### Code Structure
 
 - **telegram-bot**: Core `Bot`, `Handler` traits, handler chain, Telegram adapter, and built-in handlers (logging, auth, memory, persistence)
-- **llm-handlers**: LLM detection and processing
+- **telegram-llm-bot**: LLM integration (SyncLLMHandler, @mention detection and processing)
 - **memory**: Memory management and context building
 - **storage**: Message persistence
 
