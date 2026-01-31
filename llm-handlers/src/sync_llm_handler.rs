@@ -2,7 +2,7 @@
 
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use async_trait::async_trait;
-use dbot_core::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
+use telegram_bot::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
 use memory::{
     Context, ContextBuilder, MemoryStore, RecentMessagesStrategy, SemanticSearchStrategy,
@@ -120,7 +120,7 @@ impl SyncLLMHandler {
 
     /// Resolves the user question: when replying to bot use current content; when @mention with non-empty text use extracted content;
     /// when @mention but empty use DEFAULT_EMPTY_MENTION_QUESTION so bot still replies; otherwise None.
-    /// External: uses Message (dbot_core) fields only. Public for integration tests in `tests/`.
+    /// External: uses Message (telegram_bot) fields only. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
         if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
             return Some(message.content.clone());
@@ -225,7 +225,7 @@ impl SyncLLMHandler {
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to send message");
-                dbot_core::DbotError::Bot(e.to_string())
+                telegram_bot::DbotError::Bot(e.to_string())
             })?;
         self.log_llm_response_for_message(message, response).await?;
         info!(user_id = message.user.id, "LLM response sent");
@@ -248,7 +248,7 @@ impl SyncLLMHandler {
             .await
             .map_err(|e| {
                 error!(error = %e, "Failed to save LLM response");
-                dbot_core::DbotError::Database(e.to_string())
+                telegram_bot::DbotError::Database(e.to_string())
             })?;
         Ok(())
     }

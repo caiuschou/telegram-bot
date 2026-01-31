@@ -2,14 +2,14 @@
 
 use anyhow::Result;
 use bigmodel_embedding::BigModelEmbedding;
-use dbot_core::Handler;
-use handler_chain::HandlerChain;
+use crate::chain::HandlerChain;
+use crate::core::Handler;
+use crate::handlers::{MemoryHandler, PersistenceHandler};
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
 #[cfg(feature = "lance")]
 use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
-use handlers::{MemoryHandler, PersistenceHandler};
 use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
 use storage::MessageRepository;

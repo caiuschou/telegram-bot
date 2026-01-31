@@ -1,7 +1,7 @@
 //! Detects when the user triggers an LLM query (reply-to-bot or @-mention) and sends an [`LLMQuery`] on a channel for another handler (e.g. SyncLLMHandler) to process.
 
 use async_trait::async_trait;
-use dbot_core::{Handler, HandlerResponse, Message, Result};
+use telegram_bot::{Handler, HandlerResponse, Message, Result};
 use std::sync::Arc;
 use tracing::{info, instrument};
 
@@ -71,7 +71,7 @@ impl LLMDetectionHandler {
                 };
 
                 self.query_sender.send(query).map_err(|e| {
-                    dbot_core::DbotError::Bot(format!("Failed to send LLM query: {}", e))
+                    telegram_bot::DbotError::Bot(format!("Failed to send LLM query: {}", e))
                 })?;
 
                 return Ok(HandlerResponse::Stop);
@@ -96,7 +96,7 @@ impl LLMDetectionHandler {
                         };
 
                         self.query_sender.send(query).map_err(|e| {
-                            dbot_core::DbotError::Bot(format!("Failed to send LLM query: {}", e))
+                            telegram_bot::DbotError::Bot(format!("Failed to send LLM query: {}", e))
                         })?;
 
                         return Ok(HandlerResponse::Stop);
@@ -111,7 +111,7 @@ impl LLMDetectionHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbot_core::{Chat, Message, MessageDirection, User};
+    use telegram_bot::{Chat, Message, MessageDirection, User};
 
     /// **Test: LLMQuery fields match constructed values.**
     #[test]

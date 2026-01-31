@@ -4,7 +4,7 @@
 //! Integrated into dbot-llm-cli crate.
 
 use anyhow::Result;
-use dbot_telegram::TelegramBotAdapter;
+use telegram_bot::TelegramBotAdapter;
 use llm_client::{EnvLlmConfig, LlmClient, LlmConfig, OpenAILlmClient};
 use llm_handlers::SyncLLMHandler;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use telegram_bot::{run_bot, AppExtensions, BotComponents, BotConfig};
 pub fn build_llm_handler(
     config: &BotConfig,
     components: BotComponents,
-) -> Result<Arc<dyn dbot_core::Handler>> {
+) -> Result<Arc<dyn telegram_bot::Handler>> {
     let llm_cfg = EnvLlmConfig::from_env()?;
     let mem_cfg = config
         .extensions()
@@ -30,7 +30,7 @@ pub fn build_llm_handler(
         .with_system_prompt_opt(llm_cfg.system_prompt().map(String::from)),
     );
 
-    let bot_adapter: Arc<dyn dbot_core::Bot> =
+    let bot_adapter: Arc<dyn telegram_bot::Bot> =
         Arc::new(TelegramBotAdapter::new(components.teloxide_bot.clone()));
 
     let handler = Arc::new(SyncLLMHandler::new(

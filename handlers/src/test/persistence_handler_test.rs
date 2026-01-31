@@ -3,7 +3,7 @@
 //! Uses in-memory SQLite (sqlite::memory:); no external DB. Tests via PersistenceHandler public API.
 
 use crate::persistence_handler::PersistenceHandler;
-use dbot_core::{HandlerResponse, Message, MessageDirection, Handler};
+use telegram_bot::{HandlerResponse, Message, MessageDirection, Handler};
 use storage::MessageRepository;
 use chrono::Utc;
 
@@ -12,13 +12,13 @@ fn create_test_message(content: &str) -> Message {
     Message {
         id: "test_message_id".to_string(),
         content: content.to_string(),
-        user: dbot_core::User {
+        user: telegram_bot::User {
             id: 123,
             username: Some("test_user".to_string()),
             first_name: Some("Test".to_string()),
             last_name: None,
         },
-        chat: dbot_core::Chat {
+        chat: telegram_bot::Chat {
             id: 456,
             chat_type: "private".to_string(),
         },

@@ -6,7 +6,7 @@
 use std::env;
 use std::sync::Once;
 
-use dbot_core::{Chat, Message, MessageDirection, User};
+use telegram_bot::{Chat, Message, MessageDirection, User};
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use telegram_bot::runner::TelegramBot;
 use telegram_bot::BotConfig;

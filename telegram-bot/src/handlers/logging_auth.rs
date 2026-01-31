@@ -1,7 +1,7 @@
 //! Handlers for logging and optional auth (allowlist).
 
+use crate::core::{Handler, HandlerResponse, Message, Result};
 use async_trait::async_trait;
-use telegram_bot::{HandlerResponse, Message, Handler, Result};
 use tracing::{debug, error, info, instrument};
 
 /// Logs each message in before() and the response in after(); always continues.
@@ -53,7 +53,7 @@ impl Handler for AuthHandler {
             Ok(true)
         } else {
             error!(user_id = user_id, "Unauthorized access attempt");
-            Err(telegram_bot::HandlerError::Unauthorized.into())
+            Err(crate::core::HandlerError::Unauthorized.into())
         }
     }
 }

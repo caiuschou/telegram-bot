@@ -1,7 +1,7 @@
 use anyhow::Result;
-use dbot_core::{Handler, init_tracing, Message as CoreMessage, ToCoreMessage};
-use dbot_telegram::{run_repl, TelegramMessageWrapper};
-use handler_chain::HandlerChain;
+use crate::core::{Handler, init_tracing, Message as CoreMessage, ToCoreMessage};
+use crate::telegram::{run_repl, TelegramMessageWrapper};
+use crate::chain::HandlerChain;
 use memory::MemoryStore;
 use std::sync::Arc;
 use tracing::{error, info, instrument};

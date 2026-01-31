@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 llm-client = { path = "../crates/llm-client" }
-dbot-core = { path = "../dbot-core" }
+telegram-bot = { path = "../telegram-bot" }
 storage = { path = "../storage" }
 memory = { path = "../memory" }
 memory-inmemory = { path = "../crates/memory/memory-inmemory" }
@@ -20,4 +20,4 @@ tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 llm-client = { path = "../crates/llm-client" }
-dbot-core = { path = "../dbot-core" }
+telegram-bot = { path = "../telegram-bot" }

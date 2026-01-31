@@ -3,7 +3,7 @@
 //! Reads `BOT_TOKEN`, `OPENAI_API_KEY`, optional `OPENAI_BASE_URL` and `TELEGRAM_BOT_USERNAME` from env.
 //! Runs a REPL that handles every message with streamed LLM replies when the bot is @-mentioned.
 
-use dbot_core::init_tracing;
+use telegram_bot::init_tracing;
 use dotenvy::dotenv;
 use teloxide::prelude::*;
 use tracing::{error, info};

@@ -3,7 +3,7 @@
 //! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryHandler public/pub(crate) APIs.
 
 use chrono::Utc;
-use dbot_core::{Chat, Handler, HandlerResponse, Message, User};
+use telegram_bot::{Chat, Handler, HandlerResponse, Message, User};
 use memory::MemoryRole;
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
@@ -26,7 +26,7 @@ fn create_test_message(content: &str) -> Message {
             chat_type: "private".to_string(),
         },
         message_type: "text".to_string(),
-        direction: dbot_core::MessageDirection::Incoming,
+        direction: telegram_bot::MessageDirection::Incoming,
         created_at: Utc::now(),
         reply_to_message_id: None,
         reply_to_message_from_bot: false,

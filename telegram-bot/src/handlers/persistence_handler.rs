@@ -1,7 +1,7 @@
 //! Handler that persists incoming messages to storage in before().
 
+use crate::core::{Handler, HandlerResponse, Message, MessageDirection, Result};
 use async_trait::async_trait;
-use telegram_bot::{HandlerResponse, Message, MessageDirection, Handler, Result};
 use storage::MessageRepository;
 use tracing::{error, info, instrument};
 
@@ -47,7 +47,7 @@ impl Handler for PersistenceHandler {
 
         self.repo.save(&record).await.map_err(|e| {
             error!(error = %e, user_id = message.user.id, "Failed to save message");
-            telegram_bot::DbotError::Database(e.to_string())
+            crate::core::DbotError::Database(e.to_string())
         })?;
 
         info!(

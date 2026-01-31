@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "dbot-core",
     "storage",
     "llm-handlers",
     "telegram-bot",
@@ -15,12 +14,8 @@ members = [
     "crates/embedding/embedding",
     "crates/embedding/openai-embedding",
     "crates/embedding/bigmodel-embedding",
-    "crates/memory/memory-handler",
     "crates/memory/memory-inmemory",
     "crates/memory/memory-sqlite",
-    "handler-chain",
-    "dbot-telegram",
     "crates/llm-client",
-    "handlers",
     "crates/prompt",
 ]
