@@ -38,6 +38,9 @@ lancedb = { version = "0.23", optional = true }
 arrow-array = { version = "56", optional = true }
 arrow-schema = { version = "56", optional = true }
 futures = { version = "0.3", optional = true }
+embedding = { path = "../crates/embedding/embedding" }
+bigmodel-embedding = { path = "../crates/embedding/bigmodel-embedding" }
+openai-embedding = { path = "../crates/embedding/openai-embedding" }
 
 [dev-dependencies]
 mockall = "0.14"

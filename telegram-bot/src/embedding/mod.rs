@@ -1,18 +1,5 @@
-//! Text embeddings: trait and implementations (OpenAI, BigModel).
+//! Text embeddings: re-exports from embedding crates.
 
-use async_trait::async_trait;
-
-mod config;
-pub mod openai;
-pub mod bigmodel;
-
-pub use config::{EmbeddingConfig, EnvEmbeddingConfig};
-pub use openai::OpenAIEmbedding;
-pub use bigmodel::BigModelEmbedding;
-
-/// Service for generating text embeddings.
-#[async_trait]
-pub trait EmbeddingService: Send + Sync {
-    async fn embed(&self, text: &str) -> Result<Vec<f32>, anyhow::Error>;
-    async fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, anyhow::Error>;
-}
+pub use bigmodel_embedding::BigModelEmbedding;
+pub use embedding::{EmbeddingConfig, EmbeddingService, EnvEmbeddingConfig};
+pub use openai_embedding::OpenAIEmbedding;
