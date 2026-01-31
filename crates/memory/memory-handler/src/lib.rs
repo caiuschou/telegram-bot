@@ -3,13 +3,13 @@
 //! Handler that saves user messages and LLM responses to the memory store (before/after).
 
 use async_trait::async_trait;
-use dbot_core::{HandlerResponse, Message, Handler, Result};
+use chrono::Utc;
+use dbot_core::{Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
 use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
 use tracing::{error, info, instrument};
-use chrono::Utc;
 
 /// Configuration for MemoryHandler.
 #[derive(Clone)]
@@ -230,3 +230,6 @@ impl Handler for MemoryHandler {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod memory_handler_test;

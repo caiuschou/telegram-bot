@@ -2,12 +2,13 @@
 //!
 //! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryHandler public/pub(crate) APIs.
 
-use crate::memory_handler::{MemoryConfig, MemoryHandler};
 use chrono::Utc;
-use dbot_core::{HandlerResponse, Message, Handler, User, Chat};
+use dbot_core::{Chat, Handler, HandlerResponse, Message, User};
 use memory::MemoryRole;
 use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
+
+use crate::{MemoryConfig, MemoryHandler};
 
 /// Builds a test Message with fixed user_id=123, chat_id=456.
 fn create_test_message(content: &str) -> Message {

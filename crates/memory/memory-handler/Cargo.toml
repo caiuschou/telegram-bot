@@ -1,0 +1,20 @@
+[package]
+name = "memory-handler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1"
+chrono = "0.4"
+dbot-core = { path = "../../../dbot-core" }
+embedding = { path = "../../embedding/embedding" }
+memory = { path = "../../../memory" }
+memory-inmemory = { path = "../memory-inmemory" }
+tracing = "0.1"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+dbot-core = { path = "../../../dbot-core" }
+memory = { path = "../../../memory" }
+memory-inmemory = { path = "../memory-inmemory" }
+tokio = { version = "1", features = ["full"] }

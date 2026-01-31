@@ -6,6 +6,7 @@ use dbot_core::Handler;
 use handler_chain::HandlerChain;
 use memory::MemoryStore;
 use memory_inmemory::InMemoryVectorStore;
+#[cfg(feature = "lance")]
 use memory_lance::{LanceConfig, LanceVectorStore};
 use memory_sqlite::SQLiteVectorStore;
 use handlers::{MemoryHandler, PersistenceHandler};
@@ -37,35 +38,45 @@ pub async fn create_memory_stores(
         .extensions()
         .memory_config()
         .ok_or_else(|| anyhow::anyhow!("Memory config required"))?;
+    #[cfg_attr(not(feature = "lance"), allow(unused_variables))]
     let emb_cfg = config.extensions().embedding_config();
 
     let memory_store: Arc<dyn MemoryStore> = match mem_cfg.store_type() {
         "lance" => {
-            let lance_path = mem_cfg
-                .lance_path()
-                .unwrap_or("./data/lance_db")
-                .to_string();
-            let embedding_dim = if emb_cfg
-                .map_or(false, |e: &dyn embedding::EmbeddingConfig| e.provider().eq_ignore_ascii_case("zhipuai"))
+            #[cfg(not(feature = "lance"))]
             {
-                1024
-            } else {
-                1536
-            };
-            let lance_config = LanceConfig {
-                db_path: lance_path.clone(),
-                embedding_dim,
-                ..Default::default()
-            };
-            info!(
-                db_path = %lance_path,
-                embedding_dim = embedding_dim,
-                "Using Lance vector store"
-            );
-            Arc::new(LanceVectorStore::with_config(lance_config).await.map_err(|e| {
-                error!(error = %e, "Failed to initialize Lance store");
-                anyhow::anyhow!("Failed to initialize Lance store: {}", e)
-            })?)
+                return Err(anyhow::anyhow!(
+                    "Memory store type 'lance' is configured but telegram-bot was built without the 'lance' feature. Build with --features lance."
+                ));
+            }
+            #[cfg(feature = "lance")]
+            {
+                let lance_path = mem_cfg
+                    .lance_path()
+                    .unwrap_or("./data/lance_db")
+                    .to_string();
+                let embedding_dim = if emb_cfg
+                    .map_or(false, |e: &dyn embedding::EmbeddingConfig| e.provider().eq_ignore_ascii_case("zhipuai"))
+                {
+                    1024
+                } else {
+                    1536
+                };
+                let lance_config = LanceConfig {
+                    db_path: lance_path.clone(),
+                    embedding_dim,
+                    ..Default::default()
+                };
+                info!(
+                    db_path = %lance_path,
+                    embedding_dim = embedding_dim,
+                    "Using Lance vector store"
+                );
+                Arc::new(LanceVectorStore::with_config(lance_config).await.map_err(|e| {
+                    error!(error = %e, "Failed to initialize Lance store");
+                    anyhow::anyhow!("Failed to initialize Lance store: {}", e)
+                })?)
+            }
         }
         "sqlite" => {
             info!(db_path = %mem_cfg.sqlite_path(), "Using SQLite vector store");

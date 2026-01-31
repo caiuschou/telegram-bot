@@ -3,7 +3,6 @@
 //! This crate provides handler implementations: logging, auth, memory, and persistence.
 
 mod logging_auth;
-mod memory_handler;
 mod persistence_handler;
 
 #[cfg(test)]

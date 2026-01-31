@@ -103,6 +103,8 @@ RUST_LOG=info
 cargo run --release -p dbot-llm-cli -- run
 ```
 
+To use LanceDB as memory storage, add the `lance` feature: see [Enabling Lance (LanceDB)](#enabling-lance-lancedb).
+
 ## Memory System
 
 The bot supports three context building strategies:
@@ -123,6 +125,36 @@ Records and retrieves user preference settings.
 | `memory` | In-memory storage | Development and testing |
 | `sqlite` | SQLite storage | Lightweight deployment |
 | `lance` | LanceDB vector database | Production, requires semantic search |
+
+### Enabling Lance (LanceDB)
+
+LanceDB is **optional** and not compiled by default (to avoid pulling in lancedb, arrow, datafusion and related dependencies). To use Lance as memory storage:
+
+1. **Build or run with the `lance` feature:**
+
+   ```bash
+   # Run with Lance support
+   cargo run --release -p telegram-bot --features lance -- run
+
+   # Or for the LLM CLI entry point
+   cargo run --release -p dbot-llm-cli --features lance -- run
+   ```
+
+2. **Set memory store type to `lance`** in `.env`:
+
+   ```bash
+   MEMORY_STORE_TYPE=lance
+   LANCE_DB_PATH=./data/lancedb
+   ```
+
+3. **Run tests with Lance** (when needed):
+
+   ```bash
+   cargo test -p telegram-bot --features lance
+   cargo test -p memory-lance
+   ```
+
+Without the `lance` feature, `cargo build --workspace` and normal `cargo run` do not compile the `memory-lance` crate.
 
 ## Documentation
 

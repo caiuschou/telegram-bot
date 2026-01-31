@@ -3,6 +3,10 @@ name = "dbot-llm-cli"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+lance = ["telegram-bot/lance"]
+
 [lib]
 name = "dbot_llm"
 path = "src/lib.rs"
