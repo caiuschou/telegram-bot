@@ -12,10 +12,7 @@ env_logger = "0.11"
 dotenvy = "0.15"
 dbot-core = { path = "../dbot-core" }
 dbot-telegram = { path = "../dbot-telegram" }
-llm-handlers = { path = "../llm-handlers" }
 storage = { path = "../storage" }
-llm-client = { path = "../crates/llm-client" }
-openai-client = { path = "../crates/llm/openai-client" }
 embedding = { path = "../crates/embedding/embedding" }
 openai-embedding = { path = "../crates/embedding/openai-embedding" }
 bigmodel-embedding = { path = "../crates/embedding/bigmodel-embedding" }
@@ -40,3 +37,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 chrono = "0.4"
 serial_test = "3.0"
 dbot-core = { path = "../dbot-core" }
+dbot-llm = { path = "../dbot-llm" }

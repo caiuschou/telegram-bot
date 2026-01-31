@@ -61,6 +61,9 @@
 
 use async_trait::async_trait;
 
+mod config;
+pub use config::{EmbeddingConfig, EnvEmbeddingConfig};
+
 /// Service for generating text embeddings.
 #[async_trait]
 pub trait EmbeddingService: Send + Sync {

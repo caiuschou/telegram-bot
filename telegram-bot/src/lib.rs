@@ -8,6 +8,8 @@ pub mod runner;
 pub mod telegram_impl;
 
 pub use dbot_telegram::{TelegramMessageWrapper, TelegramUserWrapper};
-pub use config::BotConfig;
+pub use config::{AppExtensions, BotConfig};
 pub use runner::run_bot;
 pub use telegram_impl::TelegramBot;
+
+pub use components::{build_bot_components, create_memory_stores, BotComponents};

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use dbot_core::{init_tracing, Message as CoreMessage, ToCoreMessage};
+use dbot_core::{Handler, init_tracing, Message as CoreMessage, ToCoreMessage};
 use dbot_telegram::{run_repl, TelegramMessageWrapper};
 use handler_chain::HandlerChain;
 use memory::MemoryStore;
@@ -7,12 +7,11 @@ use std::sync::Arc;
 use tracing::{error, info, instrument};
 
 use super::components::{
-    build_handler_chain, initialize_bot_components, initialize_bot_components_with_store,
-    BotComponents,
+    build_bot_components, build_handler_chain, create_memory_stores, BotComponents,
 };
-use super::config::BotConfig;
+use super::config::{AppExtensions, BotConfig};
 
-/// TelegramBot: config, components, and handler chain. Testable via handle_message / handle_core_message.
+/// TelegramBot: config, components, and handler chain. Handler is injected from outside.
 pub struct TelegramBot {
     pub config: BotConfig,
     pub components: BotComponents,
@@ -20,10 +19,11 @@ pub struct TelegramBot {
 }
 
 impl TelegramBot {
-    /// Creates a TelegramBot from config (repo, memory, LLM, middleware chain).
-    pub async fn new(config: BotConfig) -> Result<Self> {
-        let components = initialize_bot_components(&config).await?;
-        let handler_chain = build_handler_chain(&components);
+    /// Creates a TelegramBot from config and handler. Handler is built externally using components.
+    pub async fn new(config: BotConfig, handler: Arc<dyn Handler>) -> Result<Self> {
+        let (memory_store, recent_store) = create_memory_stores(&config).await?;
+        let components = build_bot_components(&config, memory_store, recent_store).await?;
+        let handler_chain = build_handler_chain(&components, handler);
         Ok(Self {
             config,
             components,
@@ -31,13 +31,14 @@ impl TelegramBot {
         })
     }
 
-    /// Creates TelegramBot with a custom MemoryStore (for tests).
+    /// Creates TelegramBot with a custom MemoryStore (e.g. for tests).
     pub async fn new_with_memory_store(
         config: BotConfig,
         memory_store: Arc<dyn MemoryStore>,
+        handler: Arc<dyn Handler>,
     ) -> Result<Self> {
-        let components = initialize_bot_components_with_store(&config, memory_store).await?;
-        let handler_chain = build_handler_chain(&components);
+        let components = build_bot_components(&config, memory_store, None).await?;
+        let handler_chain = build_handler_chain(&components, handler);
         Ok(Self {
             config,
             components,
@@ -65,9 +66,7 @@ impl TelegramBot {
         Ok(())
     }
 
-    /// Drive handler chain with core Message (for integration tests; avoids building teloxide Message).
-    ///
-    /// Same behavior as handle_message but takes dbot_core::Message for tests (e.g. reply-to-bot).
+    /// Drive handler chain with core Message (for integration tests).
     #[doc(hidden)]
     pub async fn handle_core_message(&self, message: &CoreMessage) -> Result<()> {
         info!(
@@ -80,33 +79,39 @@ impl TelegramBot {
         }
         Ok(())
     }
-
 }
 
-/// Main entry: init logging, validate config, create TelegramBot, then run REPL.
-#[instrument(skip(config))]
-pub async fn run_bot(config: BotConfig) -> Result<()> {
+/// Main entry: init logging, validate config, build components, create handler via factory, then run REPL.
+/// The factory receives (config, BotComponents) and returns the handler (e.g. SyncLLMHandler built from llm-handlers).
+#[instrument(skip(config, make_handler))]
+pub async fn run_bot<F>(config: BotConfig, make_handler: F) -> Result<()>
+where
+    F: FnOnce(&BotConfig, BotComponents) -> Arc<dyn Handler>,
+{
     config.validate()?;
     std::fs::create_dir_all("logs").expect("Failed to create logs directory");
-    init_tracing(&config.log_file)?;
+    init_tracing(config.base().log_file.as_str())?;
+
+    let mem_cfg = config
+        .extensions()
+        .memory_config()
+        .expect("BaseAppExtensions always has memory");
 
     info!(
-        database_url = %config.database_url,
-        llm_model = %config.llm_model,
-        llm_use_streaming = config.llm_use_streaming,
-        memory_store_type = %config.memory_store_type,
+        database_url = %config.base().database_url,
+        memory_store_type = %mem_cfg.store_type(),
         "Initializing bot"
     );
 
-    // Use TelegramBot struct for init logic
-    let bot = TelegramBot::new(config).await?;
-    let handler_chain = bot.handler_chain.clone();
-    let bot_username = bot.components.bot_username.clone();
-    let teloxide_bot = bot.components.teloxide_bot.clone();
+    let (memory_store, recent_store) = create_memory_stores(&config).await?;
+    let components = build_bot_components(&config, memory_store, recent_store).await?;
+    let handler = make_handler(&config, components.clone());
+    let handler_chain = build_handler_chain(&components, handler);
+    let bot_username = components.bot_username.clone();
+    let teloxide_bot = components.teloxide_bot.clone();
 
     info!("Bot started successfully");
 
-    // run_repl calls get_me and sets bot_username before handling messages
     run_repl(teloxide_bot, handler_chain, bot_username).await?;
 
     Ok(())

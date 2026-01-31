@@ -50,9 +50,12 @@
 //! - `openai-embedding` - OpenAI implementation
 //! - `bigmodel-embedding` - BigModel (Zhipu AI) implementation
 
+pub mod config;
 pub mod context;
 pub mod migration;
 
+// Re-export config types
+pub use config::{EnvMemoryConfig, MemoryConfig};
 // Re-export core types and store trait from memory-core
 pub use memory_core::*;
 // Re-export strategies and ContextStrategy from memory-strategies

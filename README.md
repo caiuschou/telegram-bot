@@ -17,8 +17,10 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 telegram-bot/
 ├── dbot-core/          # Core types and traits (Bot, Handler, Middleware)
 ├── dbot-telegram/      # Telegram adapter
-├── dbot-cli/           # CLI tool
-├── telegram-bot/       # Main application entry, config and runner
+├── dbot-cli/           # CLI base (arg parsing, config loading)
+├── telegram-bot/       # Bot framework (Telegram, handler chain, memory)
+├── dbot-llm/           # LLM integration (SyncLLMHandler, run_bot_with_llm)
+├── dbot-llm-cli/       # Full integration and entry point (`dbot run`)
 ├── handler-chain/      # Handler chain implementation
 ├── llm-handlers/       # LLM handlers (@mention detection, sync processing)
 ├── middleware/         # Middleware (memory, persistence)
@@ -99,7 +101,7 @@ RUST_LOG=info
 ### Running
 
 ```bash
-cargo run --release -p telegram-bot
+cargo run --release -p dbot-llm-cli -- run
 ```
 
 ## Memory System
@@ -122,6 +124,10 @@ Records and retrieves user preference settings.
 | `memory` | In-memory storage | Development and testing |
 | `sqlite` | SQLite storage | Lightweight deployment |
 | `lance` | LanceDB vector database | Production, requires semantic search |
+
+## Documentation
+
+- [Config 重构方案](docs/config-refactoring-plan.md)：可扩展配置架构的详细设计与迁移方案
 
 ## Development
 

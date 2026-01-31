@@ -15,8 +15,10 @@ use prompt::{ChatMessage, MessageRole};
 use std::future::Future;
 use std::pin::Pin;
 
+mod config;
 mod openai_llm;
 
+pub use config::{EnvLlmConfig, LlmConfig};
 pub use openai_llm::OpenAILlmClient;
 
 /// A chunk of streamed LLM output; aligned with `openai_client::StreamChunk`.
