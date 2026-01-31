@@ -11,34 +11,6 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 - **Multiple Embedding Services**: Supports OpenAI and Zhipu AI (BigModel) embeddings
 - **Modular Architecture**: Clean Workspace structure, easy to extend and maintain
 
-## Project Structure
-
-```
-telegram-bot/
-├── telegram-bot/       # Bot framework (core, handler chain, telegram adapter, handlers, config, CLI)
-│   └── src/
-│       ├── embedding/      # Embedding trait + OpenAI/BigModel implementations
-│       ├── memory_core/    # Memory core types and MemoryStore trait
-│       └── memory_strategies/  # Context strategies (recent, semantic, user preferences)
-├── telegram-llm-bot/   # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
-│   └── (llm_handlers module in src)
-├── storage/            # Message persistence storage (SQLite)
-├── memory/             # Memory system and context building
-├── crates/
-│   ├── llm/
-│   │   ├── openai-client/      # OpenAI client
-│   │   └── telegram-bot-llm/   # Telegram LLM integration
-│   ├── llm-client/             # LLM client abstraction
-│   ├── embedding/
-│   │   ├── embedding/          # Embedding service trait
-│   │   ├── openai-embedding/   # OpenAI embedding implementation
-│   │   └── bigmodel-embedding/ # Zhipu AI embedding implementation
-│   ├── memory/
-│   │   ├── memory-sqlite/      # SQLite storage
-│   │   └── memory-lance/       # LanceDB vector storage
-│   └── prompt/                 # Prompt templates
-```
-
 ## Quick Start
 
 ### Prerequisites
@@ -148,10 +120,6 @@ LanceDB is **optional** and is injected by `telegram-llm-bot` when the `lance` f
 
 The `memory-lance` crate is a workspace member and is built when running `cargo build --workspace`. Lance support in `telegram-llm-bot` requires `--features lance`.
 
-## Documentation
-
-- [Config 重构方案](docs/config-refactoring-plan.md)：可扩展配置架构的详细设计与迁移方案
-
 ## Development
 
 ### Running Tests
@@ -161,7 +129,8 @@ The `memory-lance` crate is a workspace member and is built when running `cargo 
 cargo test
 
 # Run tests for a specific crate
-cargo test -p memory
+cargo test -p telegram-bot
+# Or test LanceDB memory: cargo test -p memory-lance
 
 # Run integration tests
 cargo test --test '*_integration_test'

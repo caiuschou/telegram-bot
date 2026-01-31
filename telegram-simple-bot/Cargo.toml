@@ -1,0 +1,15 @@
+[package]
+name = "telegram-simple-bot"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "telegram-simple-bot"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+dotenvy = "0.15"
+telegram-bot = { path = "../telegram-bot" }
+tokio = { version = "1", features = ["full"] }

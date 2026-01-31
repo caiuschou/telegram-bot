@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "telegram-bot",
     "telegram-llm-bot",
+    "telegram-simple-bot",
     "crates/llm/openai-client",
     "crates/llm/telegram-bot-llm",
     "crates/llm-client",

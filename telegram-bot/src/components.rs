@@ -36,10 +36,11 @@ pub async fn create_memory_stores(
 
     let memory_store: Arc<dyn MemoryStore> = match mem_cfg.store_type() {
         "lance" => {
-            return Err(anyhow::anyhow!(
-                "MEMORY_STORE_TYPE=lance is not supported by telegram-bot directly. \
-                 Use run_bot_with_memory_stores and pass a Lance store from telegram-llm-bot (build with --features lance)."
-            ));
+            info!(
+                "MEMORY_STORE_TYPE=lance not supported here; downgrading to in-memory store. \
+                 Use telegram-llm-bot with --features lance for Lance."
+            );
+            Arc::new(InMemoryVectorStore::new())
         }
         "sqlite" => {
             info!(db_path = %mem_cfg.sqlite_path(), "Using SQLite vector store");
