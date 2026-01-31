@@ -3,7 +3,7 @@
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use async_trait::async_trait;
 use telegram_bot::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
-use embedding::EmbeddingService;
+use telegram_bot::embedding::EmbeddingService;
 use telegram_bot::memory::{
     Context, ContextBuilder, MemoryStore, RecentMessagesStrategy, SemanticSearchStrategy,
     UserPreferencesStrategy,

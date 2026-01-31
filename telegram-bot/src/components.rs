@@ -1,14 +1,13 @@
 //! Component factory: builds BotComponents from config. Handler is injected from outside (LLM impl).
 
 use anyhow::Result;
-use bigmodel_embedding::BigModelEmbedding;
 use crate::chain::HandlerChain;
 use crate::core::Handler;
+use crate::embedding::{BigModelEmbedding, OpenAIEmbedding};
 use crate::handlers::{MemoryHandler, PersistenceHandler};
 use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
 #[cfg(feature = "lance")]
-use memory_lance::{LanceConfig, LanceVectorStore};
-use openai_embedding::OpenAIEmbedding;
+use crate::memory_lance::{LanceConfig, LanceVectorStore};
 use std::sync::Arc;
 use crate::storage::MessageRepository;
 use teloxide::prelude::*;

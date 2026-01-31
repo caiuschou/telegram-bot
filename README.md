@@ -16,6 +16,11 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 ```
 telegram-bot/
 ├── telegram-bot/       # Bot framework (core, handler chain, telegram adapter, handlers, config, CLI)
+│   └── src/
+│       ├── embedding/      # Embedding trait + OpenAI/BigModel implementations
+│       ├── memory_core/    # Memory core types and MemoryStore trait
+│       ├── memory_strategies/  # Context strategies (recent, semantic, user preferences)
+│       └── memory_lance/   # LanceDB vector store (optional, feature "lance")
 ├── telegram-llm-bot/   # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
 │   └── (llm_handlers module in src)
 ├── storage/            # Message persistence storage (SQLite)
@@ -30,8 +35,6 @@ telegram-bot/
 │   │   ├── openai-embedding/   # OpenAI embedding implementation
 │   │   └── bigmodel-embedding/ # Zhipu AI embedding implementation
 │   ├── memory/
-│   │   ├── memory-core/        # Memory core types
-│   │   ├── memory-strategies/  # Context strategies (recent messages, semantic search, user preferences)
 │   │   ├── memory-sqlite/      # SQLite storage
 │   │   └── memory-lance/       # LanceDB vector storage
 │   └── prompt/                 # Prompt templates

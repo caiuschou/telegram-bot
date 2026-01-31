@@ -11,6 +11,10 @@ pub mod core;
 pub mod embedding;
 pub mod handlers;
 pub mod memory;
+pub mod memory_core;
+pub mod memory_strategies;
+#[cfg(feature = "lance")]
+pub mod memory_lance;
 pub mod runner;
 pub mod storage;
 pub mod telegram;

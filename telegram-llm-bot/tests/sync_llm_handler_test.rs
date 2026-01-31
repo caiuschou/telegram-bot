@@ -7,7 +7,7 @@ use telegram_llm_bot::llm_handlers::SyncLLMHandler;
 use llm_client::{LlmClient, OpenAILlmClient};
 use async_trait::async_trait;
 use chrono::Utc;
-use embedding::EmbeddingService;
+use telegram_bot::embedding::EmbeddingService;
 use std::sync::Arc;
 use telegram_bot::memory::{InMemoryVectorStore, MemoryStore};
 use telegram_bot::{Bot as CoreBot, Chat, Message, MessageDirection, Result as DbotResult, User};

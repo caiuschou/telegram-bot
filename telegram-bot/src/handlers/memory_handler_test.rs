@@ -3,11 +3,12 @@
 //! Uses InMemoryVectorStore; no real external services. Tests via MemoryConfig and MemoryHandler public/pub(crate) APIs.
 
 use chrono::Utc;
-use telegram_bot::{Chat, Handler, HandlerResponse, Message, User};
-use telegram_bot::memory::{InMemoryVectorStore, MemoryRole, MemoryStore};
+use crate::core::{Handler, HandlerResponse};
+use crate::core::types::{Chat, Message, User};
+use crate::memory::{InMemoryVectorStore, MemoryRole, MemoryStore};
 use std::sync::Arc;
 
-use crate::{MemoryConfig, MemoryHandler};
+use super::{MemoryConfig, MemoryHandler};
 
 /// Builds a test Message with fixed user_id=123, chat_id=456.
 fn create_test_message(content: &str) -> Message {
@@ -25,7 +26,7 @@ fn create_test_message(content: &str) -> Message {
             chat_type: "private".to_string(),
         },
         message_type: "text".to_string(),
-        direction: telegram_bot::MessageDirection::Incoming,
+        direction: crate::MessageDirection::Incoming,
         created_at: Utc::now(),
         reply_to_message_id: None,
         reply_to_message_from_bot: false,

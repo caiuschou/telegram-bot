@@ -14,10 +14,10 @@ use std::sync::Arc;
 use tempfile::TempDir;
 use uuid::Uuid;
 
-use bigmodel_embedding::BigModelEmbedding;
-use embedding::EmbeddingService;
-use memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
-use memory_strategies::{
+use telegram_bot::embedding::BigModelEmbedding;
+use telegram_bot::embedding::EmbeddingService;
+use telegram_bot::memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use telegram_bot::memory_strategies::{
     RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
 };
 use telegram_bot::memory::ContextBuilder;
@@ -35,8 +35,8 @@ fn zhipu_api_key() -> Option<String> {
 }
 
 /// Create Zhipu embedding service (embedding-2); None if no API key.
-fn make_zhipu_embedding() -> Option<Arc<BigModelEmbedding>> {
-    zhipu_api_key().map(|key| Arc::new(BigModelEmbedding::new(key, "embedding-2".to_string())))
+fn make_zhipu_embedding() -> Option<Arc<dyn EmbeddingService>> {
+    zhipu_api_key().map(|key| Arc::new(BigModelEmbedding::with_api_key(key)) as Arc<dyn EmbeddingService>)
 }
 
 /// Verify: Lance store + ContextBuilder runs three strategies (RecentMessages + SemanticSearch + UserPreferences)
