@@ -17,7 +17,8 @@ use super::utils::format_message;
 ///
 /// Uses the user's question text to generate an embedding, then searches the vector store
 /// for the most semantically similar memory entries to include as context.
-/// Entries with score < min_score are filtered out (see docs/rag/memory/vector-search-accuracy.md).
+/// Filtering is by conversation (e.g. Telegram group/chat) only, not by user, so all messages
+/// in the same chat are searchable. Entries with score < min_score are filtered out.
 pub struct SemanticSearchStrategy {
     limit: usize,
     /// Minimum similarity score (e.g. cosine). Entries with score < min_score are excluded. 0.0 = no filter.
@@ -55,7 +56,7 @@ impl ContextStrategy for SemanticSearchStrategy {
     /// Builds context by performing semantic search for relevant messages.
     ///
     /// 1. If query text is present, generates embedding via EmbeddingService.
-    /// 2. Calls store.semantic_search() with query embedding.
+    /// 2. Calls store.semantic_search() with query embedding, filtered by conversation_id only (not user_id).
     /// 3. Formats returned entries as messages and returns them.
     ///
     /// # External Interactions
@@ -66,7 +67,7 @@ impl ContextStrategy for SemanticSearchStrategy {
     async fn build_context(
         &self,
         store: &dyn MemoryStore,
-        user_id: &Option<String>,
+        _user_id: &Option<String>,
         conversation_id: &Option<String>,
         query: &Option<String>,
     ) -> Result<StrategyResult, anyhow::Error> {
@@ -107,11 +108,12 @@ impl ContextStrategy for SemanticSearchStrategy {
             min_score = self.min_score,
             "step: embedding semantic_search"
         );
+        // Filter by conversation (group/chat) only; do not filter by user so all messages in the chat are searchable.
         let scored_entries = match store
             .semantic_search(
                 &query_embedding,
                 self.limit,
-                user_id.as_deref(),
+                None,
                 conversation_id.as_deref(),
             )
             .await

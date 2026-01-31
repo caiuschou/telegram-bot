@@ -400,6 +400,12 @@ impl LanceVectorStore {
         Ok(entries)
     }
 
+    /// Escapes a string for safe use in a Lance SQL predicate (e.g. only_if).
+    /// Single quotes are doubled so values cannot break the predicate.
+    fn escape_sql_string(s: &str) -> String {
+        s.replace('\'', "''")
+    }
+
     /// Converts Lance _distance to similarity score (higher = more similar).
     /// For Cosine distance: Lance typically returns 1 - cos_sim, so similarity = 1.0 - distance.
     /// If _distance column is missing, returns 1.0.
@@ -572,8 +578,10 @@ impl MemoryStore for LanceVectorStore {
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
+        let filter = format!("conversation_id = '{}'", Self::escape_sql_string(conversation_id));
         let results = table
             .query()
+            .only_if(filter)
             .execute()
             .await
             .map_err(|e| anyhow!("Failed to execute query: {}", e))?;
@@ -587,9 +595,7 @@ impl MemoryStore for LanceVectorStore {
         for batch in results {
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
-                if entry.metadata.conversation_id.as_deref() == Some(conversation_id) {
-                    entries.push(entry);
-                }
+                entries.push(entry);
             }
         }
         entries.sort_by(|a, b| a.metadata.timestamp.cmp(&b.metadata.timestamp));
@@ -632,14 +638,16 @@ impl MemoryStore for LanceVectorStore {
                 anyhow!("Failed to open table: {}", e)
             })?;
 
-        // Fetch more candidates when filtering so we have enough after filter (configurable multiplier)
-        let fetch_limit = if user_id.is_some() || conversation_id.is_some() {
-            limit
-                .saturating_mul(self.config.semantic_fetch_multiplier as usize)
-                .max(50)
-        } else {
-            limit
-        };
+        // Push conversation_id and user_id to Lance so we only need limit (no over-fetch).
+        let mut predicate_parts = Vec::new();
+        if let Some(u) = user_id {
+            predicate_parts.push(format!("user_id = '{}'", Self::escape_sql_string(u)));
+        }
+        if let Some(c) = conversation_id {
+            predicate_parts.push(format!("conversation_id = '{}'", Self::escape_sql_string(c)));
+        }
+        let predicate = predicate_parts.join(" AND ");
+        let filter_pushed_down = !predicate.is_empty();
 
         let mut vector_query = table
             .query()
@@ -659,6 +667,9 @@ impl MemoryStore for LanceVectorStore {
                 )
             })?;
 
+        if filter_pushed_down {
+            vector_query = vector_query.only_if(predicate);
+        }
         if self.config.use_exact_search {
             vector_query = vector_query.bypass_vector_index();
         }
@@ -670,7 +681,7 @@ impl MemoryStore for LanceVectorStore {
         }
 
         let results = vector_query
-            .limit(fetch_limit)
+            .limit(limit)
             .execute()
             .await
             .map_err(|e| {
@@ -701,15 +712,22 @@ impl MemoryStore for LanceVectorStore {
             let distance_col_idx = batch.schema().index_of("_distance").ok();
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
-                let match_user = user_id
-                    .map(|u| entry.metadata.user_id.as_deref() == Some(u))
-                    .unwrap_or(true);
-                let match_conv = conversation_id
-                    .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
-                    .unwrap_or(true);
-                if match_user && match_conv {
-                    let score = Self::distance_to_similarity(&batch, distance_col_idx, row);
-                    scored_entries.push((score, entry));
+                if filter_pushed_down {
+                    scored_entries.push((
+                        Self::distance_to_similarity(&batch, distance_col_idx, row),
+                        entry,
+                    ));
+                } else {
+                    let match_user = user_id
+                        .map(|u| entry.metadata.user_id.as_deref() == Some(u))
+                        .unwrap_or(true);
+                    let match_conv = conversation_id
+                        .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
+                        .unwrap_or(true);
+                    if match_user && match_conv {
+                        let score = Self::distance_to_similarity(&batch, distance_col_idx, row);
+                        scored_entries.push((score, entry));
+                    }
                 }
             }
         }
