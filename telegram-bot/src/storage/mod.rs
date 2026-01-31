@@ -1,6 +1,6 @@
-//! Storage crate: message persistence and repository abstractions.
+//! Storage module: message persistence and repository abstractions.
 //!
-//! ## Modules
+//! ## Submodules
 //!
 //! - [`error`] – Storage error types
 //! - [`models`] – MessageRecord, MessageQuery, MessageStats
@@ -13,8 +13,6 @@ mod message_repo;
 mod models;
 mod repository;
 mod sqlite_pool;
-
-// Unit/integration tests live in tests/message_repo_test.rs
 
 pub use error::StorageError;
 pub use message_repo::MessageRepository;

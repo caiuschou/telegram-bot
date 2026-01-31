@@ -1,4 +1,4 @@
-//! SQLite connection pool wrapper for the storage crate.
+//! SQLite connection pool wrapper for the storage module.
 //!
 //! Provides [`SqlitePoolManager`] to create and reuse a single pool per database URL;
 //! the database file is created if it does not exist.

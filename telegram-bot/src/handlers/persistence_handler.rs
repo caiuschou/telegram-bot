@@ -2,7 +2,7 @@
 
 use crate::core::{Handler, HandlerResponse, Message, MessageDirection, Result};
 use async_trait::async_trait;
-use storage::MessageRepository;
+use crate::storage::MessageRepository;
 use tracing::{error, info, instrument};
 
 /// Saves each incoming message to the given [`MessageRepository`] in before(); always continues.
@@ -30,7 +30,7 @@ impl Handler for PersistenceHandler {
             "step: PersistenceHandler before, saving message"
         );
 
-        let record = storage::MessageRecord::new(
+        let record = crate::storage::MessageRecord::new(
             message.user.id,
             message.chat.id,
             message.user.username.clone(),

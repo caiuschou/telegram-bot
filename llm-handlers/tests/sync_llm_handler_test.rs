@@ -7,12 +7,11 @@ use llm_client::{LlmClient, OpenAILlmClient};
 use llm_handlers::SyncLLMHandler;
 use async_trait::async_trait;
 use chrono::Utc;
-use telegram_bot::{Bot as CoreBot, Chat, Message, MessageDirection, Result as DbotResult, User};
 use embedding::EmbeddingService;
-use memory::MemoryStore;
-use memory_inmemory::InMemoryVectorStore;
 use std::sync::Arc;
-use storage::MessageRepository;
+use telegram_bot::memory::{InMemoryVectorStore, MemoryStore};
+use telegram_bot::{Bot as CoreBot, Chat, Message, MessageDirection, Result as DbotResult, User};
+use telegram_bot::storage::MessageRepository;
 
 /// Mock embedding service for tests: returns fixed-dimension vectors, no external API.
 struct MockEmbeddingService;

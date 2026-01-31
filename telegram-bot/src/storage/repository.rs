@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 
-use crate::error::StorageError;
+use super::error::StorageError;
 
 /// Generic async repository: save, find_by_id, find_all, delete.
 #[async_trait]

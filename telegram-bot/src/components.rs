@@ -10,7 +10,7 @@ use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
 use memory_lance::{LanceConfig, LanceVectorStore};
 use openai_embedding::OpenAIEmbedding;
 use std::sync::Arc;
-use storage::MessageRepository;
+use crate::storage::MessageRepository;
 use teloxide::prelude::*;
 use tracing::{error, info, instrument};
 

@@ -3,8 +3,8 @@
 //! Uses SqlitePoolManager and the models (MessageRecord, MessageQuery, MessageStats).
 //! External: SQLite via sqlx; callers use save/get_messages/get_stats etc.
 
-use crate::models::{MessageQuery, MessageRecord, MessageStats};
-use crate::sqlite_pool::SqlitePoolManager;
+use super::models::{MessageQuery, MessageRecord, MessageStats};
+use super::sqlite_pool::SqlitePoolManager;
 use chrono::{DateTime, Local, Utc};
 use tracing::info;
 

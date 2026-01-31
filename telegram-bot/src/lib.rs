@@ -11,6 +11,7 @@ pub mod core;
 pub mod handlers;
 pub mod memory;
 pub mod runner;
+pub mod storage;
 pub mod telegram;
 pub mod telegram_impl;
 

@@ -1,8 +1,8 @@
-//! Integration tests for [`storage::MessageRepository`].
+//! Integration tests for [`telegram_bot::storage::MessageRepository`].
 //!
 //! Covers `get_message_by_id`, `get_recent_messages_by_chat`, get_stats, get_messages, search_messages, and chat filtering using an in-memory SQLite database.
 
-use storage::{MessageQuery, MessageRecord, MessageRepository};
+use telegram_bot::storage::{MessageQuery, MessageRecord, MessageRepository};
 use tempfile::TempDir;
 
 /// Returns a fresh SQLite database path in a temp dir so each test gets an isolated DB.

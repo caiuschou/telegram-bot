@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 llm-client = { path = "../crates/llm-client" }
 telegram-bot = { path = "../telegram-bot" }
-storage = { path = "../storage" }
 prompt = { path = "../crates/prompt" }
 embedding = { path = "../crates/embedding/embedding" }
 async-trait = "0.1"

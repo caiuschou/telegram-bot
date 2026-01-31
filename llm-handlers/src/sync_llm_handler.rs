@@ -11,7 +11,7 @@ use telegram_bot::memory::{
 use prompt::ChatMessage;
 use std::sync::Arc;
 use std::time::Instant;
-use storage::MessageRepository;
+use telegram_bot::storage::MessageRepository;
 use tokio::time::sleep;
 use tracing::{debug, error, info, instrument};
 
@@ -233,7 +233,7 @@ impl SyncLLMHandler {
     }
 
     async fn log_llm_response_for_message(&self, message: &Message, response: &str) -> Result<()> {
-        let record = storage::MessageRecord::new(
+        let record = telegram_bot::storage::MessageRecord::new(
             message.user.id,
             message.chat.id,
             None,
