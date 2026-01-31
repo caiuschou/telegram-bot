@@ -19,8 +19,7 @@ telegram-bot/
 ├── dbot-telegram/      # Telegram adapter
 ├── dbot-cli/           # CLI base (arg parsing, config loading)
 ├── telegram-bot/       # Bot framework (Telegram, handler chain, memory)
-├── dbot-llm/           # LLM integration (SyncLLMHandler, run_bot_with_llm)
-├── dbot-llm-cli/       # Full integration and entry point (`dbot run`)
+├── dbot-llm-cli/       # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
 ├── handler-chain/      # Handler chain implementation
 ├── llm-handlers/       # LLM handlers (@mention detection, sync processing)
 ├── handlers/           # Handlers (logging, auth, memory, persistence)

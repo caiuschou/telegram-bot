@@ -1,6 +1,7 @@
-//! # dbot-llm
+//! # dbot_llm
 //!
 //! LLM integration for Telegram bot: builds SyncLLMHandler and runs via telegram-bot.
+//! Integrated into dbot-llm-cli crate.
 
 use anyhow::Result;
 use dbot_telegram::TelegramBotAdapter;

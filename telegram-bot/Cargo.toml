@@ -37,4 +37,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 chrono = "0.4"
 serial_test = "3.0"
 dbot-core = { path = "../dbot-core" }
-dbot-llm = { path = "../dbot-llm" }
+dbot-llm-cli = { path = "../dbot-llm-cli" }

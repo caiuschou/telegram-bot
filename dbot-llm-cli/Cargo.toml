@@ -3,6 +3,10 @@ name = "dbot-llm-cli"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "dbot_llm"
+path = "src/lib.rs"
+
 [[bin]]
 name = "dbot"
 path = "src/main.rs"
@@ -13,4 +17,9 @@ clap = { version = "4.5", features = ["derive"] }
 dotenvy = "0.15"
 tokio = { version = "1", features = ["full"] }
 dbot-cli = { path = "../dbot-cli" }
-dbot-llm = { path = "../dbot-llm" }
+dbot-core = { path = "../dbot-core" }
+dbot-telegram = { path = "../dbot-telegram" }
+llm-client = { path = "../crates/llm-client" }
+llm-handlers = { path = "../llm-handlers" }
+openai-client = { path = "../crates/llm/openai-client" }
+telegram-bot = { path = "../telegram-bot" }
