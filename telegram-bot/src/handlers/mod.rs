@@ -2,8 +2,10 @@
 
 mod logging_auth;
 mod memory_handler;
+mod noop_handler;
 mod persistence_handler;
 
 pub use logging_auth::{AuthHandler, LoggingHandler};
 pub use memory_handler::{MemoryConfig, MemoryHandler};
+pub use noop_handler::NoOpHandler;
 pub use persistence_handler::PersistenceHandler;

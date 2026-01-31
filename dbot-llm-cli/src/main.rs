@@ -1,9 +1,9 @@
-//! dbot-llm-cli: Full integration and entry point. Combines dbot-cli base + dbot-llm.
+//! dbot-llm-cli: Full integration and entry point. Combines telegram-bot CLI + dbot-llm.
 
 use anyhow::Result;
 use clap::Parser;
-use dbot_cli::{load_config, Cli, Commands};
 use dbot_llm::run_bot_with_llm;
+use telegram_bot::{load_config, Cli, Commands};
 
 #[tokio::main]
 async fn main() -> Result<()> {

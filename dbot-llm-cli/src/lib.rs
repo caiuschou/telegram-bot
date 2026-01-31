@@ -52,7 +52,7 @@ pub fn build_llm_handler(
     Ok(handler)
 }
 
-/// Runs the bot with LLM handler. Load config with `dbot_cli::load_config` before calling.
+/// Runs the bot with LLM handler. Load config with `telegram_bot::load_config` before calling.
 pub async fn run_bot_with_llm(config: BotConfig) -> Result<()> {
     run_bot(config, |config, components| {
         build_llm_handler(config, components).expect("Failed to build LLM handler")

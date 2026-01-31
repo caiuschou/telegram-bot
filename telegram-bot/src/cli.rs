@@ -1,8 +1,10 @@
 //! CLI parser and config loading.
+//! Integrated from dbot-cli.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use telegram_bot::BotConfig;
+
+use crate::config::BotConfig;
 
 #[derive(Parser)]
 #[command(name = "dbot")]

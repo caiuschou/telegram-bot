@@ -15,8 +15,7 @@ An intelligent Telegram chatbot written in Rust, featuring LLM conversations, RA
 
 ```
 telegram-bot/
-├── dbot-cli/           # CLI base (arg parsing, config loading)
-├── telegram-bot/       # Bot framework (core, handler chain, telegram adapter, handlers, config)
+├── telegram-bot/       # Bot framework (core, handler chain, telegram adapter, handlers, config, CLI)
 ├── dbot-llm-cli/       # CLI entry point + LLM integration (SyncLLMHandler, run_bot_with_llm)
 ├── llm-handlers/       # LLM handlers (@mention detection, sync processing)
 ├── storage/            # Message persistence storage (SQLite)

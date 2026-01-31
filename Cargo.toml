@@ -4,7 +4,6 @@ members = [
     "storage",
     "llm-handlers",
     "telegram-bot",
-    "dbot-cli",
     "dbot-llm-cli",
     "crates/llm/openai-client",
     "crates/llm/telegram-bot-llm",
