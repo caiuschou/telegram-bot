@@ -32,7 +32,6 @@ telegram-bot/
 │   ├── memory/
 │   │   ├── memory-core/        # Memory core types
 │   │   ├── memory-strategies/  # Context strategies (recent messages, semantic search, user preferences)
-│   │   ├── memory-inmemory/    # In-memory storage
 │   │   ├── memory-sqlite/      # SQLite storage
 │   │   └── memory-lance/       # LanceDB vector storage
 │   └── prompt/                 # Prompt templates

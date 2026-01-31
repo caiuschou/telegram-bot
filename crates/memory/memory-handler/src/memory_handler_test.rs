@@ -4,8 +4,7 @@
 
 use chrono::Utc;
 use telegram_bot::{Chat, Handler, HandlerResponse, Message, User};
-use memory::MemoryRole;
-use memory_inmemory::InMemoryVectorStore;
+use telegram_bot::memory::{InMemoryVectorStore, MemoryRole, MemoryStore};
 use std::sync::Arc;
 
 use crate::{MemoryConfig, MemoryHandler};
@@ -47,14 +46,14 @@ fn test_memory_config_default() {
 /// **Test: MemoryHandler::with_store(store) creates handler with save_user_messages true.**
 #[test]
 fn test_memory_handler_creation() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
     let handler = MemoryHandler::with_store(store);
     assert!(handler.config.save_user_messages);
 }
 
 #[test]
 fn test_message_to_memory_entry() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
     let handler = MemoryHandler::with_store(store);
     let message = create_test_message("Test message");
 
@@ -69,7 +68,7 @@ fn test_message_to_memory_entry() {
 /// **Test: before() saves incoming user message to store; search_by_user returns one entry with User role.**
 #[tokio::test]
 async fn test_memory_handler_saves_user_messages() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
     let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 
@@ -78,13 +77,13 @@ async fn test_memory_handler_saves_user_messages() {
     let entries = store.search_by_user("123").await.unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].content, "Hello");
-    assert_eq!(entries[0].metadata.role, memory::MemoryRole::User);
+    assert_eq!(entries[0].metadata.role, MemoryRole::User);
 }
 
 /// **Test: after() with HandlerResponse::Continue does not save any entry (no reply text).**
 #[tokio::test]
 async fn test_memory_handler_after_handler_response() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
     let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 
@@ -99,7 +98,7 @@ async fn test_memory_handler_after_handler_response() {
 
 #[tokio::test]
 async fn test_memory_handler_after_saves_reply_to_memory() {
-    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn memory::MemoryStore>;
+    let store = Arc::new(InMemoryVectorStore::new()) as Arc<dyn MemoryStore>;
     let handler = MemoryHandler::with_store(store.clone());
     let message = create_test_message("Hello");
 

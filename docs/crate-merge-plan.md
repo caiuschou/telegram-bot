@@ -85,7 +85,6 @@ dotenvy = "0.15"
 # 原 telegram-bot 应用层
 storage = { path = "../storage" }
 memory = { path = "../memory" }
-memory-inmemory = { path = "../crates/memory/memory-inmemory" }
 memory-sqlite = { path = "../crates/memory/memory-sqlite" }
 memory-lance = { path = "../crates/memory/memory-lance", optional = true }
 handlers = { path = "../handlers" }

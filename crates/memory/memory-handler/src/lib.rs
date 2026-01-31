@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use telegram_bot::{Handler, HandlerResponse, Message, Result};
 use embedding::EmbeddingService;
-use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
-use memory_inmemory::InMemoryVectorStore;
+use telegram_bot::memory::{InMemoryVectorStore, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use std::sync::Arc;
 use tracing::{error, info, instrument};
 
