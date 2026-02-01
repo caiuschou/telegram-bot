@@ -1,29 +1,22 @@
 //! Write and read messages in langgraph short-term memory (Checkpointer / SqliteSaver).
 //!
-//! **Write flow**: Load messages → build state → `Checkpoint::from_state` → `checkpointer.put`.
-//! **Verification**: After put, `get_messages_from_checkpointer` reads back the latest checkpoint for the thread.
+//! Uses `langgraph::ReActState` so the same checkpointer can be used by the ReAct graph.
+//! **Write flow**: Load messages → build `ReActState { messages, tool_calls: [], tool_results: [] }` → put.
+//! **Verification**: After put, `get_messages_from_checkpointer` reads back `.messages` from the latest checkpoint.
 
 use anyhow::Result;
 use langgraph::memory::{
     Checkpoint, CheckpointSource, Checkpointer, JsonSerializer, RunnableConfig, SqliteSaver,
 };
+use langgraph::ReActState;
 use std::path::Path;
 use std::sync::Arc;
 
-/// State type for short-term memory: only messages (no ReAct tool_calls/tool_results).
-///
-/// Used by `Checkpoint::from_state` and by `Checkpointer::put` / `get_tuple`; the checkpointer
-/// stores and returns this type in `Checkpoint::channel_values`.
-#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct MessagesState {
-    pub messages: Vec<langgraph::Message>,
-}
-
-/// Builds a shared `SqliteSaver` checkpointer for `MessagesState` at the given DB path.
-/// Used by `import_messages_into_checkpointer` and `get_messages_from_checkpointer`.
-fn make_checkpointer(db_path: impl AsRef<Path>) -> Result<Arc<dyn Checkpointer<MessagesState>>> {
+/// Builds a shared `SqliteSaver` checkpointer for `ReActState` at the given DB path.
+/// Used by `import_messages_into_checkpointer`, `get_messages_from_checkpointer`, and `get_react_state_from_checkpointer`.
+fn make_checkpointer(db_path: impl AsRef<Path>) -> Result<Arc<dyn Checkpointer<ReActState>>> {
     let serializer = Arc::new(JsonSerializer);
-    let checkpointer: Arc<dyn Checkpointer<MessagesState>> = Arc::new(
+    let checkpointer: Arc<dyn Checkpointer<ReActState>> = Arc::new(
         SqliteSaver::new(db_path.as_ref(), serializer)
             .map_err(|e| anyhow::anyhow!("SqliteSaver at {:?}: {}", db_path.as_ref(), e))?,
     );
@@ -42,12 +35,11 @@ fn make_config(thread_id: &str) -> RunnableConfig {
 }
 
 /// Creates a persistent checkpointer (SqliteSaver) and writes the given messages
-/// as the initial checkpoint for `thread_id`. Later runs with the same `thread_id`
-/// will see this conversation as short-term memory. Use `get_messages_from_checkpointer`
-/// to read back and verify after seeding.
+/// as the initial checkpoint for `thread_id`. Uses `ReActState { messages, tool_calls: [], tool_results: [] }`
+/// so the same DB can be used by the ReAct graph. Use `get_messages_from_checkpointer` to read back after seeding.
 ///
 /// **Write flow**:
-/// 1. Build `MessagesState { messages }`.
+/// 1. Build `ReActState { messages, tool_calls: [], tool_results: [] }`.
 /// 2. Build `Checkpoint::from_state(state, CheckpointSource::Input, 0)`.
 /// 3. `config = RunnableConfig { thread_id: Some(thread_id), .. }`.
 /// 4. `checkpointer.put(&config, &checkpoint).await`.
@@ -57,8 +49,10 @@ pub async fn import_messages_into_checkpointer(
     messages: &[langgraph::Message],
 ) -> Result<String> {
     let checkpointer = make_checkpointer(db_path)?;
-    let state = MessagesState {
+    let state = ReActState {
         messages: messages.to_vec(),
+        tool_calls: vec![],
+        tool_results: vec![],
     };
     let checkpoint = Checkpoint::from_state(state, CheckpointSource::Input, 0);
     let config = make_config(thread_id);
@@ -76,6 +70,16 @@ pub async fn get_messages_from_checkpointer(
     db_path: impl AsRef<Path>,
     thread_id: &str,
 ) -> Result<Vec<langgraph::Message>> {
+    let state = get_react_state_from_checkpointer(db_path, thread_id).await?;
+    Ok(state.messages)
+}
+
+/// Reads the latest checkpoint for `thread_id` and returns the full `ReActState`.
+/// Used by the ReAct chat flow to load persistent memory before invoke. Returns `Default::default()` if no checkpoint.
+pub async fn get_react_state_from_checkpointer(
+    db_path: impl AsRef<Path>,
+    thread_id: &str,
+) -> Result<ReActState> {
     let checkpointer = make_checkpointer(db_path)?;
     let config = make_config(thread_id);
     let tuple = checkpointer
@@ -83,7 +87,7 @@ pub async fn get_messages_from_checkpointer(
         .await
         .map_err(|e| anyhow::anyhow!("checkpoint get_tuple: {}", e))?;
     Ok(tuple
-        .map(|(cp, _)| cp.channel_values.messages)
+        .map(|(cp, _)| cp.channel_values)
         .unwrap_or_default())
 }
 
