@@ -21,6 +21,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set"),
         std::env::var("OPENAI_BASE_URL")
             .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
+    )
+    .with_system_prompt_opt(
+        std::env::var("LLM_SYSTEM_PROMPT")
+            .or_else(|_| std::env::var("SYSTEM_PROMPT"))
+            .ok()
+            .filter(|s| !s.trim().is_empty()),
     );
 
     let bot_username =

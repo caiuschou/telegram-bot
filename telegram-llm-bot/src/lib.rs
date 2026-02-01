@@ -6,10 +6,12 @@
 pub mod llm_handlers;
 
 use anyhow::{anyhow, Result};
+use std::env;
 use telegram_bot::TelegramBotAdapter;
 use llm_client::{EnvLlmConfig, LlmClient, LlmConfig, OpenAILlmClient};
 use crate::llm_handlers::SyncLLMHandler;
 use std::sync::Arc;
+use tracing::{info, warn};
 use telegram_bot::{
     run_bot_with_memory_stores, AppExtensions, BotComponents, BotConfig,
     memory::MemoryStore,
@@ -26,13 +28,32 @@ pub fn build_llm_handler(
         .memory_config()
         .ok_or_else(|| anyhow::anyhow!("Memory config required"))?;
 
+    let system_prompt = config
+        .extensions()
+        .llm_system_prompt()
+        .map(String::from)
+        .or_else(|| llm_cfg.system_prompt().map(String::from))
+        .or_else(|| {
+            env::var("LLM_SYSTEM_PROMPT")
+                .or_else(|_| env::var("SYSTEM_PROMPT"))
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        });
+
+    if let Some(ref s) = system_prompt {
+        let prefix: String = s.chars().take(50).collect();
+        info!(len = s.len(), prefix = %prefix, "Using custom SYSTEM_PROMPT from env");
+    } else {
+        warn!("No SYSTEM_PROMPT/LLM_SYSTEM_PROMPT in env; using default (plain text, no Markdown)");
+    }
+
     let llm_client: Arc<dyn LlmClient> = Arc::new(
         OpenAILlmClient::with_base_url(
             llm_cfg.api_key().to_string(),
             llm_cfg.base_url().to_string(),
         )
         .with_model(llm_cfg.model().to_string())
-        .with_system_prompt_opt(llm_cfg.system_prompt().map(String::from)),
+        .with_system_prompt_opt(system_prompt),
     );
 
     let bot_adapter: Arc<dyn telegram_bot::Bot> =

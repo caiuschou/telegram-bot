@@ -60,6 +60,7 @@ impl EnvLlmConfig {
         let llm_thinking_message = env::var("THINKING_MESSAGE")
             .unwrap_or_else(|_| "Thinking...".to_string());
         let llm_system_prompt = env::var("LLM_SYSTEM_PROMPT")
+            .or_else(|_| env::var("SYSTEM_PROMPT"))
             .ok()
             .filter(|s| !s.trim().is_empty());
         Ok(Self {
