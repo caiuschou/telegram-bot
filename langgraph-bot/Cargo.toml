@@ -1,0 +1,19 @@
+[package]
+name = "langgraph-bot"
+version = "0.1.0"
+edition = "2021"
+description = "Import messages into langgraph short-term memory (SqliteSaver checkpoint)"
+
+[[bin]]
+name = "langgraph-bot"
+path = "src/main.rs"
+
+[dependencies]
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite"] }
+seed-messages = { path = "../seed-messages" }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }

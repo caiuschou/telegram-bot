@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "langgraph-bot",
     "seed-messages",
     "telegram-bot",
     "telegram-llm-bot",
@@ -8,6 +9,7 @@ members = [
     "crates/llm/openai-client",
     "crates/llm/telegram-bot-llm",
     "crates/llm-client",
-    "crates/memory/memory-lance",
     "crates/prompt",
 ]
+# Lance optional: not built by default. To build: `cargo build -p telegram-llm-bot --features lance` or `cd crates/memory/memory-lance && cargo build`.
+exclude = ["crates/memory/memory-lance"]

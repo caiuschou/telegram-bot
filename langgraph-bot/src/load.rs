@@ -1,0 +1,62 @@
+//! Load messages using seed-messages and convert to langgraph `Message` list.
+//!
+//! Uses `seed_messages::SeedMessage` for parsing (same shape as messages.json).
+//! Convention: `direction == "received"` → User(content), `"sent"` → Assistant(content).
+
+use anyhow::Result;
+use langgraph::Message;
+use seed_messages::SeedMessage;
+
+/// Converts `Vec<SeedMessage>` to `Vec<Message>`.
+/// - `direction == "received"` → `Message::User(content)`
+/// - `direction == "sent"` → `Message::Assistant(content)`
+/// Other directions are skipped. Result is typically passed to `checkpoint::import_messages_into_checkpointer`.
+pub fn seed_messages_to_messages(seed: Vec<SeedMessage>) -> Vec<Message> {
+    seed_messages_to_messages_with_stats(seed).0
+}
+
+/// Converts `Vec<SeedMessage>` to `Vec<Message>` and returns the number of skipped messages.
+/// - `direction == "received"` → `Message::User(content)`
+/// - `direction == "sent"` → `Message::Assistant(content)`
+/// Other directions are skipped; their count is returned as the second element.
+pub fn seed_messages_to_messages_with_stats(seed: Vec<SeedMessage>) -> (Vec<Message>, usize) {
+    let mut skipped = 0;
+    let messages: Vec<Message> = seed
+        .into_iter()
+        .filter_map(|r| match r.direction.as_str() {
+            "received" => Some(Message::User(r.content)),
+            "sent" => Some(Message::Assistant(r.content)),
+            _ => {
+                skipped += 1;
+                None
+            }
+        })
+        .collect();
+    (messages, skipped)
+}
+
+/// Reads JSON array from path (e.g. messages.json) as `Vec<SeedMessage>` and converts to `Vec<Message>`.
+/// Delegates to `load_messages_from_path_with_stats`; use that if you need the skipped count.
+pub fn load_messages_from_path(path: impl AsRef<std::path::Path>) -> Result<Vec<Message>> {
+    load_messages_from_path_with_stats(path).map(|(m, _)| m)
+}
+
+/// Reads JSON array from path and converts to `Vec<Message>`, returning the number of skipped messages.
+pub fn load_messages_from_path_with_stats(
+    path: impl AsRef<std::path::Path>,
+) -> Result<(Vec<Message>, usize)> {
+    let bytes = std::fs::read(path)?;
+    load_messages_from_slice_with_stats(&bytes)
+}
+
+/// Parses JSON array from bytes as `Vec<SeedMessage>` and converts to `Vec<Message>`.
+/// Delegates to `load_messages_from_slice_with_stats`; use that if you need the skipped count.
+pub fn load_messages_from_slice(bytes: &[u8]) -> Result<Vec<Message>> {
+    load_messages_from_slice_with_stats(bytes).map(|(m, _)| m)
+}
+
+/// Parses JSON array from bytes and converts to `Vec<Message>`, returning the number of skipped messages.
+pub fn load_messages_from_slice_with_stats(bytes: &[u8]) -> Result<(Vec<Message>, usize)> {
+    let raw: Vec<SeedMessage> = serde_json::from_slice(bytes)?;
+    Ok(seed_messages_to_messages_with_stats(raw))
+}
