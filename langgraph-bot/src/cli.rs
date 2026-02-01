@@ -15,7 +15,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-/// Subcommands; `Seed` is the only variant and is handled in `main.rs` via load + checkpoint.
+/// Subcommands; `Seed` and `Chat` are handled in `main.rs`.
 #[derive(Subcommand)]
 pub enum Commands {
     /// Write messages into SqliteSaver checkpoint for a thread. Messages from seed-messages (default) or from a JSON file.
@@ -31,5 +31,16 @@ pub enum Commands {
         /// Thread ID for the conversation. If omitted, a new UUID is generated.
         #[arg(short, long)]
         thread_id: Option<String>,
+    },
+
+    /// Chat with persistent memory. Optional first message; then waits for input line by line. Exit with Ctrl+C.
+    Chat {
+        /// Optional first message. If omitted, only the interactive loop runs.
+        #[arg(value_name = "MESSAGE")]
+        message: Option<String>,
+
+        /// Path to Sqlite checkpoint database (same as seed).
+        #[arg(short, long, default_value = "checkpoint.db")]
+        db: std::path::PathBuf,
     },
 }
