@@ -1,33 +1,32 @@
-//! Lance + ContextBuilder 三策略串联集成测试
+//! Lance + ContextBuilder three-strategy integration test
 //!
-//! 使用真实 Lance 存储和智谱（Zhipu）词嵌入，验证 ContextBuilder 依次执行
-//! RecentMessagesStrategy、SemanticSearchStrategy、UserPreferencesStrategy 的完整链路：
-//! - 写入同一会话的带向量条目（猫/狗/汽车）及偏好表述（I like / I prefer）
-//! - 断言 recent_messages / semantic_messages 分别包含最近消息与语义命中（含「猫」）
-//! - 断言 user_preferences 非空且含偏好关键词
+//! Uses real Lance store and Zhipu embedding to verify ContextBuilder runs
+//! RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy in sequence:
+//! - Write same-session entries (cat/dog/car) and preference text (I like / I prefer)
+//! - Assert recent_messages / semantic_messages contain recent and semantic hits (including cat)
+//! - Assert user_preferences is non-empty with preference keywords
 //!
-//! 外部交互：
-//! - 临时目录创建 Lance 数据库
-//! - memory::ContextBuilder、RecentMessagesStrategy、SemanticSearchStrategy、UserPreferencesStrategy、MemoryStore、embedding::EmbeddingService
-//! - 智谱开放平台 API（需环境变量 BIGMODEL_API_KEY 或 ZHIPUAI_API_KEY，未设置时跳过测试）
+//! External: temp dir Lance DB; ContextBuilder, strategies, MemoryStore, EmbeddingService;
+//! Zhipu API (BIGMODEL_API_KEY or ZHIPUAI_API_KEY, skip if unset).
 
 use chrono::Utc;
 use std::sync::Arc;
 use tempfile::TempDir;
 use uuid::Uuid;
 
-use bigmodel_embedding::BigModelEmbedding;
-use embedding::EmbeddingService;
-use memory::{
-    ContextBuilder, MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore, RecentMessagesStrategy,
-    SemanticSearchStrategy, UserPreferencesStrategy,
+use telegram_bot::embedding::BigModelEmbedding;
+use telegram_bot::embedding::EmbeddingService;
+use telegram_bot::memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use telegram_bot::memory_strategies::{
+    RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy,
 };
+use telegram_bot::memory::ContextBuilder;
 use memory_lance::{LanceConfig, LanceVectorStore};
 
-/// 智谱 embedding-2 模型向量维度
+/// Zhipu embedding-2 model dimension
 const DIM: usize = 1024;
 
-/// 从环境变量获取智谱 API Key；未设置时返回 None，测试将跳过。
+/// Get Zhipu API key from env; None if unset (test will skip).
 fn zhipu_api_key() -> Option<String> {
     std::env::var("BIGMODEL_API_KEY")
         .ok()
@@ -35,18 +34,18 @@ fn zhipu_api_key() -> Option<String> {
         .or_else(|| std::env::var("ZHIPUAI_API_KEY").ok().filter(|s| !s.is_empty()))
 }
 
-/// 创建智谱词嵌入服务（embedding-2），无 API Key 时返回 None。
-fn make_zhipu_embedding() -> Option<Arc<BigModelEmbedding>> {
-    zhipu_api_key().map(|key| Arc::new(BigModelEmbedding::new(key, "embedding-2".to_string())))
+/// Create Zhipu embedding service (embedding-2); None if no API key.
+fn make_zhipu_embedding() -> Option<Arc<dyn EmbeddingService>> {
+    zhipu_api_key().map(|key| Arc::new(BigModelEmbedding::with_api_key(key)) as Arc<dyn EmbeddingService>)
 }
 
-/// 验证：Lance 存储 + ContextBuilder 串联三个策略（RecentMessages + SemanticSearch + UserPreferences）
+/// Verify: Lance store + ContextBuilder runs three strategies (RecentMessages + SemanticSearch + UserPreferences)
 ///
-/// 步骤：
-/// 1. 使用智谱 BigModelEmbedding 生成向量；无 API Key 时跳过
-/// 2. 创建临时 Lance 库并写入：同一会话的猫/狗/汽车条目（带向量）+ 一条偏好表述 "I like pizza and I prefer tea"
-/// 3. 使用 ContextBuilder 依次挂载 RecentMessagesStrategy、SemanticSearchStrategy、UserPreferencesStrategy
-/// 4. 调用 build()，断言：recent_messages / semantic_messages 分别包含最近消息与语义命中（含「猫」），user_preferences 非空且含偏好关键词
+/// Steps:
+/// 1. Use Zhipu BigModelEmbedding for vectors; skip if no API key
+/// 2. Create temp Lance DB and write: same-session cat/dog/car entries (with vectors) + preference "I like pizza and I prefer tea"
+/// 3. ContextBuilder with RecentMessagesStrategy, SemanticSearchStrategy, UserPreferencesStrategy
+/// 4. build(); assert recent_messages / semantic_messages contain recent and semantic hits (cat), user_preferences non-empty with keywords
 #[tokio::test]
 async fn test_lance_all_three_strategies_build_context() {
     let embedding = match make_zhipu_embedding() {
@@ -67,9 +66,9 @@ async fn test_lance_all_three_strategies_build_context() {
         .await
         .expect("create LanceVectorStore");
 
-    let content_cat = "关于猫的讨论：猫是可爱的宠物。";
-    let content_dog = "关于狗的讨论：狗很忠诚。";
-    let content_car = "关于汽车的讨论：电动汽车很环保。";
+    let content_cat = "Discussion about cats: cats are lovely pets.";
+    let content_dog = "Discussion about dogs: dogs are loyal.";
+    let content_car = "Discussion about cars: electric cars are eco-friendly.";
     let content_pref = "I like pizza and I prefer tea";
 
     let emb_cat = embedding.embed(content_cat).await.expect("embed cat");
@@ -131,7 +130,7 @@ async fn test_lance_all_three_strategies_build_context() {
         .with_strategy(Box::new(UserPreferencesStrategy::new()))
         .for_user("u1")
         .for_conversation("c1")
-        .with_query("用户问：猫吃什么？")
+        .with_query("User asks: what do cats eat?")
         .build()
         .await
         .expect("build context");
@@ -140,7 +139,7 @@ async fn test_lance_all_three_strategies_build_context() {
         !context.is_empty(),
         "context should contain recent and/or semantic messages"
     );
-    // RecentMessagesStrategy 应返回会话 c1 的 4 条最近消息
+    // RecentMessagesStrategy should return 4 recent messages for conversation c1
     assert!(
         context.recent_messages.len() >= 4,
         "recent_messages should contain at least 4 from RecentMessagesStrategy, got {}",
@@ -148,8 +147,8 @@ async fn test_lance_all_three_strategies_build_context() {
     );
     let recent_joined = context.recent_messages.join(" ");
     assert!(
-        recent_joined.contains("关于狗") || recent_joined.contains("狗很忠诚"),
-        "recent_messages should include message about 狗, got: {}",
+        recent_joined.contains("dogs") || recent_joined.contains("loyal"),
+        "recent_messages should include message about dogs, got: {}",
         recent_joined
     );
     assert!(
@@ -157,11 +156,11 @@ async fn test_lance_all_three_strategies_build_context() {
         "recent_messages should include preference (I like pizza / I prefer tea), got: {}",
         recent_joined
     );
-    // SemanticSearchStrategy 应对查询「猫」返回语义相关消息
+    // SemanticSearchStrategy should return semantic hit about cat for query
     let semantic_joined = context.semantic_messages.join(" ");
     assert!(
-        semantic_joined.contains("猫"),
-        "semantic_messages should include hit about 猫, got: {}",
+        semantic_joined.contains("cat") || semantic_joined.contains("cats"),
+        "semantic_messages should include hit about cat, got: {}",
         semantic_joined
     );
     assert!(

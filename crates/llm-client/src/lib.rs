@@ -2,6 +2,8 @@
 //!
 //! Defines the [`LlmClient`] trait and an OpenAI implementation. Transport-agnostic;
 //! used by llm-handlers and telegram-bot-llm.
+//!
+//! The stream method uses a boxed callback so that [`LlmClient`] is object-safe (dyn compatible).
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -10,9 +12,13 @@ use openai_client::{
     ChatCompletionRequestUserMessageArgs,
 };
 use prompt::{ChatMessage, MessageRole};
+use std::future::Future;
+use std::pin::Pin;
 
+mod config;
 mod openai_llm;
 
+pub use config::{EnvLlmConfig, LlmConfig};
 pub use openai_llm::OpenAILlmClient;
 
 /// A chunk of streamed LLM output; aligned with `openai_client::StreamChunk`.
@@ -22,6 +28,10 @@ pub struct StreamChunk {
     pub done: bool,
 }
 
+/// Type-erased callback for stream chunks so that [`LlmClient`] is dyn compatible.
+pub type StreamChunkCallback =
+    dyn FnMut(StreamChunk) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send;
+
 /// LLM client interface: request completion or streamed completion from a list of messages.
 #[async_trait]
 pub trait LlmClient: Send + Sync {
@@ -29,14 +39,12 @@ pub trait LlmClient: Send + Sync {
     async fn get_llm_response_with_messages(&self, messages: Vec<ChatMessage>) -> Result<String>;
 
     /// Streamed completion: invokes `callback` for each chunk and returns the full reply text.
-    async fn get_llm_response_stream_with_messages<F, Fut>(
+    /// Uses boxed callback for object safety (dyn LlmClient).
+    async fn get_llm_response_stream_with_messages(
         &self,
         messages: Vec<ChatMessage>,
-        callback: F,
-    ) -> Result<String>
-    where
-        F: FnMut(StreamChunk) -> Fut + Send,
-        Fut: std::future::Future<Output = Result<()>> + Send;
+        callback: &mut StreamChunkCallback,
+    ) -> Result<String>;
 }
 
 /// Converts a single [`ChatMessage`] into OpenAI API message format.

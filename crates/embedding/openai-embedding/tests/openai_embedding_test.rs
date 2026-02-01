@@ -12,6 +12,7 @@
 
 use std::path::Path;
 
+use embedding::EmbeddingService;
 use openai_embedding::OpenAIEmbedding;
 
 /// Loads `.env` from the workspace root so `OPENAI_API_KEY` is available in ignored tests.

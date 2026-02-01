@@ -5,7 +5,7 @@
 //! it extracts the question and calls the LLM, then sends the reply (or streamed chunks) back.
 
 use anyhow::Result;
-use llm_client::{LlmClient, OpenAILlmClient};
+use llm_client::{LlmClient, OpenAILlmClient, StreamChunk, StreamChunkCallback};
 use prompt::ChatMessage;
 use teloxide::{prelude::*, types::Message};
 use tracing::{error, info, instrument};
@@ -46,7 +46,7 @@ impl TelegramBotLLM {
                     info!(user_id = user_id, "Sent LLM response to user");
                 }
                 Err(e) => {
-                    let error_msg = format!("抱歉，处理您的请求时出错: {}", e);
+                    let error_msg = format!("Sorry, something went wrong processing your request: {}", e);
                     bot.send_message(msg.chat.id, error_msg).await?;
                     error!(user_id = user_id, error = %e, "LLM response error");
                 }
@@ -71,22 +71,23 @@ impl TelegramBotLLM {
             let chat_id = msg.chat.id;
 
             let bot_clone = bot.clone();
-            if let Err(e) = self
-                .get_llm_response_stream(&user_question, |chunk| {
-                    let bot = bot_clone.clone();
-                    async move {
-                        if !chunk.content.is_empty() {
-                            if let Err(e) = bot.send_message(chat_id, chunk.content).await {
-                                error!(error = %e, "Failed to send stream chunk");
-                                return Err(anyhow::anyhow!("Failed to send message: {}", e));
-                            }
+            let mut stream_callback: Box<StreamChunkCallback> = Box::new(move |chunk: StreamChunk| {
+                let bot = bot_clone.clone();
+                Box::pin(async move {
+                    if !chunk.content.is_empty() {
+                        if let Err(e) = bot.send_message(chat_id, chunk.content).await {
+                            error!(error = %e, "Failed to send stream chunk");
+                            return Err(anyhow::anyhow!("Failed to send message: {}", e));
                         }
-                        Ok(())
                     }
+                    Ok(())
                 })
+            });
+            if let Err(e) = self
+                .get_llm_response_stream(&user_question, stream_callback.as_mut())
                 .await
             {
-                let error_msg = format!("抱歉，处理您的请求时出错: {}", e);
+                let error_msg = format!("Sorry, something went wrong processing your request: {}", e);
                 bot.send_message(msg.chat.id, error_msg).await?;
                 error!(user_id = user_id, error = %e, "LLM stream response error");
             } else {
@@ -125,15 +126,11 @@ impl TelegramBotLLM {
 
     /// Streamed LLM reply for a single question; invokes callback for each chunk.
     #[instrument(skip(self, callback))]
-    pub async fn get_llm_response_stream<F, Fut>(
+    pub async fn get_llm_response_stream(
         &self,
         question: &str,
-        callback: F,
-    ) -> Result<String>
-    where
-        F: FnMut(llm_client::StreamChunk) -> Fut + Send,
-        Fut: std::future::Future<Output = Result<()>> + Send,
-    {
+        callback: &mut StreamChunkCallback,
+    ) -> Result<String> {
         self.llm_client
             .get_llm_response_stream_with_messages(vec![ChatMessage::user(question)], callback)
             .await
@@ -141,15 +138,11 @@ impl TelegramBotLLM {
 
     /// Streamed LLM reply for an arbitrary message list; invokes callback for each chunk.
     #[instrument(skip(self, messages, callback))]
-    pub async fn get_llm_response_stream_with_messages<F, Fut>(
+    pub async fn get_llm_response_stream_with_messages(
         &self,
         messages: Vec<ChatMessage>,
-        callback: F,
-    ) -> Result<String>
-    where
-        F: FnMut(llm_client::StreamChunk) -> Fut + Send,
-        Fut: std::future::Future<Output = Result<()>> + Send,
-    {
+        callback: &mut StreamChunkCallback,
+    ) -> Result<String> {
         self.llm_client
             .get_llm_response_stream_with_messages(messages, callback)
             .await

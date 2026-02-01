@@ -72,7 +72,7 @@ pub const SECTION_SEMANTIC: &str = "Relevant reference (semantic):";
 
 /// Builds context as a single string for AI models (no current question).
 ///
-/// Used when only the context block is needed (e.g. middleware returning context string).
+/// Used when only the context block is needed (e.g. handler returning context string).
 /// Order: optional System (if include_system), User Preferences, Conversation (recent), Relevant reference (semantic).
 ///
 /// # Arguments

@@ -14,10 +14,9 @@ arrow-array = { version = "56" }
 arrow-schema = { version = "56" }
 futures = "0.3"
 tracing = "0.1"
-memory = { path = "../../../memory" }
+telegram-bot = { path = "../../../telegram-bot", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
-embedding = { path = "../../embedding/embedding" }
-bigmodel-embedding = { path = "../../embedding/bigmodel-embedding" }
+telegram-bot = { path = "../../../telegram-bot" }
 async-trait = "0.1"

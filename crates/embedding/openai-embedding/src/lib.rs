@@ -157,7 +157,7 @@ impl EmbeddingService for OpenAIEmbedding {
             model = %self.model,
             text_preview = %text_preview,
             text_len = text.len(),
-            "step: 词向量 OpenAI embed 请求"
+            "step: embedding OpenAI embed request"
         );
 
         let request = CreateEmbeddingRequestArgs::default()
@@ -198,7 +198,7 @@ impl EmbeddingService for OpenAIEmbedding {
 
         info!(
             dimension = embedding.len(),
-            "step: 词向量 OpenAI embed 完成"
+            "step: embedding OpenAI embed done"
         );
         Ok(embedding)
     }
@@ -256,7 +256,7 @@ impl EmbeddingService for OpenAIEmbedding {
         info!(
             model = %self.model,
             batch_size = texts.len(),
-            "step: 词向量 OpenAI embed_batch 请求"
+            "step: embedding OpenAI embed_batch request"
         );
 
         // Timeout for batch request (longer than single embed due to larger payload).
@@ -315,7 +315,7 @@ impl EmbeddingService for OpenAIEmbedding {
         info!(
             count = embeddings.len(),
             dimension = dimension,
-            "step: 词向量 OpenAI embed_batch 完成"
+            "step: embedding OpenAI embed_batch done"
         );
         Ok(embeddings)
     }

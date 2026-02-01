@@ -197,7 +197,7 @@ impl EmbeddingService for BigModelEmbedding {
             model = %self.model,
             text_preview = %text_preview,
             text_len = text.len(),
-            "step: 词向量 BigModel embed 请求"
+            "step: embedding BigModel embed request"
         );
 
         let request = EmbeddingRequest {
@@ -229,7 +229,7 @@ impl EmbeddingService for BigModelEmbedding {
 
         info!(
             dimension = embedding.len(),
-            "step: 词向量 BigModel embed 完成"
+            "step: embedding BigModel embed done"
         );
         Ok(embedding)
     }
@@ -273,7 +273,7 @@ impl EmbeddingService for BigModelEmbedding {
         info!(
             model = %self.model,
             batch_size = texts.len(),
-            "step: 词向量 BigModel embed_batch 请求"
+            "step: embedding BigModel embed_batch request"
         );
 
         let inputs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
@@ -319,7 +319,7 @@ impl EmbeddingService for BigModelEmbedding {
         info!(
             count = embeddings.len(),
             dimension = dimension,
-            "step: 词向量 BigModel embed_batch 完成"
+            "step: embedding BigModel embed_batch done"
         );
         Ok(embeddings)
     }

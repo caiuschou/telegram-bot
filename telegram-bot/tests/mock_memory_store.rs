@@ -10,7 +10,7 @@ use std::sync::{
 };
 
 use async_trait::async_trait;
-use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use telegram_bot::memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use uuid::Uuid;
 
 /// In-memory MemoryStore for tests. Counters (store_call_count, query_call_count, semantic_search_call_count) for assertions.

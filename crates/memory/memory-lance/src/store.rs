@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use memory::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
+use telegram_bot::memory_core::{MemoryEntry, MemoryMetadata, MemoryRole, MemoryStore};
 use lancedb::query::{ExecutableQuery, QueryBase};
 use futures::TryStreamExt;
 use anyhow::{anyhow, Result};
@@ -344,18 +344,18 @@ impl LanceVectorStore {
         ])))
     }
 
-    /// 按时间倒序返回最近 `limit` 条记录（仅 Lance 使用，非 MemoryStore trait）。
+    /// Returns the most recent `limit` entries by time (Lance-only, not MemoryStore trait).
     ///
-    /// 全表扫描后在内存中按 `metadata.timestamp` 降序排序并取前 `limit` 条。
-    /// 与外部交互：仅读 LanceDB 表，不涉及网络。
+    /// Full table scan, then sort by `metadata.timestamp` descending in memory and take first `limit`.
+    /// External: reads LanceDB table only, no network.
     ///
-    /// # 参数
+    /// # Arguments
     ///
-    /// * `limit` - 返回的最大条数；0 则返回空 vec。
+    /// * `limit` - Max number of entries to return; 0 returns empty vec.
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// 按时间从新到旧排列的 `MemoryEntry` 列表。
+    /// List of `MemoryEntry` from newest to oldest.
     pub async fn list_recent(&self, limit: usize) -> Result<Vec<MemoryEntry>> {
         if limit == 0 {
             info!(limit = 0, "list_recent: limit is 0, returning empty");
@@ -400,6 +400,12 @@ impl LanceVectorStore {
         Ok(entries)
     }
 
+    /// Escapes a string for safe use in a Lance SQL predicate (e.g. only_if).
+    /// Single quotes are doubled so values cannot break the predicate.
+    fn escape_sql_string(s: &str) -> String {
+        s.replace('\'', "''")
+    }
+
     /// Converts Lance _distance to similarity score (higher = more similar).
     /// For Cosine distance: Lance typically returns 1 - cos_sim, so similarity = 1.0 - distance.
     /// If _distance column is missing, returns 1.0.
@@ -428,7 +434,7 @@ impl MemoryStore for LanceVectorStore {
             info!(
                 id = %entry.id,
                 dimension = entry.embedding.as_ref().map(|e| e.len()).unwrap_or(0),
-                "step: 词向量 Lance 写入向量"
+                "step: embedding Lance write vector"
             );
         }
         info!(
@@ -572,8 +578,10 @@ impl MemoryStore for LanceVectorStore {
             .await
             .map_err(|e| anyhow!("Failed to open table: {}", e))?;
 
+        let filter = format!("conversation_id = '{}'", Self::escape_sql_string(conversation_id));
         let results = table
             .query()
+            .only_if(filter)
             .execute()
             .await
             .map_err(|e| anyhow!("Failed to execute query: {}", e))?;
@@ -587,9 +595,7 @@ impl MemoryStore for LanceVectorStore {
         for batch in results {
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
-                if entry.metadata.conversation_id.as_deref() == Some(conversation_id) {
-                    entries.push(entry);
-                }
+                entries.push(entry);
             }
         }
         entries.sort_by(|a, b| a.metadata.timestamp.cmp(&b.metadata.timestamp));
@@ -614,7 +620,7 @@ impl MemoryStore for LanceVectorStore {
             limit = limit,
             user_id = ?user_id,
             conversation_id = ?conversation_id,
-            "step: 词向量 Lance 向量检索"
+            "step: embedding Lance semantic search"
         );
         info!(
             embedding_len = query_embedding.len(),
@@ -632,14 +638,16 @@ impl MemoryStore for LanceVectorStore {
                 anyhow!("Failed to open table: {}", e)
             })?;
 
-        // Fetch more candidates when filtering so we have enough after filter (configurable multiplier)
-        let fetch_limit = if user_id.is_some() || conversation_id.is_some() {
-            limit
-                .saturating_mul(self.config.semantic_fetch_multiplier as usize)
-                .max(50)
-        } else {
-            limit
-        };
+        // Push conversation_id and user_id to Lance so we only need limit (no over-fetch).
+        let mut predicate_parts = Vec::new();
+        if let Some(u) = user_id {
+            predicate_parts.push(format!("user_id = '{}'", Self::escape_sql_string(u)));
+        }
+        if let Some(c) = conversation_id {
+            predicate_parts.push(format!("conversation_id = '{}'", Self::escape_sql_string(c)));
+        }
+        let predicate = predicate_parts.join(" AND ");
+        let filter_pushed_down = !predicate.is_empty();
 
         let mut vector_query = table
             .query()
@@ -659,6 +667,9 @@ impl MemoryStore for LanceVectorStore {
                 )
             })?;
 
+        if filter_pushed_down {
+            vector_query = vector_query.only_if(predicate);
+        }
         if self.config.use_exact_search {
             vector_query = vector_query.bypass_vector_index();
         }
@@ -670,7 +681,7 @@ impl MemoryStore for LanceVectorStore {
         }
 
         let results = vector_query
-            .limit(fetch_limit)
+            .limit(limit)
             .execute()
             .await
             .map_err(|e| {
@@ -701,15 +712,22 @@ impl MemoryStore for LanceVectorStore {
             let distance_col_idx = batch.schema().index_of("_distance").ok();
             for row in 0..batch.num_rows() {
                 let entry = self.batch_to_entry(&batch, row)?;
-                let match_user = user_id
-                    .map(|u| entry.metadata.user_id.as_deref() == Some(u))
-                    .unwrap_or(true);
-                let match_conv = conversation_id
-                    .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
-                    .unwrap_or(true);
-                if match_user && match_conv {
-                    let score = Self::distance_to_similarity(&batch, distance_col_idx, row);
-                    scored_entries.push((score, entry));
+                if filter_pushed_down {
+                    scored_entries.push((
+                        Self::distance_to_similarity(&batch, distance_col_idx, row),
+                        entry,
+                    ));
+                } else {
+                    let match_user = user_id
+                        .map(|u| entry.metadata.user_id.as_deref() == Some(u))
+                        .unwrap_or(true);
+                    let match_conv = conversation_id
+                        .map(|c| entry.metadata.conversation_id.as_deref() == Some(c))
+                        .unwrap_or(true);
+                    if match_user && match_conv {
+                        let score = Self::distance_to_similarity(&batch, distance_col_idx, row);
+                        scored_entries.push((score, entry));
+                    }
                 }
             }
         }
@@ -718,7 +736,7 @@ impl MemoryStore for LanceVectorStore {
         info!(
             limit = limit,
             count = scored_entries.len(),
-            "step: 词向量 Lance 向量检索完成"
+            "step: embedding Lance semantic search done"
         );
         info!(
             limit = limit,

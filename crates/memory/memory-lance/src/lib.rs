@@ -13,7 +13,7 @@
 //!
 //! ```rust
 //! use memory_lance::LanceVectorStore;
-//! use memory::{MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole};
+//! use telegram_bot::memory_core::{MemoryStore, MemoryEntry, MemoryMetadata, MemoryRole};
 //! use chrono::Utc;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
