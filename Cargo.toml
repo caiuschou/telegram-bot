@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "seed-messages",
     "telegram-bot",
     "telegram-llm-bot",
     "telegram-simple-bot",
