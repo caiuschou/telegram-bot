@@ -15,8 +15,10 @@ pub use checkpoint::{
 pub use format::user_info_prefix;
 pub use load::{
     load_messages_from_path, load_messages_from_path_with_stats, load_messages_from_slice,
-    load_messages_from_slice_with_stats, seed_messages_to_messages,
-    seed_messages_to_messages_with_stats,
+    load_messages_from_slice_with_stats, load_messages_from_slice_with_user_info,
+    load_messages_from_slice_with_user_info_with_stats, seed_messages_to_messages,
+    seed_messages_to_messages_with_stats, seed_messages_to_messages_with_user_info,
+    seed_messages_to_messages_with_user_info_with_stats,
 };
 pub use react::{create_react_runner, print_runtime_info, ReactRunner};
 
