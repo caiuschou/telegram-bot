@@ -9,16 +9,16 @@ pub mod load;
 pub mod react;
 pub mod telegram_db;
 
-#[cfg(feature = "telegram")]
 pub mod telegram_handler;
+mod run;
 
+pub use run::run_telegram;
 pub use checkpoint::{
     format_thread_summary, get_messages_from_checkpointer, get_react_state_from_checkpointer,
     import_messages_into_checkpointer, list_thread_ids, merge_messages_into_checkpointer,
     verify_messages_format, verify_messages_integrity,
 };
 pub use format::user_info_prefix;
-pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 pub use load::{
     load_messages_from_path, load_messages_from_path_with_stats,
     load_messages_from_path_with_user_info, load_messages_from_path_with_user_info_with_stats,
@@ -28,8 +28,8 @@ pub use load::{
     seed_messages_to_messages_with_user_info, seed_messages_to_messages_with_user_info_with_stats,
 };
 pub use react::{create_react_runner, print_runtime_info, ReactRunner, UserProfile};
+pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 
-#[cfg(feature = "telegram")]
 pub use telegram_handler::AgentHandler;
 
 /// Runs one chat turn using the given runner (loads persistent state, appends user message, invokes ReAct, returns reply).
@@ -53,5 +53,7 @@ pub async fn run_chat_stream(
     on_chunk: impl FnMut(&str) + Send,
     user_profile: Option<&UserProfile>,
 ) -> anyhow::Result<String> {
-    runner.run_chat_stream(thread_id, content, on_chunk, user_profile).await
+    runner
+        .run_chat_stream(thread_id, content, on_chunk, user_profile)
+        .await
 }

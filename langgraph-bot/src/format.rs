@@ -13,8 +13,7 @@
 /// - A single space follows the closing `]` so the actual message content is separated.
 ///
 /// **Example**: `[User: Alice Smith / @alice] Hello` or `[User: - / -] Hi`.
-pub const USER_INFO_PREFIX_FORMAT: &str =
-    "[User: {display_name} / {username_part}] ";
+pub const USER_INFO_PREFIX_FORMAT: &str = "[User: {display_name} / {username_part}] ";
 
 /// Builds the user info prefix string for a single User message.
 ///
@@ -62,11 +61,7 @@ mod tests {
     /// **Test: All fields present yields display name and @username.**
     #[test]
     fn user_info_prefix_all_fields() {
-        let s = user_info_prefix(
-            Some("Alice"),
-            Some("Smith"),
-            Some("alice"),
-        );
+        let s = user_info_prefix(Some("Alice"), Some("Smith"), Some("alice"));
         assert_eq!(s, "[User: Alice Smith / @alice] ");
     }
 

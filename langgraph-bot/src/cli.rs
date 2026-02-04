@@ -8,7 +8,9 @@ use clap::{Parser, Subcommand};
 /// Root CLI: holds a single subcommand. Parsed by `main.rs` and matched to load/checkpoint calls.
 #[derive(Parser)]
 #[command(name = "langgraph-bot")]
-#[command(about = "Load or seed messages into langgraph short-term memory (SqliteSaver checkpoint)")]
+#[command(
+    about = "Load or seed messages into langgraph short-term memory (SqliteSaver checkpoint)"
+)]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -81,8 +83,7 @@ pub enum Commands {
         verbose: bool,
     },
 
-    /// Run Telegram bot with ReAct agent. Reply to the bot or @mention to trigger. Requires --features telegram.
-    #[cfg(feature = "telegram")]
+    /// Run Telegram bot with ReAct agent. Reply to the bot or @mention to trigger.
     Run {
         /// Bot token. If omitted, BOT_TOKEN from env is used.
         #[arg(short, long)]

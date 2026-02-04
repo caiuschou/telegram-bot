@@ -2,7 +2,7 @@
 //!
 //! Uses `run_chat_stream`, same-thread serialization (one request per thread at a time), and user-facing error messages.
 
-use crate::react::{run_chat_stream, UserProfile};
+use crate::{run_chat_stream, UserProfile};
 use crate::ReactRunner;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,7 +65,9 @@ impl AgentHandler {
     }
 
     fn extract_question(&self, text: &str, bot_username: &str) -> String {
-        text.replace(&format!("@{}", bot_username), "").trim().to_string()
+        text.replace(&format!("@{}", bot_username), "")
+            .trim()
+            .to_string()
     }
 
     /// Returns the user question if the message should trigger the agent (reply-to-bot or @mention); otherwise None.
@@ -122,7 +124,10 @@ impl Handler for AgentHandler {
             .entry(thread_id.clone())
             .or_insert_with(|| Arc::new(AtomicBool::new(false)))
             .clone();
-        if flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if flag
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
             let _ = self.bot.send_message(&message.chat, MSG_BUSY).await;
             return Ok(HandlerResponse::Stop);
         }
@@ -150,6 +155,7 @@ impl Handler for AgentHandler {
         let (tx, mut rx) = mpsc::unbounded_channel::<String>();
         let bot = self.bot.clone();
         let chat = message.chat.clone();
+        let message_id_edit = message_id.clone();
         let edit_interval_secs = self.edit_interval_secs;
         let last_edit = Arc::new(tokio::sync::Mutex::new(None::<Instant>));
 
@@ -158,7 +164,7 @@ impl Handler for AgentHandler {
             while let Some(chunk) = rx.recv().await {
                 content.push_str(&chunk);
                 if edit_interval_secs > 0 {
-                    let mut last = last_edit.lock().await;
+                    let last = last_edit.lock().await;
                     if let Some(prev) = *last {
                         let elapsed = prev.elapsed();
                         let interval = std::time::Duration::from_secs(edit_interval_secs);
@@ -168,7 +174,7 @@ impl Handler for AgentHandler {
                         }
                     }
                 }
-                if let Err(e) = bot.edit_message(&chat, &message_id, &content).await {
+                if let Err(e) = bot.edit_message(&chat, &message_id_edit, &content).await {
                     error!(error = %e, "Failed to edit message");
                 }
                 if edit_interval_secs > 0 {

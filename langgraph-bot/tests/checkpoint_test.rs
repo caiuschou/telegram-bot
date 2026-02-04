@@ -60,20 +60,14 @@ fn verify_integrity_empty_passes() {
 /// **Test: User and Assistant only pass format check.**
 #[test]
 fn verify_format_user_assistant_passes() {
-    let messages = vec![
-        Message::User("a".into()),
-        Message::Assistant("b".into()),
-    ];
+    let messages = vec![Message::User("a".into()), Message::Assistant("b".into())];
     assert!(verify_messages_format(&messages).is_ok());
 }
 
 /// **Test: System message fails format check.**
 #[test]
 fn verify_format_system_fails() {
-    let messages = vec![
-        Message::User("a".into()),
-        Message::System("sys".into()),
-    ];
+    let messages = vec![Message::User("a".into()), Message::System("sys".into())];
     let err = verify_messages_format(&messages).unwrap_err();
     assert!(err.to_string().contains("System"));
 }

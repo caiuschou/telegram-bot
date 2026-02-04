@@ -102,7 +102,8 @@ fn load_with_user_info_skips_unknown_direction_and_returns_count() {
         {"id":"2","user_id":2,"chat_id":1,"username":null,"first_name":null,"last_name":null,"message_type":"text","content":"B","direction":"unknown","created_at":"2025-02-01T10:00:01Z"},
         {"id":"3","user_id":1,"chat_id":1,"username":null,"first_name":null,"last_name":null,"message_type":"text","content":"C","direction":"sent","created_at":"2025-02-01T10:00:02Z"}
     ]"#;
-    let (messages, skipped) = load_messages_from_slice_with_user_info_with_stats(json.as_bytes()).unwrap();
+    let (messages, skipped) =
+        load_messages_from_slice_with_user_info_with_stats(json.as_bytes()).unwrap();
     assert_eq!(messages.len(), 2);
     assert_eq!(skipped, 1);
     assert!(matches!(&messages[0], Message::User(s) if s == "[User: - / -] A"));

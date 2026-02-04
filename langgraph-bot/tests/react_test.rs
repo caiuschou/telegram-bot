@@ -60,14 +60,14 @@ async fn run_chat_persists_state_across_turns() -> Result<()> {
 
     let (_dir, db_path) = temp_db_path();
     let runner = create_react_runner(&db_path).await?;
-    
+
     let reply1 = run_chat(&runner, "persist_thread", "My name is Alice", None).await?;
     assert!(!reply1.is_empty());
-    
+
     let reply2 = run_chat(&runner, "persist_thread", "What is my name?", None).await?;
     assert!(!reply2.is_empty());
     // Note: Full context verification requires checking checkpoint, not just reply content
-    
+
     Ok(())
 }
 
@@ -82,17 +82,17 @@ async fn run_chat_separates_threads() -> Result<()> {
 
     let (_dir, db_path) = temp_db_path();
     let runner = create_react_runner(&db_path).await?;
-    
+
     let _reply1 = run_chat(&runner, "thread_a", "I like cats", None).await?;
     let _reply2 = run_chat(&runner, "thread_b", "I like dogs", None).await?;
-    
+
     // Both threads should work independently
     let reply_a = run_chat(&runner, "thread_a", "What do I like?", None).await?;
     let reply_b = run_chat(&runner, "thread_b", "What do I like?", None).await?;
-    
+
     assert!(!reply_a.is_empty());
     assert!(!reply_b.is_empty());
-    
+
     Ok(())
 }
 
@@ -138,6 +138,9 @@ async fn run_chat_with_user_profile_injects_system_message() -> Result<()> {
             false
         }
     });
-    assert!(has_profile, "Checkpoint should contain User profile System message");
+    assert!(
+        has_profile,
+        "Checkpoint should contain User profile System message"
+    );
     Ok(())
 }

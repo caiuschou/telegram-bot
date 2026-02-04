@@ -5,10 +5,10 @@
 //! **Verification**: After put, `get_messages_from_checkpointer` reads back `.messages` from the latest checkpoint.
 
 use anyhow::Result;
-use langgraph::Message;
 use langgraph::memory::{
     Checkpoint, CheckpointSource, Checkpointer, JsonSerializer, RunnableConfig, SqliteSaver,
 };
+use langgraph::Message;
 use langgraph::ReActState;
 use rusqlite::Connection;
 use std::path::Path;
@@ -55,7 +55,6 @@ pub async fn import_messages_into_checkpointer(
         messages: messages.to_vec(),
         tool_calls: vec![],
         tool_results: vec![],
-        turn_count: 0,
     };
     let checkpoint = Checkpoint::from_state(state, CheckpointSource::Input, 0);
     let config = make_config(thread_id);
@@ -89,12 +88,10 @@ pub async fn get_react_state_from_checkpointer(
         .get_tuple(&config)
         .await
         .map_err(|e| anyhow::anyhow!("checkpoint get_tuple: {}", e))?;
-    Ok(tuple
-        .map(|(cp, _)| cp.channel_values)
-        .unwrap_or_default())
+    Ok(tuple.map(|(cp, _)| cp.channel_values).unwrap_or_default())
 }
 
-/// Merges `messages_to_prepend` into the existing checkpoint for `thread_id`: prepends messages that are not already present (by content), preserves turn_count and tool state.
+/// Merges `messages_to_prepend` into the existing checkpoint for `thread_id`: prepends messages that are not already present (by content), preserves tool state.
 ///
 /// **Use case**: Sync long-term history from DB into short-term (checkpoint) without dropping current conversation. Dedup is by message content (User/Assistant); System messages are not deduped.
 ///
@@ -110,9 +107,7 @@ pub async fn merge_messages_into_checkpointer(
         .get_tuple(&config)
         .await
         .map_err(|e| anyhow::anyhow!("checkpoint get_tuple: {}", e))?;
-    let mut state: ReActState = tuple
-        .map(|(cp, _)| cp.channel_values)
-        .unwrap_or_default();
+    let mut state: ReActState = tuple.map(|(cp, _)| cp.channel_values).unwrap_or_default();
 
     let existing_contents: std::collections::HashSet<String> = state
         .messages
@@ -121,9 +116,7 @@ pub async fn merge_messages_into_checkpointer(
         .collect();
     let to_prepend: Vec<langgraph::Message> = messages_to_prepend
         .iter()
-        .filter(|m| {
-            message_content(m).map_or(true, |c| !existing_contents.contains(&c))
-        })
+        .filter(|m| message_content(m).map_or(true, |c| !existing_contents.contains(&c)))
         .cloned()
         .collect();
     state.messages.splice(0..0, to_prepend);
@@ -161,12 +154,7 @@ pub fn verify_messages_integrity(
             (langgraph::Message::User(u1), langgraph::Message::User(u2)) if u1 == u2 => {}
             (langgraph::Message::Assistant(a1), langgraph::Message::Assistant(a2)) if a1 == a2 => {}
             _ => {
-                anyhow::bail!(
-                    "integrity: message[{}] mismatch: {:?} vs {:?}",
-                    i,
-                    a,
-                    b
-                );
+                anyhow::bail!("integrity: message[{}] mismatch: {:?} vs {:?}", i, a, b);
             }
         }
     }
@@ -203,13 +191,9 @@ fn message_preview(msg: &Message, max_len: usize) -> String {
     }
 }
 
-/// Builds a short summary of ReActState for one thread: message count, turn_count, first and last message previews.
+/// Builds a short summary of ReActState for one thread: message count, first and last message previews.
 /// Used by the Memory summary command. Interacts with `get_react_state_from_checkpointer` for state; this only formats.
-pub fn format_thread_summary(
-    thread_id: &str,
-    state: &ReActState,
-    preview_len: usize,
-) -> String {
+pub fn format_thread_summary(thread_id: &str, state: &ReActState, preview_len: usize) -> String {
     let n = state.messages.len();
     let first = state
         .messages
@@ -222,8 +206,8 @@ pub fn format_thread_summary(
         .map(|m| message_preview(m, preview_len))
         .unwrap_or_else(|| "—".to_string());
     format!(
-        "  thread_id: {}\n  messages: {}  turn_count: {}\n  first: {}\n  last:  {}",
-        thread_id, n, state.turn_count, first, last
+        "  thread_id: {}\n  messages: {}\n  first: {}\n  last:  {}",
+        thread_id, n, first, last
     )
 }
 
@@ -234,7 +218,10 @@ pub fn verify_messages_format(messages: &[langgraph::Message]) -> Result<()> {
         match msg {
             langgraph::Message::User(_) | langgraph::Message::Assistant(_) => {}
             langgraph::Message::System(_) => {
-                anyhow::bail!("format: message[{}] is System (expected only User/Assistant)", i);
+                anyhow::bail!(
+                    "format: message[{}] is System (expected only User/Assistant)",
+                    i
+                );
             }
         }
     }

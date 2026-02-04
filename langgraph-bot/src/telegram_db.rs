@@ -146,7 +146,8 @@ mod tests {
             "#,
         )
         .expect("create table");
-        let (messages, skipped) = load_all_messages_from_telegram_db(&db_path, None).expect("query");
+        let (messages, skipped) =
+            load_all_messages_from_telegram_db(&db_path, None).expect("query");
         assert!(messages.is_empty());
         assert_eq!(skipped, 0);
     }

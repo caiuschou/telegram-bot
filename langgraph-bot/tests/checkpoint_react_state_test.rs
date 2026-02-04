@@ -38,10 +38,10 @@ async fn get_react_state_returns_imported_messages() -> Result<()> {
         Message::User("Hello".into()),
         Message::Assistant("Hi there".into()),
     ];
-    
+
     import_messages_into_checkpointer(&db_path, "test_thread", &original).await?;
     let state = get_react_state_from_checkpointer(&db_path, "test_thread").await?;
-    
+
     verify_messages_integrity(&original, &state.messages)?;
     assert!(state.tool_calls.is_empty());
     assert!(state.tool_results.is_empty());
@@ -53,10 +53,10 @@ async fn get_react_state_returns_imported_messages() -> Result<()> {
 async fn get_react_state_empty_messages() -> Result<()> {
     let (_dir, db_path) = temp_db_path();
     let original: Vec<Message> = vec![];
-    
+
     import_messages_into_checkpointer(&db_path, "empty_thread", &original).await?;
     let state = get_react_state_from_checkpointer(&db_path, "empty_thread").await?;
-    
+
     assert!(state.messages.is_empty());
     assert!(state.tool_calls.is_empty());
     assert!(state.tool_results.is_empty());
@@ -73,10 +73,10 @@ async fn get_react_state_preserves_order() -> Result<()> {
         Message::User("Third".into()),
         Message::Assistant("Fourth".into()),
     ];
-    
+
     import_messages_into_checkpointer(&db_path, "order_thread", &original).await?;
     let state = get_react_state_from_checkpointer(&db_path, "order_thread").await?;
-    
+
     verify_messages_integrity(&original, &state.messages)?;
     Ok(())
 }
@@ -85,19 +85,19 @@ async fn get_react_state_preserves_order() -> Result<()> {
 #[tokio::test]
 async fn get_react_state_separates_threads() -> Result<()> {
     let (_dir, db_path) = temp_db_path();
-    
+
     let messages_a = vec![Message::User("Thread A".into())];
     let messages_b = vec![Message::User("Thread B".into())];
-    
+
     import_messages_into_checkpointer(&db_path, "thread_a", &messages_a).await?;
     import_messages_into_checkpointer(&db_path, "thread_b", &messages_b).await?;
-    
+
     let state_a = get_react_state_from_checkpointer(&db_path, "thread_a").await?;
     let state_b = get_react_state_from_checkpointer(&db_path, "thread_b").await?;
-    
+
     verify_messages_integrity(&messages_a, &state_a.messages)?;
     verify_messages_integrity(&messages_b, &state_b.messages)?;
-    
+
     Ok(())
 }
 
