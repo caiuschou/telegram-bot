@@ -53,6 +53,7 @@ pub async fn import_messages_into_checkpointer(
         messages: messages.to_vec(),
         tool_calls: vec![],
         tool_results: vec![],
+        turn_count: 0,
     };
     let checkpoint = Checkpoint::from_state(state, CheckpointSource::Input, 0);
     let config = make_config(thread_id);

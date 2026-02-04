@@ -42,5 +42,13 @@ pub enum Commands {
         /// Path to Sqlite checkpoint database (same as seed).
         #[arg(short, long, default_value = "checkpoint.db")]
         db: std::path::PathBuf,
+
+        /// Stream LLM output token-by-token.
+        #[arg(long, default_value = "true")]
+        stream: bool,
+
+        /// Enable debug logging (RUST_LOG=debug).
+        #[arg(short, long)]
+        verbose: bool,
     },
 }

@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use langgraph_bot::{
     create_react_runner, get_messages_from_checkpointer, import_messages_into_checkpointer,
-    load_messages_from_path_with_stats, run_chat, seed_messages_to_messages_with_stats,
+    load_messages_from_path_with_stats, run_chat, run_chat_stream, seed_messages_to_messages_with_stats,
     verify_messages_format, verify_messages_integrity,
 };
 use seed_messages::generate_messages;
@@ -29,16 +29,39 @@ fn print_help() {
 
 /// Interactive chat loop: optional first message, then read lines from stdin until EOF or /exit.
 /// Supports commands: /help, /exit, /quit. Ctrl+C also exits (SIGINT).
-async fn run_chat_loop(db: &std::path::Path, first_message: Option<String>) -> Result<()> {
+async fn run_chat_loop(
+    db: &std::path::Path,
+    first_message: Option<String>,
+    stream: bool,
+    verbose: bool,
+) -> Result<()> {
+    if verbose {
+        std::env::set_var("RUST_LOG", "debug");
+    }
     let runner = create_react_runner(db).await?;
-    
+
     println!("ReAct Chat (type /help for commands, /exit to quit)");
     println!();
-    
+
     if let Some(m) = first_message {
         println!("> {}", m);
-        match run_chat(&runner, DEFAULT_THREAD_ID, &m).await {
-            Ok(reply) => println!("{}", reply),
+        let result = if stream {
+            run_chat_stream(&runner, DEFAULT_THREAD_ID, &m, |chunk| {
+                print!("{}", chunk);
+                let _ = io::stdout().flush();
+            })
+            .await
+        } else {
+            run_chat(&runner, DEFAULT_THREAD_ID, &m).await
+        };
+        match result {
+            Ok(reply) => {
+                if stream {
+                    println!();
+                } else {
+                    println!("{}", reply);
+                }
+            }
             Err(e) => eprintln!("Error: {}", e),
         }
         println!();
@@ -71,8 +94,23 @@ async fn run_chat_loop(db: &std::path::Path, first_message: Option<String>) -> R
         }
         
         // Send message to ReAct agent with retry on error
-        match run_chat(&runner, DEFAULT_THREAD_ID, line).await {
-            Ok(reply) => println!("{}", reply),
+        let result = if stream {
+            run_chat_stream(&runner, DEFAULT_THREAD_ID, line, |chunk| {
+                print!("{}", chunk);
+                let _ = io::stdout().flush();
+            })
+            .await
+        } else {
+            run_chat(&runner, DEFAULT_THREAD_ID, line).await
+        };
+        match result {
+            Ok(reply) => {
+                if stream {
+                    println!();
+                } else {
+                    println!("{}", reply);
+                }
+            }
             Err(e) => {
                 eprintln!("Error: {}", e);
                 eprintln!("(You can continue chatting or type /exit to quit)");
@@ -88,7 +126,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Chat { message, db } => run_chat_loop(&db, message).await?,
+        Commands::Chat { message, db, stream, verbose } => run_chat_loop(&db, message, stream, verbose).await?,
         Commands::Seed {
             messages,
             db,

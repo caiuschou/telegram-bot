@@ -28,3 +28,13 @@ pub async fn run_chat(
 ) -> anyhow::Result<String> {
     runner.run_chat(thread_id, content).await
 }
+
+/// Runs one chat turn with streaming: `on_chunk` is called for each LLM token; returns final reply.
+pub async fn run_chat_stream(
+    runner: &ReactRunner,
+    thread_id: &str,
+    content: &str,
+    on_chunk: impl FnMut(&str) + Send,
+) -> anyhow::Result<String> {
+    runner.run_chat_stream(thread_id, content, on_chunk).await
+}

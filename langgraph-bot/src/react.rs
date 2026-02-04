@@ -5,13 +5,17 @@
 //! `create_react_runner`. See idea/langgraph-bot/react-chat-plan.md.
 
 use anyhow::Result;
+use async_openai::config::OpenAIConfig;
 use langgraph::memory::{Checkpointer, JsonSerializer, RunnableConfig, SqliteSaver};
 use langgraph::{
-    ActNode, ChatOpenAI, CompiledStateGraph, Message, MockToolSource, ObserveNode, ReActState,
-    StateGraph, ThinkNode, ToolSource, REACT_SYSTEM_PROMPT, END, START,
+    ActNode, ChatOpenAI, CompiledStateGraph, McpToolSource, Message, MockToolSource, ObserveNode,
+    ReActState, StateGraph, ThinkNode, ToolSource, REACT_SYSTEM_PROMPT, END, START,
 };
+use langgraph::stream::{StreamEvent, StreamMode};
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
+use tokio_stream::StreamExt;
 
 /// Runner that holds a checkpointer and compiled ReAct graph for chat. Created once per DB path.
 ///
@@ -31,26 +35,61 @@ fn make_config(thread_id: &str) -> RunnableConfig {
 }
 
 /// Builds the ReAct graph (think → act → observe) with the given checkpointer.
-/// Uses ChatOpenAI from env (OPENAI_MODEL, OPENAI_API_KEY) and MockToolSource::get_time_example().
+/// Uses ChatOpenAI from env (OPENAI_MODEL, OPENAI_API_KEY, OPENAI_BASE_URL or OPENAI_API_BASE) and MockToolSource::get_time_example().
 ///
 /// **Validation**: Checks OPENAI_API_KEY exists; OPENAI_MODEL defaults to gpt-4o-mini.
 async fn build_compiled_graph(
     checkpointer: Arc<dyn Checkpointer<ReActState>>,
 ) -> Result<CompiledStateGraph<ReActState>> {
     // Validate required environment variables
-    std::env::var("OPENAI_API_KEY")
+    let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENAI_API_KEY not set. Please set it in .env file or environment."))?;
-    
+
+    // OPENAI_BASE_URL is used by async-openai; OPENAI_API_BASE is fallback for compatibility
+    let api_base = std::env::var("OPENAI_BASE_URL")
+        .or_else(|_| std::env::var("OPENAI_API_BASE"))
+        .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
     let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-    let tool_source = MockToolSource::get_time_example();
+    let openai_config = OpenAIConfig::new()
+        .with_api_key(api_key)
+        .with_api_base(api_base);
+
+    // Prefer McpToolSource (Exa web search) when EXA_API_KEY is set; else MockToolSource (get_time).
+    let tool_source: Box<dyn ToolSource> = if let Ok(exa_key) = std::env::var("EXA_API_KEY") {
+        let exa_url =
+            std::env::var("MCP_EXA_URL").unwrap_or_else(|_| "https://mcp.exa.ai/mcp".to_string());
+        let cmd = std::env::var("MCP_REMOTE_CMD").unwrap_or_else(|_| "npx".to_string());
+        let args_str =
+            std::env::var("MCP_REMOTE_ARGS").unwrap_or_else(|_| "-y mcp-remote".to_string());
+        let mut args: Vec<String> = args_str.split_whitespace().map(String::from).collect();
+        if !args.iter().any(|a| a.contains("mcp.exa.ai") || a == &exa_url) {
+            args.push(exa_url);
+        }
+        match McpToolSource::new_with_env(
+            cmd,
+            args,
+            vec![("EXA_API_KEY".to_string(), exa_key)],
+            false,
+        ) {
+            Ok(mcp) => Box::new(mcp),
+            Err(e) => {
+                eprintln!("Warning: McpToolSource init failed ({}), using MockToolSource", e);
+                Box::new(MockToolSource::get_time_example())
+            }
+        }
+    } else {
+        Box::new(MockToolSource::get_time_example())
+    };
+
     let tools = tool_source
         .list_tools()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to list tools from MockToolSource: {}", e))?;
-    let llm = ChatOpenAI::new(model).with_tools(tools);
+        .map_err(|e| anyhow::anyhow!("Failed to list tools: {}", e))?;
+    let llm = ChatOpenAI::with_config(openai_config, model).with_tools(tools);
     let think = ThinkNode::new(Box::new(llm));
-    let act = ActNode::new(Box::new(tool_source));
-    let observe = ObserveNode::new();
+    let act = ActNode::new(tool_source);
+    let observe = ObserveNode::with_loop();
 
     let mut graph = StateGraph::<ReActState>::new();
     graph
@@ -141,6 +180,80 @@ impl ReactRunner {
                 } else {
                     None
                 }
+            })
+            .unwrap_or_default();
+        Ok(reply)
+    }
+
+    /// Runs one chat turn with streaming: prints LLM tokens as they arrive, returns final reply.
+    ///
+    /// Uses `compiled.stream()` with `StreamMode::Messages` and `StreamMode::Values`.
+    /// `on_chunk` is called for each MessageChunk (e.g. to print tokens); the last Values
+    /// state is used to extract the final Assistant reply.
+    pub async fn run_chat_stream(
+        &self,
+        thread_id: &str,
+        content: &str,
+        mut on_chunk: impl FnMut(&str) + Send,
+    ) -> Result<String> {
+        let config = make_config(thread_id);
+        let tuple = self
+            .checkpointer
+            .get_tuple(&config)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to get checkpoint for thread '{}': {}",
+                    thread_id,
+                    e
+                )
+            })?;
+        let mut state: ReActState = tuple
+            .map(|(cp, _)| cp.channel_values)
+            .unwrap_or_default();
+
+        state.messages.push(Message::User(content.to_string()));
+        let has_system = state
+            .messages
+            .first()
+            .map(|m| matches!(m, Message::System(_)))
+            .unwrap_or(false);
+        if !has_system {
+            state
+                .messages
+                .insert(0, Message::system(REACT_SYSTEM_PROMPT));
+        }
+
+        let modes: HashSet<StreamMode> =
+            HashSet::from_iter([StreamMode::Messages, StreamMode::Values]);
+        let mut stream = self.compiled.stream(state, Some(config.clone()), modes);
+
+        let mut last_state: Option<ReActState> = None;
+        while let Some(event) = stream.next().await {
+            match event {
+                StreamEvent::Messages { chunk, .. } => {
+                    on_chunk(&chunk.content);
+                }
+                StreamEvent::Values(s) => {
+                    last_state = Some(s);
+                }
+                _ => {}
+            }
+        }
+
+        let reply = last_state
+            .as_ref()
+            .and_then(|s| {
+                s.messages
+                    .iter()
+                    .rev()
+                    .find_map(|m| {
+                        if let Message::Assistant(text) = m {
+                            Some(text.clone())
+                        } else {
+                            None
+                        }
+                    })
             })
             .unwrap_or_default();
         Ok(reply)
