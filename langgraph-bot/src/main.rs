@@ -17,12 +17,40 @@ use langgraph_bot::{
 use seed_messages::generate_messages;
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
+
+#[cfg(feature = "telegram")]
+use langgraph_bot::AgentHandler;
+#[cfg(feature = "telegram")]
+use telegram_bot::{create_memory_stores, load_config, run_bot_with_memory_stores, TelegramBotAdapter};
 
 mod cli;
 
 use cli::{Cli, Commands};
 
 const DEFAULT_THREAD_ID: &str = "default";
+
+/// Runs the Telegram bot with ReAct agent. Loads config (BOT_TOKEN etc.), creates runner and memory stores, then runs the REPL.
+#[cfg(feature = "telegram")]
+async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result<()> {
+    let config = load_config(token)?;
+    let runner = create_react_runner(db).await?;
+    let runner = Arc::new(runner);
+    let (memory_store, recent_store) = create_memory_stores(&config).await?;
+    run_bot_with_memory_stores(config, memory_store, recent_store, move |_config, components| {
+        let bot: Arc<dyn telegram_bot::Bot> =
+            Arc::new(TelegramBotAdapter::new(components.teloxide_bot.clone()));
+        Arc::new(AgentHandler::new(
+            runner.clone(),
+            bot,
+            components.bot_username.clone(),
+            "正在思考…".to_string(),
+            components.base().telegram_edit_interval_secs,
+        ))
+    })
+    .await?;
+    Ok(())
+}
 
 /// Prints help message for interactive chat commands.
 fn print_help() {
@@ -200,6 +228,40 @@ async fn print_memory_summary(
     Ok(())
 }
 
+/// Load subcommand: resolve message source, import into checkpointer, print preview.
+async fn cmd_load(
+    messages_path: Option<PathBuf>,
+    db: &std::path::Path,
+    thread_id: Option<String>,
+) -> Result<()> {
+    let (messages, skipped, resolved_thread_id) =
+        resolve_messages_source(messages_path, thread_id.as_deref())?;
+    if skipped > 0 {
+        eprintln!("Warning: {} messages skipped (direction not received/sent)", skipped);
+    }
+    let thread_id = resolved_thread_id
+        .or(thread_id)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let id = import_messages_into_checkpointer(db, &thread_id, &messages).await?;
+    println!("Loaded thread {} with checkpoint id: {}", thread_id, id);
+    print_import_preview(db, &thread_id, &messages).await?;
+    Ok(())
+}
+
+/// Seed subcommand: generate messages, import into checkpointer, print preview.
+async fn cmd_seed(db: &std::path::Path, thread_id: Option<String>) -> Result<()> {
+    let (messages, skipped) =
+        seed_messages_to_messages_with_user_info_with_stats(generate_messages()?);
+    if skipped > 0 {
+        eprintln!("Warning: {} messages skipped (direction not received/sent)", skipped);
+    }
+    let thread_id = thread_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let id = import_messages_into_checkpointer(db, &thread_id, &messages).await?;
+    println!("Seeded thread {} with checkpoint id: {}", thread_id, id);
+    print_import_preview(db, &thread_id, &messages).await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
@@ -209,30 +271,10 @@ async fn main() -> Result<()> {
         Commands::Info { db } => print_runtime_info(&db).await?,
         Commands::Memory { db, thread_id } => print_memory_summary(&db, thread_id.as_deref()).await?,
         Commands::Chat { message, db, stream, verbose } => run_chat_loop(&db, message, stream, verbose).await?,
-        Commands::Load { messages, db, thread_id } => {
-            let (messages, skipped, resolved_thread_id) =
-                resolve_messages_source(messages, thread_id.as_deref())?;
-            if skipped > 0 {
-                eprintln!("Warning: {} messages skipped (direction not received/sent)", skipped);
-            }
-            let thread_id = resolved_thread_id
-                .or(thread_id)
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let id = import_messages_into_checkpointer(&db, &thread_id, &messages).await?;
-            println!("Loaded thread {} with checkpoint id: {}", thread_id, id);
-            print_import_preview(&db, &thread_id, &messages).await?;
-        }
-        Commands::Seed { db, thread_id } => {
-            let (messages, skipped) =
-                seed_messages_to_messages_with_user_info_with_stats(generate_messages()?);
-            if skipped > 0 {
-                eprintln!("Warning: {} messages skipped (direction not received/sent)", skipped);
-            }
-            let thread_id = thread_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-            let id = import_messages_into_checkpointer(&db, &thread_id, &messages).await?;
-            println!("Seeded thread {} with checkpoint id: {}", thread_id, id);
-            print_import_preview(&db, &thread_id, &messages).await?;
-        }
+        #[cfg(feature = "telegram")]
+        Commands::Run { token, db } => run_telegram(&db, token).await?,
+        Commands::Load { messages, db, thread_id } => cmd_load(messages, &db, thread_id).await?,
+        Commands::Seed { db, thread_id } => cmd_seed(&db, thread_id).await?,
     }
 
     Ok(())

@@ -110,11 +110,14 @@ fn make_tool_source() -> Box<dyn ToolSource> {
         if !args.iter().any(|a| a.contains("mcp.exa.ai") || a == &exa_url) {
             args.push(exa_url);
         }
+        // Default: use HTTP to connect to MCP_EXA_URL; set MCP_EXA_USE_HTTP=0 to use stdio (npx mcp-remote).
+        let use_http = std::env::var("MCP_EXA_USE_HTTP").unwrap_or_else(|_| "1".into());
+        let use_http = !matches!(use_http.as_str(), "0" | "false" | "no");
         match McpToolSource::new_with_env(
             cmd,
             args,
             vec![("EXA_API_KEY".to_string(), exa_key)],
-            false,
+            use_http,
         ) {
             Ok(mcp) => Box::new(mcp),
             Err(e) => {

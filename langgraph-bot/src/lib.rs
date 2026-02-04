@@ -9,6 +9,9 @@ pub mod load;
 pub mod react;
 pub mod telegram_db;
 
+#[cfg(feature = "telegram")]
+pub mod telegram_handler;
+
 pub use checkpoint::{
     format_thread_summary, get_messages_from_checkpointer, get_react_state_from_checkpointer,
     import_messages_into_checkpointer, list_thread_ids, merge_messages_into_checkpointer,
@@ -25,6 +28,9 @@ pub use load::{
     seed_messages_to_messages_with_user_info, seed_messages_to_messages_with_user_info_with_stats,
 };
 pub use react::{create_react_runner, print_runtime_info, ReactRunner, UserProfile};
+
+#[cfg(feature = "telegram")]
+pub use telegram_handler::AgentHandler;
 
 /// Runs one chat turn using the given runner (loads persistent state, appends user message, invokes ReAct, returns reply).
 ///

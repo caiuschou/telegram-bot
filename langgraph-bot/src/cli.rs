@@ -15,7 +15,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-/// Subcommands; `Load`, `Seed`, `Chat`, `Info`, and `Memory` are handled in `main.rs`.
+/// Subcommands; `Load`, `Seed`, `Chat`, `Info`, `Memory`, and (with feature) `Run` are handled in `main.rs`.
 #[derive(Subcommand)]
 pub enum Commands {
     /// Print short-term memory (checkpoint) summary: threads and message counts. Optionally limit to one thread.
@@ -79,5 +79,17 @@ pub enum Commands {
         /// Enable debug logging (RUST_LOG=debug).
         #[arg(short, long)]
         verbose: bool,
+    },
+
+    /// Run Telegram bot with ReAct agent. Reply to the bot or @mention to trigger. Requires --features telegram.
+    #[cfg(feature = "telegram")]
+    Run {
+        /// Bot token. If omitted, BOT_TOKEN from env is used.
+        #[arg(short, long)]
+        token: Option<String>,
+
+        /// Path to Sqlite checkpoint database (same as chat).
+        #[arg(short, long, default_value = "checkpoint.db")]
+        db: std::path::PathBuf,
     },
 }

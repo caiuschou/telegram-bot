@@ -8,6 +8,10 @@ description = "Import messages into langgraph short-term memory (SqliteSaver che
 name = "langgraph-bot"
 path = "src/main.rs"
 
+[features]
+default = []
+telegram = ["dep:telegram-bot", "dep:dashmap"]
+
 [dependencies]
 async-openai = { version = "0.32", features = ["chat-completion"] }
 langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite", "openai", "mcp"] }
@@ -21,6 +25,8 @@ serde = { version = "1", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 dotenvy = "0.15"
 rusqlite = { version = "0.31", features = ["bundled"] }
+telegram-bot = { path = "../telegram-bot", optional = true }
+dashmap = { version = "5", optional = true }
 
 [dev-dependencies]
 langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite", "openai", "mcp"] }
