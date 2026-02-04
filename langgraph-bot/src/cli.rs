@@ -36,9 +36,9 @@ pub enum Commands {
         db: std::path::PathBuf,
     },
 
-    /// Load messages from a JSON file into the checkpoint for a thread. Default path from LANGGRAPH_MESSAGES_PATH in .env.
+    /// Load messages into the checkpoint for a thread. Without -m: use TELEGRAM_MESSAGES_DB (Telegram SQLite) if set (then -t is chat_id), else LANGGRAPH_MESSAGES_PATH (JSON).
     Load {
-        /// Path to messages JSON (same shape as seed-messages). Default: LANGGRAPH_MESSAGES_PATH from .env.
+        /// Path to messages JSON. If omitted: TELEGRAM_MESSAGES_DB or LANGGRAPH_MESSAGES_PATH from .env.
         #[arg(short, long)]
         messages: Option<std::path::PathBuf>,
 

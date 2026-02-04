@@ -3,6 +3,9 @@
 //! Builds a `StateGraph<ReActState>` with ThinkNode(ChatOpenAI), ActNode(MockToolSource),
 //! ObserveNode; compiles with SqliteSaver so each invoke persists. Used by `run_chat` and
 //! `create_react_runner`. See idea/langgraph-bot/react-chat-plan.md.
+//!
+//! **Long-term memory (user profile)**: Optional `UserProfile` can be passed into `run_chat` / `run_chat_stream`;
+//! when set, a System message is injected after the ReAct system prompt so the model sees the current user's profile.
 
 use anyhow::Result;
 use async_openai::config::OpenAIConfig;
@@ -16,6 +19,66 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tokio_stream::StreamExt;
+
+/// User profile for long-term identity: injected as a System message before each turn when provided.
+///
+/// **Interaction**: Caller (e.g. telegram-langgraph integration) fetches from MessageRepository or user table
+/// and passes to `run_chat` / `run_chat_stream`. When `None`, no profile is injected.
+#[derive(Debug, Clone)]
+pub struct UserProfile {
+    pub user_id: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub username: Option<String>,
+}
+
+impl UserProfile {
+    /// Formats as the System message string used in checkpoint (same convention as memory-migration 3.3).
+    pub fn to_system_content(&self) -> String {
+        let name = [
+            self.first_name.as_deref().unwrap_or("").trim(),
+            self.last_name.as_deref().unwrap_or("").trim(),
+        ]
+        .join(" ")
+        .trim()
+        .to_string();
+        let name_display = if name.is_empty() { "-".to_string() } else { name };
+        let username_display = self
+            .username
+            .as_deref()
+            .map(|u| format!("@{}", u.trim()))
+            .unwrap_or_else(|| "-".to_string());
+        format!(
+            "User profile: {} ({}), user_id: {}",
+            name_display, username_display, self.user_id
+        )
+    }
+}
+
+/// Returns true if `messages` already contains a System message whose content starts with "User profile:".
+fn state_has_user_profile_system(messages: &[Message]) -> bool {
+    messages.iter().any(|m| {
+        if let Message::System(s) = m {
+            s.starts_with("User profile:")
+        } else {
+            false
+        }
+    })
+}
+
+/// Inserts a System message built from `profile` after the first System message (ReAct prompt), or at index 0 if none.
+fn inject_user_profile_into_state(state: &mut ReActState, profile: &UserProfile) {
+    let content = profile.to_system_content();
+    let insert_at = state
+        .messages
+        .iter()
+        .position(|m| matches!(m, Message::System(_)))
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    state
+        .messages
+        .insert(insert_at, Message::System(content));
+}
 
 /// Runner that holds a checkpointer and compiled ReAct graph for chat. Created once per DB path.
 ///
@@ -174,10 +237,18 @@ pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
 
 impl ReactRunner {
     /// Runs one chat turn: load persistent state for `thread_id`, append user message,
-    /// ensure system prompt, invoke ReAct graph, persist, return last assistant reply.
+    /// ensure system prompt, optionally inject user profile (long-term memory), invoke ReAct graph, persist, return last assistant reply.
+    ///
+    /// **User profile**: When `user_profile` is `Some`, a System message is inserted after the ReAct system prompt
+    /// (unless one already exists) so the model sees the current user's identity. Caller typically fetches from DB.
     ///
     /// **Error context**: Includes thread_id and message length in error messages.
-    pub async fn run_chat(&self, thread_id: &str, content: &str) -> Result<String> {
+    pub async fn run_chat(
+        &self,
+        thread_id: &str,
+        content: &str,
+        user_profile: Option<&UserProfile>,
+    ) -> Result<String> {
         let config = make_config(thread_id);
         let tuple = self
             .checkpointer
@@ -204,6 +275,11 @@ impl ReactRunner {
             state
                 .messages
                 .insert(0, Message::system(REACT_SYSTEM_PROMPT));
+        }
+        if let Some(profile) = user_profile {
+            if !state_has_user_profile_system(&state.messages) {
+                inject_user_profile_into_state(&mut state, profile);
+            }
         }
 
         let result = self
@@ -239,11 +315,13 @@ impl ReactRunner {
     /// Uses `compiled.stream()` with `StreamMode::Messages` and `StreamMode::Values`.
     /// `on_chunk` is called for each MessageChunk (e.g. to print tokens); the last Values
     /// state is used to extract the final Assistant reply.
+    /// When `user_profile` is `Some`, injects a User profile System message (same as `run_chat`).
     pub async fn run_chat_stream(
         &self,
         thread_id: &str,
         content: &str,
         mut on_chunk: impl FnMut(&str) + Send,
+        user_profile: Option<&UserProfile>,
     ) -> Result<String> {
         let config = make_config(thread_id);
         let tuple = self
@@ -271,6 +349,11 @@ impl ReactRunner {
             state
                 .messages
                 .insert(0, Message::system(REACT_SYSTEM_PROMPT));
+        }
+        if let Some(profile) = user_profile {
+            if !state_has_user_profile_system(&state.messages) {
+                inject_user_profile_into_state(&mut state, profile);
+            }
         }
 
         let modes: HashSet<StreamMode> =

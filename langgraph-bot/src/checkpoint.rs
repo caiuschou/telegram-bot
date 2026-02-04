@@ -94,6 +94,54 @@ pub async fn get_react_state_from_checkpointer(
         .unwrap_or_default())
 }
 
+/// Merges `messages_to_prepend` into the existing checkpoint for `thread_id`: prepends messages that are not already present (by content), preserves turn_count and tool state.
+///
+/// **Use case**: Sync long-term history from DB into short-term (checkpoint) without dropping current conversation. Dedup is by message content (User/Assistant); System messages are not deduped.
+///
+/// **Interaction**: Calls `get_react_state_from_checkpointer`, then prepends new messages, then `checkpointer.put` with the merged state.
+pub async fn merge_messages_into_checkpointer(
+    db_path: impl AsRef<Path>,
+    thread_id: &str,
+    messages_to_prepend: &[langgraph::Message],
+) -> Result<String> {
+    let checkpointer = make_checkpointer(db_path)?;
+    let config = make_config(thread_id);
+    let tuple = checkpointer
+        .get_tuple(&config)
+        .await
+        .map_err(|e| anyhow::anyhow!("checkpoint get_tuple: {}", e))?;
+    let mut state: ReActState = tuple
+        .map(|(cp, _)| cp.channel_values)
+        .unwrap_or_default();
+
+    let existing_contents: std::collections::HashSet<String> = state
+        .messages
+        .iter()
+        .filter_map(|m| message_content(m))
+        .collect();
+    let to_prepend: Vec<langgraph::Message> = messages_to_prepend
+        .iter()
+        .filter(|m| {
+            message_content(m).map_or(true, |c| !existing_contents.contains(&c))
+        })
+        .cloned()
+        .collect();
+    state.messages.splice(0..0, to_prepend);
+
+    let checkpoint = Checkpoint::from_state(state, CheckpointSource::Input, 0);
+    let id = checkpointer
+        .put(&config, &checkpoint)
+        .await
+        .map_err(|e| anyhow::anyhow!("checkpoint put: {}", e))?;
+    Ok(id)
+}
+
+fn message_content(m: &langgraph::Message) -> Option<String> {
+    match m {
+        Message::User(s) | Message::Assistant(s) | Message::System(s) => Some(s.clone()),
+    }
+}
+
 /// Checks that read-back messages match original: same length, same variant (User/Assistant/System), same content per index.
 /// Use after get_messages_from_checkpointer to verify integrity.
 pub fn verify_messages_integrity(

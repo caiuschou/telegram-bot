@@ -23,4 +23,5 @@ dotenvy = "0.15"
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 [dev-dependencies]
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite", "openai", "mcp"] }
 tempfile = "3"
