@@ -4,6 +4,7 @@
 //! **Chat flow**: `react::create_react_runner(db_path)` → `run_chat(&runner, thread_id, content)` loads persistent state, runs Think→Act→Observe, persists, returns reply.
 
 pub mod checkpoint;
+pub mod format;
 pub mod load;
 pub mod react;
 
@@ -11,6 +12,7 @@ pub use checkpoint::{
     get_messages_from_checkpointer, get_react_state_from_checkpointer,
     import_messages_into_checkpointer, verify_messages_format, verify_messages_integrity,
 };
+pub use format::user_info_prefix;
 pub use load::{
     load_messages_from_path, load_messages_from_path_with_stats, load_messages_from_slice,
     load_messages_from_slice_with_stats, seed_messages_to_messages,
