@@ -15,9 +15,16 @@ pub struct Cli {
     pub command: Commands,
 }
 
-/// Subcommands; `Seed` and `Chat` are handled in `main.rs`.
+/// Subcommands; `Seed`, `Chat`, and `Info` are handled in `main.rs`.
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Print loaded tools, LLM interface, embeddings, and memory info.
+    Info {
+        /// Path to Sqlite checkpoint database (same as seed/chat).
+        #[arg(short, long, default_value = "checkpoint.db")]
+        db: std::path::PathBuf,
+    },
+
     /// Write messages into SqliteSaver checkpoint for a thread. Messages from seed-messages (default) or from a JSON file.
     Seed {
         /// Path to messages JSON (same shape as seed-messages). If omitted, uses seed-messages::generate_messages().

@@ -6,8 +6,8 @@ use anyhow::Result;
 use clap::Parser;
 use langgraph_bot::{
     create_react_runner, get_messages_from_checkpointer, import_messages_into_checkpointer,
-    load_messages_from_path_with_stats, run_chat, run_chat_stream, seed_messages_to_messages_with_stats,
-    verify_messages_format, verify_messages_integrity,
+    load_messages_from_path_with_stats, print_runtime_info, run_chat, run_chat_stream,
+    seed_messages_to_messages_with_stats, verify_messages_format, verify_messages_integrity,
 };
 use seed_messages::generate_messages;
 use std::io::{self, Write};
@@ -126,6 +126,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Info { db } => print_runtime_info(&db).await?,
         Commands::Chat { message, db, stream, verbose } => run_chat_loop(&db, message, stream, verbose).await?,
         Commands::Seed {
             messages,

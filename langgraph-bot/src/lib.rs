@@ -16,7 +16,7 @@ pub use load::{
     load_messages_from_slice_with_stats, seed_messages_to_messages,
     seed_messages_to_messages_with_stats,
 };
-pub use react::{create_react_runner, ReactRunner};
+pub use react::{create_react_runner, print_runtime_info, ReactRunner};
 
 /// Runs one chat turn using the given runner (loads persistent state, appends user message, invokes ReAct, returns reply).
 ///

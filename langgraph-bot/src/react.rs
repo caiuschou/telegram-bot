@@ -9,7 +9,7 @@ use async_openai::config::OpenAIConfig;
 use langgraph::memory::{Checkpointer, JsonSerializer, RunnableConfig, SqliteSaver};
 use langgraph::{
     ActNode, ChatOpenAI, CompiledStateGraph, McpToolSource, Message, MockToolSource, ObserveNode,
-    ReActState, StateGraph, ThinkNode, ToolSource, REACT_SYSTEM_PROMPT, END, START,
+    ReActState, StateGraph, ThinkNode, ToolSource, ToolSpec, REACT_SYSTEM_PROMPT, END, START,
 };
 use langgraph::stream::{StreamEvent, StreamMode};
 use std::collections::HashSet;
@@ -34,29 +34,10 @@ fn make_config(thread_id: &str) -> RunnableConfig {
     }
 }
 
-/// Builds the ReAct graph (think → act → observe) with the given checkpointer.
-/// Uses ChatOpenAI from env (OPENAI_MODEL, OPENAI_API_KEY, OPENAI_BASE_URL or OPENAI_API_BASE) and MockToolSource::get_time_example().
-///
-/// **Validation**: Checks OPENAI_API_KEY exists; OPENAI_MODEL defaults to gpt-4o-mini.
-async fn build_compiled_graph(
-    checkpointer: Arc<dyn Checkpointer<ReActState>>,
-) -> Result<CompiledStateGraph<ReActState>> {
-    // Validate required environment variables
-    let api_key = std::env::var("OPENAI_API_KEY")
-        .map_err(|_| anyhow::anyhow!("OPENAI_API_KEY not set. Please set it in .env file or environment."))?;
-
-    // OPENAI_BASE_URL is used by async-openai; OPENAI_API_BASE is fallback for compatibility
-    let api_base = std::env::var("OPENAI_BASE_URL")
-        .or_else(|_| std::env::var("OPENAI_API_BASE"))
-        .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
-
-    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-    let openai_config = OpenAIConfig::new()
-        .with_api_key(api_key)
-        .with_api_base(api_base);
-
-    // Prefer McpToolSource (Exa web search) when EXA_API_KEY is set; else MockToolSource (get_time).
-    let tool_source: Box<dyn ToolSource> = if let Ok(exa_key) = std::env::var("EXA_API_KEY") {
+/// Builds the tool source: McpToolSource (Exa) when EXA_API_KEY is set, else MockToolSource (get_time).
+/// Used by `build_compiled_graph` and `print_runtime_info`.
+fn make_tool_source() -> Box<dyn ToolSource> {
+    if let Ok(exa_key) = std::env::var("EXA_API_KEY") {
         let exa_url =
             std::env::var("MCP_EXA_URL").unwrap_or_else(|_| "https://mcp.exa.ai/mcp".to_string());
         let cmd = std::env::var("MCP_REMOTE_CMD").unwrap_or_else(|_| "npx".to_string());
@@ -80,8 +61,31 @@ async fn build_compiled_graph(
         }
     } else {
         Box::new(MockToolSource::get_time_example())
-    };
+    }
+}
 
+/// Builds the ReAct graph (think → act → observe) with the given checkpointer.
+/// Uses ChatOpenAI from env (OPENAI_MODEL, OPENAI_API_KEY, OPENAI_BASE_URL or OPENAI_API_BASE) and MockToolSource::get_time_example().
+///
+/// **Validation**: Checks OPENAI_API_KEY exists; OPENAI_MODEL defaults to gpt-4o-mini.
+async fn build_compiled_graph(
+    checkpointer: Arc<dyn Checkpointer<ReActState>>,
+) -> Result<CompiledStateGraph<ReActState>> {
+    // Validate required environment variables
+    let api_key = std::env::var("OPENAI_API_KEY")
+        .map_err(|_| anyhow::anyhow!("OPENAI_API_KEY not set. Please set it in .env file or environment."))?;
+
+    // OPENAI_BASE_URL is used by async-openai; OPENAI_API_BASE is fallback for compatibility
+    let api_base = std::env::var("OPENAI_BASE_URL")
+        .or_else(|_| std::env::var("OPENAI_API_BASE"))
+        .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let openai_config = OpenAIConfig::new()
+        .with_api_key(api_key)
+        .with_api_base(api_base);
+
+    let tool_source = make_tool_source();
     let tools = tool_source
         .list_tools()
         .await
@@ -121,6 +125,51 @@ pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<ReactRunne
         checkpointer,
         compiled,
     })
+}
+
+/// Prints loaded tools, LLM interface, embeddings, and memory info. Used by CLI `info` subcommand.
+///
+/// **Output**: Tools (name + description), LLM (model, api_base), Embeddings (none), Memory (SqliteSaver + path).
+pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
+    dotenvy::dotenv().ok();
+
+    let tool_source = make_tool_source();
+    let tools: Vec<ToolSpec> = tool_source
+        .list_tools()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to list tools: {}", e))?;
+
+    let api_base = std::env::var("OPENAI_BASE_URL")
+        .or_else(|_| std::env::var("OPENAI_API_BASE"))
+        .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let tool_type = if std::env::var("EXA_API_KEY").is_ok() {
+        "McpToolSource (Exa web search)"
+    } else {
+        "MockToolSource (get_time)"
+    };
+
+    println!("=== langgraph-bot Runtime Info ===\n");
+
+    println!("## Tools ({} total, source: {})", tools.len(), tool_type);
+    for (i, t) in tools.iter().enumerate() {
+        let desc = t.description.as_deref().unwrap_or("(no description)");
+        println!("  [{}] {} - {}", i + 1, t.name, desc);
+    }
+
+    println!("\n## LLM Interface");
+    println!("  Model: {}", model);
+    println!("  API Base: {}", api_base);
+
+    println!("\n## Embeddings (词嵌入)");
+    println!("  Not used (langgraph-bot does not use embeddings)");
+
+    println!("\n## Memory (记忆)");
+    println!("  Type: SqliteSaver (checkpointer)");
+    println!("  Path: {}", db_path.as_ref().display());
+    println!("  State: ReActState {{ messages, tool_calls, tool_results }}");
+
+    Ok(())
 }
 
 impl ReactRunner {
