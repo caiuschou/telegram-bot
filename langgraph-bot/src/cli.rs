@@ -8,16 +8,27 @@ use clap::{Parser, Subcommand};
 /// Root CLI: holds a single subcommand. Parsed by `main.rs` and matched to load/checkpoint calls.
 #[derive(Parser)]
 #[command(name = "langgraph-bot")]
-#[command(about = "Seed messages into langgraph short-term memory (SqliteSaver checkpoint)")]
+#[command(about = "Load or seed messages into langgraph short-term memory (SqliteSaver checkpoint)")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 }
 
-/// Subcommands; `Seed`, `Chat`, and `Info` are handled in `main.rs`.
+/// Subcommands; `Load`, `Seed`, `Chat`, `Info`, and `Memory` are handled in `main.rs`.
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Print short-term memory (checkpoint) summary: threads and message counts. Optionally limit to one thread.
+    Memory {
+        /// Path to Sqlite checkpoint database (same as load/seed/chat).
+        #[arg(short, long, default_value = "checkpoint.db")]
+        db: std::path::PathBuf,
+
+        /// If set, print summary only for this thread; otherwise list all threads with summaries.
+        #[arg(short, long)]
+        thread_id: Option<String>,
+    },
+
     /// Print loaded tools, LLM interface, embeddings, and memory info.
     Info {
         /// Path to Sqlite checkpoint database (same as seed/chat).
@@ -25,12 +36,23 @@ pub enum Commands {
         db: std::path::PathBuf,
     },
 
-    /// Write messages into SqliteSaver checkpoint for a thread. Messages from seed-messages (default) or from a JSON file.
-    Seed {
-        /// Path to messages JSON (same shape as seed-messages). If omitted, uses seed-messages::generate_messages().
+    /// Load messages from a JSON file into the checkpoint for a thread. Default path from LANGGRAPH_MESSAGES_PATH in .env.
+    Load {
+        /// Path to messages JSON (same shape as seed-messages). Default: LANGGRAPH_MESSAGES_PATH from .env.
         #[arg(short, long)]
         messages: Option<std::path::PathBuf>,
 
+        /// Path to Sqlite checkpoint database (created if missing).
+        #[arg(short, long, default_value = "checkpoint.db")]
+        db: std::path::PathBuf,
+
+        /// Thread ID for the conversation. If omitted, a new UUID is generated.
+        #[arg(short, long)]
+        thread_id: Option<String>,
+    },
+
+    /// Fill checkpoint with generated/seed messages (samples or synthetic from seed-messages).
+    Seed {
         /// Path to Sqlite checkpoint database (created if missing).
         #[arg(short, long, default_value = "checkpoint.db")]
         db: std::path::PathBuf,

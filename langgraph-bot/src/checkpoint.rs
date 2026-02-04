@@ -5,10 +5,12 @@
 //! **Verification**: After put, `get_messages_from_checkpointer` reads back `.messages` from the latest checkpoint.
 
 use anyhow::Result;
+use langgraph::Message;
 use langgraph::memory::{
     Checkpoint, CheckpointSource, Checkpointer, JsonSerializer, RunnableConfig, SqliteSaver,
 };
 use langgraph::ReActState;
+use rusqlite::Connection;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -121,6 +123,60 @@ pub fn verify_messages_integrity(
         }
     }
     Ok(())
+}
+
+/// Lists all thread_ids that have at least one checkpoint in the given DB.
+/// Reads directly from the `checkpoints` table (same schema as langgraph SqliteSaver).
+/// Used by the Memory summary command to show all threads when no thread_id is specified.
+pub fn list_thread_ids(db_path: impl AsRef<Path>) -> Result<Vec<String>> {
+    let conn = Connection::open(db_path.as_ref())
+        .map_err(|e| anyhow::anyhow!("open checkpoint db: {}", e))?;
+    let mut stmt = conn.prepare("SELECT DISTINCT thread_id FROM checkpoints ORDER BY thread_id")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let mut ids: Vec<String> = Vec::new();
+    for row in rows {
+        ids.push(row?);
+    }
+    Ok(ids)
+}
+
+/// Returns a one-line preview of a message for summary display (e.g. "User: [User: Alice / @alice] 在吗？" truncated).
+fn message_preview(msg: &Message, max_len: usize) -> String {
+    let (role, s) = match msg {
+        Message::User(s) => ("User", s.as_str()),
+        Message::Assistant(s) => ("Assistant", s.as_str()),
+        Message::System(s) => ("System", s.as_str()),
+    };
+    let content: String = s.chars().take(max_len).collect();
+    if content.len() < s.chars().count() {
+        format!("{}: {}...", role, content)
+    } else {
+        format!("{}: {}", role, content)
+    }
+}
+
+/// Builds a short summary of ReActState for one thread: message count, turn_count, first and last message previews.
+/// Used by the Memory summary command. Interacts with `get_react_state_from_checkpointer` for state; this only formats.
+pub fn format_thread_summary(
+    thread_id: &str,
+    state: &ReActState,
+    preview_len: usize,
+) -> String {
+    let n = state.messages.len();
+    let first = state
+        .messages
+        .first()
+        .map(|m| message_preview(m, preview_len))
+        .unwrap_or_else(|| "—".to_string());
+    let last = state
+        .messages
+        .last()
+        .map(|m| message_preview(m, preview_len))
+        .unwrap_or_else(|| "—".to_string());
+    format!(
+        "  thread_id: {}\n  messages: {}  turn_count: {}\n  first: {}\n  last:  {}",
+        thread_id, n, state.turn_count, first, last
+    )
 }
 
 /// Checks that each message is User or Assistant (expected shape for seeded data).

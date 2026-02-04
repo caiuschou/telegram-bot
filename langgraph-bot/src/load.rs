@@ -111,3 +111,18 @@ pub fn load_messages_from_slice_with_user_info_with_stats(
     let raw: Vec<SeedMessage> = serde_json::from_slice(bytes)?;
     Ok(seed_messages_to_messages_with_user_info_with_stats(raw))
 }
+
+/// Reads JSON array from path and converts to `Vec<Message>` with user info prefix on User messages.
+pub fn load_messages_from_path_with_user_info(
+    path: impl AsRef<std::path::Path>,
+) -> Result<Vec<Message>> {
+    load_messages_from_path_with_user_info_with_stats(path).map(|(m, _)| m)
+}
+
+/// Reads JSON array from path and converts to `Vec<Message>` with user info prefix, returning the number of skipped messages.
+pub fn load_messages_from_path_with_user_info_with_stats(
+    path: impl AsRef<std::path::Path>,
+) -> Result<(Vec<Message>, usize)> {
+    let bytes = std::fs::read(path)?;
+    load_messages_from_slice_with_user_info_with_stats(&bytes)
+}
