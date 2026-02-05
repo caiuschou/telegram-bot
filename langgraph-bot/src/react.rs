@@ -156,24 +156,48 @@ pub fn last_assistant_content(state: &ReActState) -> String {
         .unwrap_or_default()
 }
 
+/// Redacts embedding/vector content from JSON for logging (do not print raw vector data).
+/// Returns a copy with array values replaced by a placeholder like "[redacted, N dims]".
+fn redact_vectors_for_log(value: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::Array(arr) => {
+            let n = arr.len();
+            Value::String(format!("[redacted, {} dims]", n))
+        }
+        Value::Object(map) => {
+            let redacted: serde_json::Map<String, Value> = map
+                .iter()
+                .map(|(k, v)| {
+                    let v2 = redact_vectors_for_log(v);
+                    (k.clone(), v2)
+                })
+                .collect();
+            Value::Object(redacted)
+        }
+        other => other.clone(),
+    }
+}
+
 /// Custom tool error handler that logs tool name, args (including key for memory tools), and error.
-/// Used for debugging recall/remember failures.
+/// Used for debugging recall/remember failures. Vector/embedding content in tool_args is redacted.
 fn tool_error_handler_with_key_logging() -> ErrorHandlerFn {
     Arc::new(|error: &ToolSourceError, tool_name: &str, tool_args: &serde_json::Value| {
         let key = tool_args
             .get("key")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+        let redacted_args = redact_vectors_for_log(tool_args);
         tracing::error!(
             tool_name = %tool_name,
             key = ?key,
-            tool_args = ?tool_args,
+            tool_args = ?redacted_args,
             error = %error,
             "Tool execution failed"
         );
         DEFAULT_EXECUTION_ERROR_TEMPLATE
             .replace("{tool_name}", tool_name)
-            .replace("{tool_kwargs}", &tool_args.to_string())
+            .replace("{tool_kwargs}", &redacted_args.to_string())
             .replace("{error}", &error.to_string())
     })
 }
