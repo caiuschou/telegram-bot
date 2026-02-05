@@ -150,7 +150,11 @@ impl EmbeddingService for OpenAIEmbedding {
         let text_preview = if text.len() <= LOG_PREVIEW_LEN {
             text.to_string()
         } else {
-            format!("{}...", &text[..LOG_PREVIEW_LEN])
+            let safe_len = text.char_indices()
+                .nth(LOG_PREVIEW_LEN)
+                .map(|(idx, _)| idx)
+                .unwrap_or(text.len());
+            format!("{}...", &text[..safe_len])
         };
 
         info!(
