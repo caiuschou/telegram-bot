@@ -10,14 +10,28 @@ use std::sync::Arc;
 use std::time::Instant;
 use telegram_bot::{Bot, Handler, HandlerResponse, Message, Result};
 use tokio::sync::mpsc;
-use tokio::time::sleep;
-use tracing::{error, info, instrument};
+use tracing::{debug, error, info, instrument};
 
-const MSG_SEND_FAILED: &str = "发送失败，请稍后再试。";
+        const MSG_SEND_FAILED: &str = "发送失败，请稍后再试。";
 const MSG_PROCESSING_FAILED: &str = "处理时出错，请稍后再试。";
 const MSG_BUSY: &str = "上一条还在处理中，请稍候。";
 const DEFAULT_EMPTY_MENTION: &str =
     "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
+
+fn extract_retry_after_seconds(error: &str) -> Option<u64> {
+    let pattern = "Retry after ";
+    if let Some(start) = error.find(pattern) {
+        let start = start + pattern.len();
+        if let Some(end) = error[start..].find('s') {
+            let seconds_str = &error[start..start + end];
+            seconds_str.trim().parse().ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
 
 /// Guard that clears the busy flag for a thread when dropped.
 struct ThreadBusyGuard {
@@ -36,7 +50,6 @@ pub struct AgentHandler {
     bot: Arc<dyn Bot>,
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     placeholder_message: String,
-    edit_interval_secs: u64,
     thread_busy: dashmap::DashMap<String, Arc<AtomicBool>>,
 }
 
@@ -47,14 +60,12 @@ impl AgentHandler {
         bot: Arc<dyn Bot>,
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         placeholder_message: String,
-        edit_interval_secs: u64,
     ) -> Self {
         Self {
             runner,
             bot,
             bot_username,
             placeholder_message,
-            edit_interval_secs,
             thread_busy: dashmap::DashMap::new(),
         }
     }
@@ -155,29 +166,130 @@ impl Handler for AgentHandler {
         let bot = self.bot.clone();
         let chat = message.chat.clone();
         let message_id_edit = message_id.clone();
-        let edit_interval_secs = self.edit_interval_secs;
-        let last_edit = Arc::new(tokio::sync::Mutex::new(None::<Instant>));
+        const EDIT_CHUNK_SIZE: usize = 50;
+        const MAX_EDIT_DELAY_SECS: u64 = 2;
 
         let edit_handle = tokio::spawn(async move {
             let mut content = String::new();
-            while let Some(chunk) = rx.recv().await {
-                content.push_str(&chunk);
-                if edit_interval_secs > 0 {
-                    let last = last_edit.lock().await;
-                    if let Some(prev) = *last {
-                        let elapsed = prev.elapsed();
-                        let interval = std::time::Duration::from_secs(edit_interval_secs);
-                        if elapsed < interval {
-                            drop(last);
-                            sleep(interval - elapsed).await;
+            let mut buffer = String::new();
+            let mut last_edit = Instant::now();
+
+            loop {
+                let timeout = if buffer.is_empty() {
+                    None
+                } else {
+                    let elapsed = last_edit.elapsed().as_secs();
+                    Some(MAX_EDIT_DELAY_SECS.saturating_sub(elapsed))
+                };
+
+                match timeout {
+                    Some(secs) => {
+                        tokio::select! {
+                            result = rx.recv() => {
+                                match result {
+                                Some(chunk) => {
+                                    buffer.push_str(&chunk);
+                                    if buffer.len() >= EDIT_CHUNK_SIZE {
+                                        content.push_str(&buffer);
+                                        buffer.clear();
+                                        loop {
+                                            match bot.edit_message(&chat, &message_id_edit, &content).await {
+                                                Ok(_) => {
+                                                    last_edit = Instant::now();
+                                                    break;
+                                                }
+                                                Err(e) => {
+                                                    let error_str = e.to_string();
+                                                    if let Some(secs) = extract_retry_after_seconds(&error_str) {
+                                                        error!(error = %e, "Failed to edit message, retrying after {}s", secs);
+                                                        tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                                                    } else {
+                                                        error!(error = %e, "Failed to edit message");
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                    None => break,
+                                }
+                            }
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {
+                                if !buffer.is_empty() {
+                                    content.push_str(&buffer);
+                                    buffer.clear();
+                                    loop {
+                                        match bot.edit_message(&chat, &message_id_edit, &content).await {
+                                            Ok(_) => {
+                                                last_edit = Instant::now();
+                                                break;
+                                            }
+                                            Err(e) => {
+                                                let error_str = e.to_string();
+                                                if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
+                                                    error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
+                                                    tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
+                                                } else {
+                                                    error!(error = %e, "Failed to edit message");
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        match rx.recv().await {
+                            Some(chunk) => {
+                                buffer.push_str(&chunk);
+                                if buffer.len() >= EDIT_CHUNK_SIZE {
+                                    content.push_str(&buffer);
+                                    buffer.clear();
+                                    loop {
+                                        match bot.edit_message(&chat, &message_id_edit, &content).await {
+                                            Ok(_) => {
+                                                last_edit = Instant::now();
+                                                break;
+                                            }
+                                            Err(e) => {
+                                                let error_str = e.to_string();
+                                                if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
+                                                    error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
+                                                    tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
+                                                } else {
+                                                    error!(error = %e, "Failed to edit message");
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None => break,
                         }
                     }
                 }
-                if let Err(e) = bot.edit_message(&chat, &message_id_edit, &content).await {
-                    error!(error = %e, "Failed to edit message");
-                }
-                if edit_interval_secs > 0 {
-                    *last_edit.lock().await = Some(Instant::now());
+            }
+
+            if !buffer.is_empty() {
+                content.push_str(&buffer);
+                loop {
+                    match bot.edit_message(&chat, &message_id_edit, &content).await {
+                        Ok(_) => break,
+                        Err(e) => {
+                            let error_str = e.to_string();
+                            if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
+                                error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
+                                tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
+                            } else {
+                                error!(error = %e, "Failed to edit message");
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -188,6 +300,7 @@ impl Handler for AgentHandler {
             &thread_id,
             &question,
             |chunk: &str| {
+                debug!(chunk_len = chunk.len(), preview = %chunk.chars().take(50).collect::<String>(), "Received stream chunk");
                 let _ = tx.send(chunk.to_string());
             },
             Some(&profile),

@@ -14,7 +14,6 @@ pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result
 
     let runner: Arc<ReactRunner> = Arc::new(create_react_runner(&db_path).await?);
     let placeholder_message = "正在思考…".to_string();
-    let edit_interval_secs = 1;
 
     run_bot(config, move |_config, components| {
         let bot_token = components.teloxide_bot.token().to_string();
@@ -25,7 +24,6 @@ pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result
             bot,
             bot_username,
             placeholder_message.clone(),
-            edit_interval_secs,
         ));
         handler
     })
