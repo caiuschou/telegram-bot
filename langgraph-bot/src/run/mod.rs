@@ -1,12 +1,33 @@
-//! Run Telegram bot. Uses telegram-bot with NoOpHandler (same pattern as telegram-simple-bot).
+//! Run Telegram bot with ReAct agent.
 
 use anyhow::Result;
 use std::sync::Arc;
-use telegram_bot::{load_config, run_bot, NoOpHandler};
+use telegram_bot::{load_config, run_bot, TelegramBot};
+use crate::{AgentHandler, create_react_runner, ReactRunner};
 
-/// Runs the Telegram bot with a no-op handler (connects and runs REPL; does not reply to messages).
-/// Config from env; `token` overrides BOT_TOKEN if provided. `_db` is unused (reserved for future use).
-pub async fn run_telegram(_db: &std::path::Path, token: Option<String>) -> Result<()> {
+/// Runs the Telegram bot with ReAct agent. Config from env; `token` overrides BOT_TOKEN if provided.
+/// The bot handles reply-to-bot and @mention messages, streams responses with placeholder → chunk updates → final reply.
+/// Uses `db` for checkpoint persistence (thread-level multi-turn memory).
+pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result<()> {
     let config = load_config(token)?;
-    run_bot(config, |_config, _components| Arc::new(NoOpHandler::new())).await
+    let db_path = db.to_path_buf();
+
+    let runner: Arc<ReactRunner> = Arc::new(create_react_runner(&db_path).await?);
+    let placeholder_message = "正在思考…".to_string();
+    let edit_interval_secs = 1;
+
+    run_bot(config, move |_config, components| {
+        let bot_token = components.teloxide_bot.token().to_string();
+        let bot = Arc::new(TelegramBot::new(bot_token));
+        let bot_username = components.bot_username.clone();
+        let handler = Arc::new(AgentHandler::new(
+            runner.clone(),
+            bot,
+            bot_username,
+            placeholder_message.clone(),
+            edit_interval_secs,
+        ));
+        handler
+    })
+    .await
 }
