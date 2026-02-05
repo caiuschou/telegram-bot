@@ -3,7 +3,7 @@
 //! Used by the `chat` subcommand: optional first message, then read lines from stdin until EOF or /exit.
 
 use anyhow::Result;
-use langgraph_bot::{create_react_runner, run_chat, run_chat_stream, ReactRunner};
+use langgraph_bot::{create_react_runner, run_chat_stream, ReactRunner};
 use std::io::{self, Write};
 
 pub const DEFAULT_THREAD_ID: &str = "default";
@@ -17,8 +17,9 @@ pub fn print_help() {
     println!("  Any other text will be sent to the ReAct agent.");
 }
 
-/// Runs one chat turn: sends `content` to the ReAct agent, prints reply (stream or full) or error.
+/// Runs one chat turn: sends `content` to the ReAct agent via `run_chat_stream`, prints reply (incremental or at end) or error.
 /// When `show_continue_hint_on_error` is true, also prints a hint to continue or /exit.
+/// When `stream` is true, prints each chunk as it arrives; when false, collects chunks and prints the full reply at end.
 pub async fn run_one_turn(
     runner: &ReactRunner,
     thread_id: &str,
@@ -39,7 +40,7 @@ pub async fn run_one_turn(
         )
         .await
     } else {
-        run_chat(runner, thread_id, content, None).await
+        run_chat_stream(runner, thread_id, content, |_| {}, None).await
     };
     match result {
         Ok(reply) => {

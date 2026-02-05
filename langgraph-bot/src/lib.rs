@@ -1,7 +1,7 @@
 //! Seed messages into langgraph short-term memory (SqliteSaver) and chat via ReAct agent.
 //!
 //! **Seed flow**: Load messages → `checkpoint::import_messages_into_checkpointer` (writes `ReActState { messages, tool_calls: [], tool_results: [] }`).
-//! **Chat flow**: `react::create_react_runner(db_path)` → `run_chat(&runner, thread_id, content)` loads persistent state, runs Think→Act→Observe, persists, returns reply.
+//! **Chat flow**: `react::create_react_runner(db_path)` → `run_chat_stream(&runner, thread_id, content, on_chunk)` loads persistent state, runs Think→Act→Observe, streams chunks, persists, returns final reply.
 
 pub mod checkpoint;
 pub mod format;
@@ -27,23 +27,10 @@ pub use load::{
     seed_messages_to_messages, seed_messages_to_messages_with_stats,
     seed_messages_to_messages_with_user_info, seed_messages_to_messages_with_user_info_with_stats,
 };
-pub use react::{create_react_runner, print_runtime_info, ReactRunner, UserProfile};
+pub use react::{create_react_runner, last_assistant_content, print_runtime_info, ReactRunner, UserProfile};
 pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 
 pub use telegram_handler::AgentHandler;
-
-/// Runs one chat turn using the given runner (loads persistent state, appends user message, invokes ReAct, returns reply).
-///
-/// **Interaction**: Used by CLI `chat` and interactive loop. Create a runner once with `create_react_runner(db_path)`.
-/// Pass `user_profile: Some(...)` to inject long-term user identity (e.g. from MessageRepository); `None` for CLI.
-pub async fn run_chat(
-    runner: &ReactRunner,
-    thread_id: &str,
-    content: &str,
-    user_profile: Option<&UserProfile>,
-) -> anyhow::Result<String> {
-    runner.run_chat(thread_id, content, user_profile).await
-}
 
 /// Runs one chat turn with streaming: `on_chunk` is called for each LLM token; returns final reply.
 pub async fn run_chat_stream(
