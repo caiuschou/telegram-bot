@@ -138,3 +138,29 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
     );
     Ok(())
 }
+
+// --- print_runtime_info (plan §6 stage 3) ---
+
+/// **Test: print_runtime_info prints configuration without errors.**
+#[tokio::test]
+async fn print_runtime_info_prints_config() -> Result<()> {
+    let (_dir, db_path) = temp_db_path();
+
+    let original_model = std::env::var("OPENAI_MODEL").ok();
+    std::env::set_var("OPENAI_MODEL", "test-model");
+
+    let result = langgraph_bot::print_runtime_info(&db_path).await;
+
+    if let Some(m) = original_model {
+        std::env::set_var("OPENAI_MODEL", m);
+    } else {
+        std::env::remove_var("OPENAI_MODEL");
+    }
+
+    assert!(
+        result.is_ok(),
+        "print_runtime_info should succeed: {:?}",
+        result
+    );
+    Ok(())
+}
