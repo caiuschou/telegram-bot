@@ -10,8 +10,9 @@ use std::sync::Arc;
 
 use langgraph::config::{MemoryConfigSummary, ToolConfigSummary};
 use langgraph::{
-    ActNode, CompiledStateGraph, Message, ObserveNode, ReActState, RunnableConfig, StateGraph,
-    ThinkNode, END, REACT_SYSTEM_PROMPT, START,
+    ActNode, CompiledStateGraph, ErrorHandlerFn, HandleToolErrors, Message, ObserveNode, ReActState,
+    RunnableConfig, StateGraph, ThinkNode, ToolSourceError, DEFAULT_EXECUTION_ERROR_TEMPLATE, END,
+    REACT_SYSTEM_PROMPT, START,
 };
 use langgraph::memory::{CheckpointError, Checkpointer};
 use langgraph::react_builder::{build_react_run_context, ReactBuildConfig};
@@ -95,9 +96,14 @@ impl UserProfile {
 
 /// ReAct runner: holds compiled graph and checkpointer only (see plan §2.1).
 /// Fields are used by `run_chat_stream`.
+///
+/// When `system_prompt` is `Some`, it overrides the default [`REACT_SYSTEM_PROMPT`] for initial state.
+/// Set via `REACT_SYSTEM_PROMPT` env var.
 pub struct ReactRunner {
     pub(super) compiled: CompiledStateGraph<ReActState>,
     pub(super) checkpointer: Arc<dyn langgraph::memory::Checkpointer<ReActState>>,
+    /// Custom system prompt from env; when None, uses REACT_SYSTEM_PROMPT.
+    pub(super) system_prompt: Option<String>,
 }
 
 /// Builds initial ReActState for one turn: from checkpoint (if thread_id + checkpointer) or fresh with system + user.
@@ -148,6 +154,28 @@ pub fn last_assistant_content(state: &ReActState) -> String {
             _ => None,
         })
         .unwrap_or_default()
+}
+
+/// Custom tool error handler that logs tool name, args (including key for memory tools), and error.
+/// Used for debugging recall/remember failures.
+fn tool_error_handler_with_key_logging() -> ErrorHandlerFn {
+    Arc::new(|error: &ToolSourceError, tool_name: &str, tool_args: &serde_json::Value| {
+        let key = tool_args
+            .get("key")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        tracing::error!(
+            tool_name = %tool_name,
+            key = ?key,
+            tool_args = ?tool_args,
+            error = %error,
+            "Tool execution failed"
+        );
+        DEFAULT_EXECUTION_ERROR_TEMPLATE
+            .replace("{tool_name}", tool_name)
+            .replace("{tool_kwargs}", &tool_args.to_string())
+            .replace("{error}", &error.to_string())
+    })
 }
 
 /// Builds checkpointer, LLM, ToolSource, optional Store from env; compiles graph; returns runner with only compiled + checkpointer.
@@ -289,7 +317,9 @@ pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<(ReactRunn
     let llm: Box<dyn langgraph::LlmClient> = Box::new(llm);
 
     let think = ThinkNode::new(llm);
-    let act = ActNode::new(ctx.tool_source);
+    let act = ActNode::new(ctx.tool_source).with_handle_tool_errors(HandleToolErrors::Custom(
+        tool_error_handler_with_key_logging(),
+    ));
     let observe = ObserveNode::with_loop();
 
     let mut graph = StateGraph::<ReActState>::new();
@@ -308,12 +338,35 @@ pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<(ReactRunn
         graph
     };
 
-    let compiled = graph
-        .compile_with_checkpointer(Arc::clone(&checkpointer))
-        .map_err(|e| anyhow!("compile_with_checkpointer: {}", e))?;
+    let llm_log_request = std::env::var("LLM_LOG_REQUEST")
+        .or_else(|_| std::env::var("VERBOSE"))
+        .ok()
+        .and_then(|s| {
+            match s.to_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" => Some(true),
+                _ => s.parse().ok(),
+            }
+        })
+        .unwrap_or(false);
 
+    let compiled = if llm_log_request {
+        let mw = Arc::new(crate::llm_request_logging::LlmRequestLoggingMiddleware);
+        graph
+            .compile_with_checkpointer_and_middleware(Arc::clone(&checkpointer), mw)
+            .map_err(|e| anyhow!("compile_with_checkpointer_and_middleware: {}", e))?
+    } else {
+        graph
+            .compile_with_checkpointer(Arc::clone(&checkpointer))
+            .map_err(|e| anyhow!("compile_with_checkpointer: {}", e))?
+    };
+
+    let system_prompt = config.system_prompt.clone();
     Ok((
-        ReactRunner { compiled, checkpointer },
+        ReactRunner {
+            compiled,
+            checkpointer,
+            system_prompt,
+        },
         tool_summary,
         memory_summary,
     ))
@@ -383,6 +436,36 @@ pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
         .unwrap();
     }
 
+    if let Ok(custom) = std::env::var("REACT_SYSTEM_PROMPT") {
+        let preview: String = custom.chars().take(80).collect();
+        writeln!(
+            output,
+            "REACT_SYSTEM_PROMPT: set ({} chars), preview: {}",
+            custom.len(),
+            preview
+        )
+        .unwrap();
+    } else {
+        writeln!(output, "REACT_SYSTEM_PROMPT: not set (using default)").unwrap();
+    }
+
+    let llm_log = std::env::var("LLM_LOG_REQUEST")
+        .or_else(|_| std::env::var("VERBOSE"))
+        .ok()
+        .and_then(|s| {
+            match s.to_lowercase().as_str() {
+                "1" | "true" | "yes" | "on" => Some(true),
+                _ => s.parse().ok(),
+            }
+        })
+        .unwrap_or(false);
+    writeln!(
+        output,
+        "LLM_LOG_REQUEST: {}",
+        if llm_log { "enabled (will log think-node messages)" } else { "disabled" }
+    )
+    .unwrap();
+
     writeln!(output, "==================================").unwrap();
 
     println!("{}", output);
@@ -402,9 +485,13 @@ impl ReactRunner {
         let mut config = RunnableConfig::default();
         config.thread_id = Some(thread_id.to_string());
 
+        let base_prompt = self
+            .system_prompt
+            .as_deref()
+            .unwrap_or(REACT_SYSTEM_PROMPT);
         let system_prompt = user_profile
-            .map(|p| format!("{}\n\n{}", REACT_SYSTEM_PROMPT, p.to_system_content()))
-            .unwrap_or_else(|| REACT_SYSTEM_PROMPT.to_string());
+            .map(|p| format!("{}\n\n{}", base_prompt, p.to_system_content()))
+            .unwrap_or_else(|| base_prompt.to_string());
 
         let state = build_initial_state_for_turn(
             content,

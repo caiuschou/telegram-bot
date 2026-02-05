@@ -6,6 +6,7 @@
 pub mod checkpoint;
 pub mod format;
 pub mod load;
+pub mod llm_request_logging;
 pub mod react;
 pub mod telegram_db;
 
