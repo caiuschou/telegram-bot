@@ -27,6 +27,42 @@ pub struct UserProfile {
     pub username: Option<String>,
 }
 
+/// Result of one streaming chat turn: final reply plus optional process steps and tools used.
+///
+/// Used by telegram handler to show "过程" and "工具" before the reply text.
+#[derive(Debug, Clone, Default)]
+pub struct ChatStreamResult {
+    /// Final assistant message content.
+    pub reply: String,
+    /// ReAct node sequence (e.g. ["思考", "执行工具", "观察"]).
+    pub steps: Vec<String>,
+    /// Tool names invoked in this turn (deduplicated, order preserved).
+    pub tools_used: Vec<String>,
+}
+
+/// Incremental update during streaming: chunk of reply text, or current steps/tools for live header.
+///
+/// Enables streaming the full message (process + tools + reply) in telegram_handler.
+#[derive(Debug, Clone)]
+pub enum StreamUpdate {
+    /// One chunk of assistant reply text (LLM token stream).
+    Chunk(String),
+    /// Current ReAct steps so far (e.g. after each TaskStart).
+    Steps(Vec<String>),
+    /// Current tools used so far (e.g. after Values with tool_calls).
+    Tools(Vec<String>),
+}
+
+/// Maps langgraph node_id to user-facing step label (Chinese).
+fn step_label(node_id: &str) -> String {
+    match node_id {
+        "think" => "思考".to_string(),
+        "act" => "执行工具".to_string(),
+        "observe" => "观察".to_string(),
+        _ => node_id.to_string(),
+    }
+}
+
 impl UserProfile {
     /// Formats as the System message string used in checkpoint.
     pub fn to_system_content(&self) -> String {
@@ -348,15 +384,15 @@ pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
 }
 
 impl ReactRunner {
-    /// Streams one turn: builds initial state, runs graph with Messages + Values modes,
-    /// calls `on_chunk` for each token, returns last assistant content (plan §5.2).
+    /// Streams one turn: builds initial state, runs graph with Messages + Values + Tasks modes,
+    /// calls `on_update` for each chunk (Chunk), and when steps/tools change (Steps, Tools); returns final result.
     pub async fn run_chat_stream(
         &self,
         thread_id: &str,
         content: &str,
-        mut on_chunk: impl FnMut(&str) + Send,
+        mut on_update: impl FnMut(StreamUpdate) + Send,
         user_profile: Option<&UserProfile>,
-    ) -> Result<String> {
+    ) -> Result<ChatStreamResult> {
         let mut config = RunnableConfig::default();
         config.thread_id = Some(thread_id.to_string());
 
@@ -373,14 +409,36 @@ impl ReactRunner {
         .await
         .map_err(|e| anyhow!("build_initial_state_for_turn: {}", e))?;
 
-        let modes = HashSet::from([StreamMode::Messages, StreamMode::Values]);
+        let modes = HashSet::from([
+            StreamMode::Messages,
+            StreamMode::Values,
+            StreamMode::Tasks,
+        ]);
         let mut stream = self.compiled.stream(state, Some(config), modes);
 
         let mut final_state: Option<ReActState> = None;
+        let mut steps: Vec<String> = Vec::new();
+        let mut tools_seen: HashSet<String> = HashSet::new();
+        let mut tools_used: Vec<String> = Vec::new();
+
         while let Some(event) = stream.next().await {
             match &event {
-                StreamEvent::Messages { chunk, .. } => on_chunk(&chunk.content),
-                StreamEvent::Values(s) => final_state = Some(s.clone()),
+                StreamEvent::Messages { chunk, .. } => {
+                    on_update(StreamUpdate::Chunk(chunk.content.clone()));
+                }
+                StreamEvent::Values(s) => {
+                    final_state = Some(s.clone());
+                    for tc in &s.tool_calls {
+                        if !tc.name.is_empty() && tools_seen.insert(tc.name.clone()) {
+                            tools_used.push(tc.name.clone());
+                            on_update(StreamUpdate::Tools(tools_used.clone()));
+                        }
+                    }
+                }
+                StreamEvent::TaskStart { node_id } => {
+                    steps.push(step_label(node_id));
+                    on_update(StreamUpdate::Steps(steps.clone()));
+                }
                 _ => {}
             }
         }
@@ -389,6 +447,10 @@ impl ReactRunner {
             .as_ref()
             .map(last_assistant_content)
             .unwrap_or_default();
-        Ok(reply)
+        Ok(ChatStreamResult {
+            reply,
+            steps,
+            tools_used,
+        })
     }
 }

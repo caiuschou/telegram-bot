@@ -3,7 +3,7 @@
 //! Used by the `chat` subcommand: optional first message, then read lines from stdin until EOF or /exit.
 
 use anyhow::Result;
-use langgraph_bot::{create_react_runner, run_chat_stream, ReactRunner};
+use langgraph_bot::{create_react_runner, run_chat_stream, ReactRunner, StreamUpdate};
 use std::io::{self, Write};
 
 pub const DEFAULT_THREAD_ID: &str = "default";
@@ -32,9 +32,11 @@ pub async fn run_one_turn(
             runner,
             thread_id,
             content,
-            |chunk| {
-                print!("{}", chunk);
-                let _ = io::stdout().flush();
+            |update| {
+                if let StreamUpdate::Chunk(s) = update {
+                    print!("{}", s);
+                    let _ = io::stdout().flush();
+                }
             },
             None,
         )
@@ -43,11 +45,21 @@ pub async fn run_one_turn(
         run_chat_stream(runner, thread_id, content, |_| {}, None).await
     };
     match result {
-        Ok(reply) => {
+        Ok(chat_result) => {
             if stream {
                 println!();
-            } else {
-                println!("{}", reply);
+            }
+            if !chat_result.steps.is_empty() {
+                println!("【过程】{}", chat_result.steps.join(" → "));
+            }
+            if !chat_result.tools_used.is_empty() {
+                println!("【工具】{}", chat_result.tools_used.join(", "));
+            }
+            if !chat_result.steps.is_empty() || !chat_result.tools_used.is_empty() {
+                println!();
+            }
+            if !stream {
+                println!("{}", chat_result.reply);
             }
         }
         Err(e) => {

@@ -2,7 +2,7 @@
 //!
 //! Uses `run_chat_stream`, per-thread queue (messages are queued per chat and processed serially), and user-facing error messages.
 
-use crate::{run_chat_stream, UserProfile};
+use crate::{run_chat_stream, StreamUpdate, UserProfile};
 use crate::ReactRunner;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -18,6 +18,22 @@ const MSG_EMPTY_REPLY_FALLBACK: &str = "已处理。（本次无文字回复）"
 const DEFAULT_EMPTY_MENTION: &str =
     "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
 
+/// Builds the final message shown to the user: optional 【过程】 and 【工具】 blocks, then the reply.
+fn format_reply_with_process_and_tools(steps: &[String], tools_used: &[String], reply: &str) -> String {
+    let mut parts = Vec::new();
+    if !steps.is_empty() {
+        parts.push(format!("【过程】{}", steps.join(" → ")));
+    }
+    if !tools_used.is_empty() {
+        parts.push(format!("【工具】{}", tools_used.join(", ")));
+    }
+    if parts.is_empty() {
+        return reply.to_string();
+    }
+    parts.push(reply.to_string());
+    parts.join("\n\n")
+}
+
 fn extract_retry_after_seconds(error: &str) -> Option<u64> {
     let pattern = "Retry after ";
     if let Some(start) = error.find(pattern) {
@@ -31,6 +47,11 @@ fn extract_retry_after_seconds(error: &str) -> Option<u64> {
     } else {
         None
     }
+}
+
+/// True when Telegram returns "message is not modified" (content unchanged); treat as success.
+fn is_message_not_modified_error(error: &str) -> bool {
+    error.contains("message is not modified") || error.contains("exactly the same")
 }
 
 /// Handler that runs the ReAct agent on Telegram messages (reply-to-bot or @mention), streams the reply, and edits the same message.
@@ -150,7 +171,7 @@ impl AgentHandler {
             }
         };
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<StreamUpdate>();
         let bot_clone = bot.clone();
         let chat = message.chat.clone();
         let message_id_edit = message_id.clone();
@@ -158,9 +179,15 @@ impl AgentHandler {
         const MAX_EDIT_DELAY_SECS: u64 = 2;
 
         let edit_handle = tokio::spawn(async move {
+            let mut steps: Vec<String> = Vec::new();
+            let mut tools_used: Vec<String> = Vec::new();
             let mut content = String::new();
             let mut buffer = String::new();
             let mut last_edit = Instant::now();
+
+            let do_edit = |steps: &[String], tools: &[String], content: &str| {
+                format_reply_with_process_and_tools(steps, tools, content)
+            };
 
             loop {
                 let timeout = if buffer.is_empty() {
@@ -170,51 +197,27 @@ impl AgentHandler {
                     Some(MAX_EDIT_DELAY_SECS.saturating_sub(elapsed))
                 };
 
-                match timeout {
+                let (recv_finished, opt_update) = match timeout {
                     Some(secs) => {
                         tokio::select! {
-                            result = rx.recv() => {
-                                match result {
-                                    Some(chunk) => {
-                                        buffer.push_str(&chunk);
-                                        if buffer.len() >= EDIT_CHUNK_SIZE {
-                                            content.push_str(&buffer);
-                                            buffer.clear();
-                                            loop {
-                                                match bot_clone.edit_message(&chat, &message_id_edit, &content).await {
-                                                    Ok(_) => {
-                                                        last_edit = Instant::now();
-                                                        break;
-                                                    }
-                                                    Err(e) => {
-                                                        let error_str = e.to_string();
-                                                        if let Some(secs) = extract_retry_after_seconds(&error_str) {
-                                                            error!(error = %e, "Failed to edit message, retrying after {}s", secs);
-                                                            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
-                                                        } else {
-                                                            error!(error = %e, "Failed to edit message");
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    None => break,
-                                }
-                            }
+                            result = rx.recv() => (result.is_none(), result),
                             _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {
                                 if !buffer.is_empty() {
                                     content.push_str(&buffer);
                                     buffer.clear();
+                                    let text = do_edit(&steps, &tools_used, &content);
                                     loop {
-                                        match bot_clone.edit_message(&chat, &message_id_edit, &content).await {
+                                        match bot_clone.edit_message(&chat, &message_id_edit, &text).await {
                                             Ok(_) => {
                                                 last_edit = Instant::now();
                                                 break;
                                             }
                                             Err(e) => {
                                                 let error_str = e.to_string();
+                                                if is_message_not_modified_error(&error_str) {
+                                                    last_edit = Instant::now();
+                                                    break;
+                                                }
                                                 if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
                                                     error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
                                                     tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
@@ -222,41 +225,109 @@ impl AgentHandler {
                                                     error!(error = %e, "Failed to edit message");
                                                     break;
                                                 }
+                                            }
+                                        }
+                                    }
+                                }
+                                (false, None)
+                            }
+                        }
+                    }
+                    None => {
+                        match rx.recv().await {
+                            Some(up) => (false, Some(up)),
+                            None => break,
+                        }
+                    }
+                };
+
+                if recv_finished {
+                    break;
+                }
+
+                if let Some(update) = opt_update {
+                    match update {
+                        StreamUpdate::Chunk(s) => {
+                            buffer.push_str(&s);
+                            if buffer.len() >= EDIT_CHUNK_SIZE {
+                                content.push_str(&buffer);
+                                buffer.clear();
+                                let text = do_edit(&steps, &tools_used, &content);
+                                loop {
+                                    match bot_clone.edit_message(&chat, &message_id_edit, &text).await {
+                                        Ok(_) => {
+                                            last_edit = Instant::now();
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            let error_str = e.to_string();
+                                            if is_message_not_modified_error(&error_str) {
+                                                last_edit = Instant::now();
+                                                break;
+                                            }
+                                            if let Some(secs) = extract_retry_after_seconds(&error_str) {
+                                                error!(error = %e, "Failed to edit message, retrying after {}s", secs);
+                                                tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                                            } else {
+                                                error!(error = %e, "Failed to edit message");
+                                                break;
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                    None => {
-                        match rx.recv().await {
-                            Some(chunk) => {
-                                buffer.push_str(&chunk);
-                                if buffer.len() >= EDIT_CHUNK_SIZE {
-                                    content.push_str(&buffer);
-                                    buffer.clear();
-                                    loop {
-                                        match bot_clone.edit_message(&chat, &message_id_edit, &content).await {
-                                            Ok(_) => {
-                                                last_edit = Instant::now();
-                                                break;
-                                            }
-                                            Err(e) => {
-                                                let error_str = e.to_string();
-                                                if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
-                                                    error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
-                                                    tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
-                                                } else {
-                                                    error!(error = %e, "Failed to edit message");
-                                                    break;
-                                                }
-                                            }
+                        StreamUpdate::Steps(s) => {
+                            steps = s;
+                            let text = do_edit(&steps, &tools_used, &content);
+                            loop {
+                                match bot_clone.edit_message(&chat, &message_id_edit, &text).await {
+                                    Ok(_) => {
+                                        last_edit = Instant::now();
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        let error_str = e.to_string();
+                                        if is_message_not_modified_error(&error_str) {
+                                            last_edit = Instant::now();
+                                            break;
+                                        }
+                                        if let Some(secs) = extract_retry_after_seconds(&error_str) {
+                                            error!(error = %e, "Failed to edit message, retrying after {}s", secs);
+                                            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                                        } else {
+                                            error!(error = %e, "Failed to edit message");
+                                            break;
                                         }
                                     }
                                 }
                             }
-                            None => break,
+                        }
+                        StreamUpdate::Tools(t) => {
+                            tools_used = t;
+                            let text = do_edit(&steps, &tools_used, &content);
+                            loop {
+                                match bot_clone.edit_message(&chat, &message_id_edit, &text).await {
+                                    Ok(_) => {
+                                        last_edit = Instant::now();
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        let error_str = e.to_string();
+                                        if is_message_not_modified_error(&error_str) {
+                                            last_edit = Instant::now();
+                                            break;
+                                        }
+                                        if let Some(secs) = extract_retry_after_seconds(&error_str) {
+                                            error!(error = %e, "Failed to edit message, retrying after {}s", secs);
+                                            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                                        } else {
+                                            error!(error = %e, "Failed to edit message");
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -264,18 +335,22 @@ impl AgentHandler {
 
             if !buffer.is_empty() {
                 content.push_str(&buffer);
-                loop {
-                    match bot_clone.edit_message(&chat, &message_id_edit, &content).await {
-                        Ok(_) => break,
-                        Err(e) => {
-                            let error_str = e.to_string();
-                            if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
-                                error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
-                                tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
-                            } else {
-                                error!(error = %e, "Failed to edit message");
-                                break;
-                            }
+            }
+            let text = do_edit(&steps, &tools_used, &content);
+            loop {
+                match bot_clone.edit_message(&chat, &message_id_edit, &text).await {
+                    Ok(_) => break,
+                    Err(e) => {
+                        let error_str = e.to_string();
+                        if is_message_not_modified_error(&error_str) {
+                            break;
+                        }
+                        if let Some(retry_secs) = extract_retry_after_seconds(&error_str) {
+                            error!(error = %e, "Failed to edit message, retrying after {}s", retry_secs);
+                            tokio::time::sleep(std::time::Duration::from_secs(retry_secs)).await;
+                        } else {
+                            error!(error = %e, "Failed to edit message");
+                            break;
                         }
                     }
                 }
@@ -287,9 +362,9 @@ impl AgentHandler {
             runner.as_ref(),
             &thread_id,
             question,
-            |chunk: &str| {
-                debug!(chunk_len = chunk.len(), preview = %chunk.chars().take(50).collect::<String>(), "Received stream chunk");
-                let _ = tx.send(chunk.to_string());
+            |update: StreamUpdate| {
+                debug!(?update, "Stream update");
+                let _ = tx.send(update);
             },
             Some(&profile),
         )
@@ -299,13 +374,18 @@ impl AgentHandler {
         let _ = edit_handle.await;
 
         match stream_result {
-            Ok(final_reply) => {
-                let text = if final_reply.trim().is_empty() {
+            Ok(result) => {
+                let reply_text = if result.reply.trim().is_empty() {
                     MSG_EMPTY_REPLY_FALLBACK.to_string()
                 } else {
-                    final_reply.clone()
+                    result.reply
                 };
-                let _ = bot.edit_message(&message.chat, &message_id, &text).await;
+                let text = format_reply_with_process_and_tools(&result.steps, &result.tools_used, &reply_text);
+                if let Err(e) = bot.edit_message(&message.chat, &message_id, &text).await {
+                    if !is_message_not_modified_error(&e.to_string()) {
+                        error!(error = %e, "Failed to edit final message");
+                    }
+                }
                 Ok(HandlerResponse::Reply(text))
             }
             Err(e) => {

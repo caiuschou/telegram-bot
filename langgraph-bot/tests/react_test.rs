@@ -97,16 +97,20 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
     let (_dir, db_path) = temp_db_path();
     let (runner, _, _) = create_react_runner(&db_path).await?;
     let mut chunks: Vec<String> = vec![];
-    let reply = run_chat_stream(
+    let result = run_chat_stream(
         &runner,
         "stream_thread",
         "Say hello in one word",
-        |s| chunks.push(s.to_string()),
+        |update| {
+            if let langgraph_bot::StreamUpdate::Chunk(s) = update {
+                chunks.push(s);
+            }
+        },
         None,
     )
     .await?;
 
-    assert!(!reply.is_empty(), "stream should return non-empty reply");
+    assert!(!result.reply.is_empty(), "stream should return non-empty reply");
     assert!(!chunks.is_empty(), "on_chunk should be called at least once");
     Ok(())
 }
@@ -121,7 +125,7 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
 
     let (_dir, db_path) = temp_db_path();
     let (runner, _, _) = create_react_runner(&db_path).await?;
-    let reply = run_chat_stream(
+    let result = run_chat_stream(
         &runner,
         "stream_final_thread",
         "Reply with exactly: ok",
@@ -133,7 +137,7 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
     let state = get_react_state_from_checkpointer(&db_path, "stream_final_thread").await?;
     let from_state = last_assistant_content(&state);
     assert_eq!(
-        reply, from_state,
+        result.reply, from_state,
         "run_chat_stream return should match last assistant content in checkpoint"
     );
     Ok(())

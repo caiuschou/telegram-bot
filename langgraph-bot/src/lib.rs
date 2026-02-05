@@ -27,20 +27,23 @@ pub use load::{
     seed_messages_to_messages, seed_messages_to_messages_with_stats,
     seed_messages_to_messages_with_user_info, seed_messages_to_messages_with_user_info_with_stats,
 };
-pub use react::{create_react_runner, last_assistant_content, print_runtime_info, ReactRunner, UserProfile};
+pub use react::{
+    create_react_runner, last_assistant_content, print_runtime_info, ChatStreamResult, ReactRunner,
+    StreamUpdate, UserProfile,
+};
 pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 
 pub use telegram_handler::AgentHandler;
 
-/// Runs one chat turn with streaming: `on_chunk` is called for each LLM token; returns final reply.
+/// Runs one chat turn with streaming: `on_update` is called for each chunk and when steps/tools change; returns final result.
 pub async fn run_chat_stream(
     runner: &ReactRunner,
     thread_id: &str,
     content: &str,
-    on_chunk: impl FnMut(&str) + Send,
+    on_update: impl FnMut(StreamUpdate) + Send,
     user_profile: Option<&UserProfile>,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<ChatStreamResult> {
     runner
-        .run_chat_stream(thread_id, content, on_chunk, user_profile)
+        .run_chat_stream(thread_id, content, on_update, user_profile)
         .await
 }
