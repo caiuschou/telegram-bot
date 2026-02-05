@@ -110,6 +110,7 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
             }
         },
         None,
+        false,
     )
     .await?;
 
@@ -134,6 +135,7 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
         "Reply with exactly: ok",
         |_| {},
         None,
+        false,
     )
     .await?;
 

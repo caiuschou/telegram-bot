@@ -101,6 +101,7 @@ async fn non_trigger_returns_continue() {
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         "正在思考…".to_string(),
+        db_path,
     ));
 
     let msg = create_test_message(12345, 1, "Just a regular message without @mention or reply");
@@ -135,6 +136,7 @@ async fn mention_triggers_processing() {
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         "正在思考…".to_string(),
+        db_path,
     ));
 
     let msg = create_test_message(12345, 1, "@test_bot hello");
@@ -178,6 +180,7 @@ async fn multiple_mentions_same_chat_queued() {
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         "正在思考…".to_string(),
+        db_path,
     ));
 
     let chat_id = 12345;
