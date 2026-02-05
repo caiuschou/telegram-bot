@@ -138,7 +138,10 @@ pub async fn build_bot_components(
         }
         _ => {
             info!("Using OpenAI embedding");
-            Arc::new(OpenAIEmbedding::with_api_key(emb_cfg.openai_api_key().to_string()))
+            Arc::new(OpenAIEmbedding::with_api_key_and_base_url(
+                emb_cfg.openai_api_key().to_string(),
+                emb_cfg.openai_base_url(),
+            ))
         }
     };
 

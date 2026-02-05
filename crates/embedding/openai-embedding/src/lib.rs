@@ -72,15 +72,28 @@ impl OpenAIEmbedding {
     /// * `api_key` - OpenAI API key. If empty, will try to read from OPENAI_API_KEY environment variable.
     /// * `model` - The embedding model to use (e.g., "text-embedding-3-small", "text-embedding-3-large").
     pub fn new(api_key: String, model: String) -> Self {
+        Self::new_with_base_url(api_key, model, None)
+    }
+
+    /// Creates a new OpenAI embedding service with optional base URL (e.g. for Big Model or other OpenAI-compatible endpoints).
+    ///
+    /// When `base_url` is `Some`, requests are sent to that URL instead of the default OpenAI API.
+    pub fn new_with_base_url(
+        api_key: String,
+        model: String,
+        base_url: Option<&str>,
+    ) -> Self {
         let api_key = if api_key.is_empty() {
             std::env::var("OPENAI_API_KEY").unwrap_or_default()
         } else {
             api_key
         };
 
-        let client = Client::with_config(
-            async_openai::config::OpenAIConfig::new().with_api_key(api_key)
-        );
+        let mut openai_config = async_openai::config::OpenAIConfig::new().with_api_key(api_key);
+        if let Some(url) = base_url.filter(|s| !s.is_empty()) {
+            openai_config = openai_config.with_api_base(url);
+        }
+        let client = Client::with_config(openai_config);
 
         Self { client, model }
     }
@@ -90,6 +103,15 @@ impl OpenAIEmbedding {
     /// Uses `text-embedding-3-small` as the default model.
     pub fn with_api_key(api_key: String) -> Self {
         Self::new(api_key, "text-embedding-3-small".to_string())
+    }
+
+    /// Creates a new OpenAI embedding service with default model and optional base URL (e.g. OPENAI_BASE_URL for Big Model).
+    pub fn with_api_key_and_base_url(api_key: String, base_url: Option<&str>) -> Self {
+        Self::new_with_base_url(
+            api_key,
+            "text-embedding-3-small".to_string(),
+            base_url,
+        )
     }
 
     /// Sets a different embedding model.
