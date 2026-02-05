@@ -108,36 +108,53 @@ pub struct ReactRunner {
 
 /// Builds initial ReActState for one turn: from checkpoint (if thread_id + checkpointer) or fresh with system + user.
 ///
+/// When `content` is `Some(c)`: load checkpoint and append `Message::user(c)`, or create fresh state with system + user.
+/// When `content` is `None`: load checkpoint only (caller has already written the user message via e.g. `append_user_message_into_checkpointer`). If the loaded state has no leading system message, one is prepended.
+///
 /// Mirrors langgraph `build_react_initial_state` so we work with git dependency that may not export it.
 async fn build_initial_state_for_turn(
-    content: &str,
+    content: Option<&str>,
     checkpointer: &Arc<dyn Checkpointer<ReActState>>,
     config: &RunnableConfig,
     system_prompt: &str,
 ) -> Result<ReActState, CheckpointError> {
     let thread_id = config.thread_id.as_deref();
-    if thread_id.is_some() {
-        let tuple = checkpointer.get_tuple(config).await?;
-        if let Some((checkpoint, _)) = tuple {
-            let mut state = checkpoint.channel_values.clone();
-            state.messages.push(Message::user(content.to_string()));
-            state.tool_calls = vec![];
-            state.tool_results = vec![];
-            // Reset turn_count so each user message gets up to MAX_REACT_TURNS rounds (e.g. 10).
-            // Otherwise a long-lived thread would hit the limit and never run a second Think after tools.
-            state.turn_count = 0;
-            return Ok(state);
+    if let Some(content_str) = content {
+        if thread_id.is_some() {
+            let tuple = checkpointer.get_tuple(config).await?;
+            if let Some((checkpoint, _)) = tuple {
+                let mut state = checkpoint.channel_values.clone();
+                state.messages.push(Message::user(content_str.to_string()));
+                state.tool_calls = vec![];
+                state.tool_results = vec![];
+                state.turn_count = 0;
+                return Ok(state);
+            }
         }
+        return Ok(ReActState {
+            messages: vec![
+                Message::system(system_prompt),
+                Message::user(content_str.to_string()),
+            ],
+            tool_calls: vec![],
+            tool_results: vec![],
+            turn_count: 0,
+        });
     }
-    Ok(ReActState {
-        messages: vec![
-            Message::system(system_prompt),
-            Message::user(content.to_string()),
-        ],
-        tool_calls: vec![],
-        tool_results: vec![],
-        turn_count: 0,
-    })
+    // content is None: user message already in checkpoint; load and optionally prepend system.
+    let tuple = checkpointer.get_tuple(config).await?;
+    let mut state = tuple
+        .map(|(cp, _)| cp.channel_values)
+        .unwrap_or_else(ReActState::default);
+    let needs_system = state
+        .messages
+        .first()
+        .map(|m| !matches!(m, Message::System(_)))
+        .unwrap_or(true);
+    if needs_system {
+        state.messages.insert(0, Message::system(system_prompt.to_string()));
+    }
+    Ok(state)
 }
 
 /// Returns the content of the last Assistant message in `state`, or empty string if none.
@@ -499,12 +516,15 @@ pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
 impl ReactRunner {
     /// Streams one turn: builds initial state, runs graph with Messages + Values + Tasks modes,
     /// calls `on_update` for each chunk (Chunk), and when steps/tools change (Steps, Tools); returns final result.
+    ///
+    /// When `user_message_already_in_checkpoint` is true, the user message is not appended again (caller has already written it via e.g. `append_user_message_into_checkpointer`).
     pub async fn run_chat_stream(
         &self,
         thread_id: &str,
         content: &str,
         mut on_update: impl FnMut(StreamUpdate) + Send,
         user_profile: Option<&UserProfile>,
+        user_message_already_in_checkpoint: bool,
     ) -> Result<ChatStreamResult> {
         let mut config = RunnableConfig::default();
         config.thread_id = Some(thread_id.to_string());
@@ -517,8 +537,13 @@ impl ReactRunner {
             .map(|p| format!("{}\n\n{}", base_prompt, p.to_system_content()))
             .unwrap_or_else(|| base_prompt.to_string());
 
+        let content_opt = if user_message_already_in_checkpoint {
+            None
+        } else {
+            Some(content)
+        };
         let state = build_initial_state_for_turn(
-            content,
+            content_opt,
             &self.checkpointer,
             &config,
             &system_prompt,

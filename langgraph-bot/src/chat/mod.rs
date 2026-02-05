@@ -42,10 +42,11 @@ pub async fn run_one_turn(
                 }
             },
             None,
+            false,
         )
         .await
     } else {
-        run_chat_stream(runner, thread_id, content, |_| {}, None).await
+        run_chat_stream(runner, thread_id, content, |_| {}, None, false).await
     };
     match result {
         Ok(chat_result) => {

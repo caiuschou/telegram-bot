@@ -42,6 +42,7 @@ pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result
             bot,
             bot_username,
             placeholder_message.clone(),
+            db_path.clone(),
         ));
         handler
     })

@@ -92,6 +92,35 @@ pub async fn get_react_state_from_checkpointer(
     Ok(tuple.map(|(cp, _)| cp.channel_values).unwrap_or_default())
 }
 
+/// Appends a single user message to the checkpoint for `thread_id`. Creates a new checkpoint with that message if none exists.
+///
+/// **Use case**: Persist the user message to short-term memory as soon as it is received (e.g. in the Telegram handler), before running the graph.
+///
+/// **Interaction**: Loads state via `get_react_state_from_checkpointer`, pushes `Message::user(content)`, resets `tool_calls`/`tool_results`/`turn_count`, then `checkpointer.put`.
+pub async fn append_user_message_into_checkpointer(
+    db_path: impl AsRef<Path>,
+    thread_id: &str,
+    content: &str,
+) -> Result<String> {
+    let checkpointer = make_checkpointer(db_path)?;
+    let config = make_config(thread_id);
+    let tuple = checkpointer
+        .get_tuple(&config)
+        .await
+        .map_err(|e| anyhow::anyhow!("checkpoint get_tuple: {}", e))?;
+    let mut state: ReActState = tuple.map(|(cp, _)| cp.channel_values).unwrap_or_default();
+    state.messages.push(Message::user(content.to_string()));
+    state.tool_calls = vec![];
+    state.tool_results = vec![];
+    state.turn_count = 0;
+    let checkpoint = Checkpoint::from_state(state, CheckpointSource::Input, 0);
+    let id = checkpointer
+        .put(&config, &checkpoint)
+        .await
+        .map_err(|e| anyhow::anyhow!("checkpoint put: {}", e))?;
+    Ok(id)
+}
+
 /// Merges `messages_to_prepend` into the existing checkpoint for `thread_id`: prepends messages that are not already present (by content), preserves tool state.
 ///
 /// **Use case**: Sync long-term history from DB into short-term (checkpoint) without dropping current conversation. Dedup is by message content (User/Assistant); System messages are not deduped.

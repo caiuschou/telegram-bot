@@ -15,9 +15,9 @@ mod run;
 
 pub use run::run_telegram;
 pub use checkpoint::{
-    format_thread_summary, get_messages_from_checkpointer, get_react_state_from_checkpointer,
-    import_messages_into_checkpointer, list_thread_ids, merge_messages_into_checkpointer,
-    verify_messages_format, verify_messages_integrity,
+    append_user_message_into_checkpointer, format_thread_summary, get_messages_from_checkpointer,
+    get_react_state_from_checkpointer, import_messages_into_checkpointer, list_thread_ids,
+    merge_messages_into_checkpointer, verify_messages_format, verify_messages_integrity,
 };
 pub use format::user_info_prefix;
 pub use load::{
@@ -37,14 +37,23 @@ pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_tel
 pub use telegram_handler::AgentHandler;
 
 /// Runs one chat turn with streaming: `on_update` is called for each chunk and when steps/tools change; returns final result.
+///
+/// When `user_message_already_in_checkpoint` is true, the user message is not appended again (caller has already written it to short-term memory, e.g. via `append_user_message_into_checkpointer`).
 pub async fn run_chat_stream(
     runner: &ReactRunner,
     thread_id: &str,
     content: &str,
     on_update: impl FnMut(StreamUpdate) + Send,
     user_profile: Option<&UserProfile>,
+    user_message_already_in_checkpoint: bool,
 ) -> anyhow::Result<ChatStreamResult> {
     runner
-        .run_chat_stream(thread_id, content, on_update, user_profile)
+        .run_chat_stream(
+            thread_id,
+            content,
+            on_update,
+            user_profile,
+            user_message_already_in_checkpoint,
+        )
         .await
 }

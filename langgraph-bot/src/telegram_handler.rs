@@ -1,10 +1,12 @@
 //! Telegram handler: when user replies to the bot or @mentions, runs ReAct agent with stream and edits the same message.
 //!
 //! Uses `run_chat_stream`, per-thread queue (messages are queued per chat and processed serially), and user-facing error messages.
+//! On receive, the user message is written to short-term memory via `append_user_message_into_checkpointer` before running the agent.
 
-use crate::{run_chat_stream, StreamUpdate, UserProfile};
+use crate::{append_user_message_into_checkpointer, run_chat_stream, StreamUpdate, UserProfile};
 use crate::ReactRunner;
 use async_trait::async_trait;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use telegram_bot::{Bot, Handler, HandlerResponse, Message, Result};
@@ -64,22 +66,25 @@ pub struct AgentHandler {
     bot: Arc<dyn Bot>,
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     placeholder_message: String,
+    db_path: PathBuf,
     message_queues: dashmap::DashMap<String, tokio::sync::mpsc::UnboundedSender<(Message, String)>>,
 }
 
 impl AgentHandler {
-    /// Creates a new AgentHandler with the given runner, bot, and config.
+    /// Creates a new AgentHandler with the given runner, bot, config, and checkpoint DB path (used to write user messages to short-term memory on receive).
     pub fn new(
         runner: Arc<ReactRunner>,
         bot: Arc<dyn Bot>,
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         placeholder_message: String,
+        db_path: PathBuf,
     ) -> Self {
         Self {
             runner,
             bot,
             bot_username,
             placeholder_message,
+            db_path,
             message_queues: dashmap::DashMap::new(),
         }
     }
@@ -131,6 +136,7 @@ impl AgentHandler {
         let runner = self.runner.clone();
         let bot = self.bot.clone();
         let placeholder_message = self.placeholder_message.clone();
+        let db_path = self.db_path.clone();
 
         tokio::spawn(async move {
             while let Some((message, question)) = rx.recv().await {
@@ -145,6 +151,7 @@ impl AgentHandler {
                     &message,
                     &question,
                     &placeholder_message,
+                    &db_path,
                 ).await {
                     error!(error = %e, user_id = message.user.id, "Failed to process queued message");
                 }
@@ -160,6 +167,7 @@ impl AgentHandler {
         message: &Message,
         question: &str,
         placeholder_message: &str,
+        db_path: &std::path::Path,
     ) -> Result<HandlerResponse> {
         let thread_id = Self::thread_id(message);
 
@@ -361,6 +369,9 @@ impl AgentHandler {
             }
         });
 
+        if let Err(e) = append_user_message_into_checkpointer(db_path, &thread_id, question).await {
+            error!(error = %e, thread_id = %thread_id, "Failed to append user message to short-term memory");
+        }
         let profile = Self::user_profile_from_message(message);
         info!(
             thread_id = %thread_id,
@@ -377,6 +388,7 @@ impl AgentHandler {
                 let _ = tx.send(update);
             },
             Some(&profile),
+            true,
         )
         .await;
 
