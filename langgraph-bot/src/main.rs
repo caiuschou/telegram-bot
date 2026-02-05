@@ -33,8 +33,8 @@ async fn main() -> Result<()> {
             messages,
             db,
             thread_id,
-        } => commands::cmd_load(messages, &db, thread_id).await?,
-        Commands::Seed { db, thread_id } => commands::cmd_seed(&db, thread_id).await?,
+        } => commands::cmd_load(messages, &db, thread_id)?,
+        Commands::Seed { db, thread_id } => commands::cmd_seed(&db, thread_id)?,
     }
 
     Ok(())

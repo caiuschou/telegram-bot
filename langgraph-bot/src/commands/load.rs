@@ -1,4 +1,4 @@
-//! Load subcommand: resolve message source (JSON path or Telegram DB), import into checkpointer, print preview.
+//! Load subcommand: resolve message source (JSON path or Telegram DB), print preview. Does not import into checkpointer.
 //!
 //! When -m is not set: if TELEGRAM_MESSAGES_DB is set, load from that SQLite; else LANGGRAPH_MESSAGES_PATH (JSON).
 
@@ -9,8 +9,7 @@ use langgraph_bot::{
 };
 use std::path::PathBuf;
 
-use super::import_into_checkpointer;
-use super::memory::print_import_preview;
+use super::memory::print_messages_preview;
 
 const ENV_MESSAGES_PATH: &str = "LANGGRAPH_MESSAGES_PATH";
 const ENV_TELEGRAM_MESSAGES_DB: &str = "TELEGRAM_MESSAGES_DB";
@@ -67,10 +66,10 @@ pub fn resolve_messages_source(
     Ok((m, skipped, None))
 }
 
-/// Load subcommand: resolve message source, import into checkpointer, print preview.
-pub async fn cmd_load(
+/// Load subcommand: resolve message source, print preview. Does not import into checkpointer.
+pub fn cmd_load(
     messages_path: Option<PathBuf>,
-    db: &std::path::Path,
+    _db: &std::path::Path,
     thread_id: Option<String>,
 ) -> Result<()> {
     let (messages, skipped, resolved_thread_id) =
@@ -81,11 +80,10 @@ pub async fn cmd_load(
             skipped
         );
     }
-    let thread_id = resolved_thread_id
+    let _thread_id = resolved_thread_id
         .or(thread_id)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let id = import_into_checkpointer(db, &thread_id, &messages).await?;
-    println!("Loaded thread {} with checkpoint id: {}", thread_id, id);
-    print_import_preview(db, &thread_id, &messages).await?;
+    println!("Loaded {} messages (not imported into checkpoint)", messages.len());
+    print_messages_preview(&messages, 3);
     Ok(())
 }
