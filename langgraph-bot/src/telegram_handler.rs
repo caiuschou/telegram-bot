@@ -13,7 +13,6 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{error, info, instrument};
 
-const MSG_PLACEHOLDER: &str = "正在思考…";
 const MSG_SEND_FAILED: &str = "发送失败，请稍后再试。";
 const MSG_PROCESSING_FAILED: &str = "处理时出错，请稍后再试。";
 const MSG_BUSY: &str = "上一条还在处理中，请稍候。";

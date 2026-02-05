@@ -14,7 +14,7 @@ use cli::{Cli, Commands};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenvy::dotenv().ok();
+    dotenvy::from_filename(".env").ok();
     let cli = Cli::parse();
 
     match cli.command {

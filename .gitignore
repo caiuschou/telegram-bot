@@ -59,4 +59,4 @@ lcov.info
 sqlite::memory:
 
 # Lance / local data
-/data/
+/data/langgraph-rust
