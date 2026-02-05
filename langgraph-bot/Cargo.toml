@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-openai = { version = "0.32", features = ["chat-completion"] }
-langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite", "openai", "mcp"] }
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust" }
 seed-messages = { path = "../seed-messages" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tokio-stream = "0.1"
@@ -27,5 +27,6 @@ async-trait = "0.1"
 tracing = "0.1"
 
 [dev-dependencies]
-langgraph = { git = "https://github.com/caiuschou/langgraph-rust", features = ["sqlite", "openai", "mcp"] }
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust" }
 tempfile = "3"
+chrono = "0.4"

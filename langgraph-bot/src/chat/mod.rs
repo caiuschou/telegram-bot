@@ -71,7 +71,7 @@ pub async fn run_chat_loop(
     if verbose {
         std::env::set_var("RUST_LOG", "debug");
     }
-    let runner = create_react_runner(db).await?;
+    let (runner, _tool_summary, _memory_summary) = create_react_runner(db).await?;
 
     println!("ReAct Chat (type /help for commands, /exit to quit)");
     println!();

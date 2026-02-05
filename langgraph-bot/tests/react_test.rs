@@ -51,7 +51,7 @@ async fn create_react_runner_succeeds() -> Result<()> {
     }
 
     let (_dir, db_path) = temp_db_path();
-    let _runner = create_react_runner(&db_path).await?;
+    let (_runner, _, _) = create_react_runner(&db_path).await?;
     assert!(db_path.exists());
     Ok(())
 }
@@ -95,7 +95,7 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
     }
 
     let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
+    let (runner, _, _) = create_react_runner(&db_path).await?;
     let mut chunks: Vec<String> = vec![];
     let reply = run_chat_stream(
         &runner,
@@ -120,7 +120,7 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
     }
 
     let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
+    let (runner, _, _) = create_react_runner(&db_path).await?;
     let reply = run_chat_stream(
         &runner,
         "stream_final_thread",
