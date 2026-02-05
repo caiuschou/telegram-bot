@@ -60,3 +60,6 @@ sqlite::memory:
 
 # Lance / local data
 /data/langgraph-rust
+
+# Local third-party (do not commit)
+thridparty/
