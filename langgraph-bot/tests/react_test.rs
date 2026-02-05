@@ -5,8 +5,10 @@
 
 use anyhow::Result;
 use langgraph::Message;
+use langgraph::ReActState;
 use langgraph_bot::{
-    create_react_runner, get_react_state_from_checkpointer, run_chat, UserProfile,
+    create_react_runner, get_react_state_from_checkpointer, last_assistant_content,
+    run_chat_stream,
 };
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -16,6 +18,27 @@ fn temp_db_path() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("create temp dir");
     let path = dir.path().join("test_react.db");
     (dir, path)
+}
+
+/// **Test: create_react_runner without OPENAI_API_KEY returns a clear error.**
+#[tokio::test]
+async fn create_react_runner_fails_without_api_key() -> Result<()> {
+    let (_dir, db_path) = temp_db_path();
+    let key = std::env::var("OPENAI_API_KEY").ok();
+    std::env::remove_var("OPENAI_API_KEY");
+    let result = create_react_runner(&db_path).await;
+    if let Some(k) = key {
+        std::env::set_var("OPENAI_API_KEY", k);
+    }
+    match result {
+        Ok(_) => panic!("create_react_runner should fail without OPENAI_API_KEY"),
+        Err(e) => assert!(
+            e.to_string().contains("OPENAI_API_KEY"),
+            "error message should mention OPENAI_API_KEY, got: {}",
+            e
+        ),
+    }
+    Ok(())
 }
 
 /// **Test: ReactRunner can be created with valid DB path.**
@@ -33,114 +56,85 @@ async fn create_react_runner_succeeds() -> Result<()> {
     Ok(())
 }
 
-/// **Test: run_chat returns non-empty reply for simple message.**
-#[tokio::test]
-async fn run_chat_returns_reply() -> Result<()> {
-    // Skip if no API key
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return Ok(());
-    }
+// --- run_chat_stream and last_assistant_content (plan §6 stage 2) ---
 
-    let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
-    let reply = run_chat(&runner, "test_thread", "Hello", None).await?;
-    assert!(!reply.is_empty(), "Reply should not be empty");
-    Ok(())
-}
-
-/// **Test: Multiple chat turns persist state in same thread.**
-#[tokio::test]
-async fn run_chat_persists_state_across_turns() -> Result<()> {
-    // Skip if no API key
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return Ok(());
-    }
-
-    let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
-
-    let reply1 = run_chat(&runner, "persist_thread", "My name is Alice", None).await?;
-    assert!(!reply1.is_empty());
-
-    let reply2 = run_chat(&runner, "persist_thread", "What is my name?", None).await?;
-    assert!(!reply2.is_empty());
-    // Note: Full context verification requires checking checkpoint, not just reply content
-
-    Ok(())
-}
-
-/// **Test: Different threads maintain separate state.**
-#[tokio::test]
-async fn run_chat_separates_threads() -> Result<()> {
-    // Skip if no API key
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return Ok(());
-    }
-
-    let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
-
-    let _reply1 = run_chat(&runner, "thread_a", "I like cats", None).await?;
-    let _reply2 = run_chat(&runner, "thread_b", "I like dogs", None).await?;
-
-    // Both threads should work independently
-    let reply_a = run_chat(&runner, "thread_a", "What do I like?", None).await?;
-    let reply_b = run_chat(&runner, "thread_b", "What do I like?", None).await?;
-
-    assert!(!reply_a.is_empty());
-    assert!(!reply_b.is_empty());
-
-    Ok(())
-}
-
-/// **Test: Empty message returns some reply (even if error-like).**
-#[tokio::test]
-async fn run_chat_handles_empty_message() -> Result<()> {
-    // Skip if no API key
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return Ok(());
-    }
-
-    let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
-    let _reply = run_chat(&runner, "empty_thread", "", None).await?;
-    // Should not panic; reply may be empty or contain error message
-    Ok(())
-}
-
-/// **Test: run_chat with UserProfile injects a System message with user identity into checkpoint.**
-#[tokio::test]
-async fn run_chat_with_user_profile_injects_system_message() -> Result<()> {
-    if std::env::var("OPENAI_API_KEY").is_err() {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return Ok(());
-    }
-
-    let (_dir, db_path) = temp_db_path();
-    let runner = create_react_runner(&db_path).await?;
-    let profile = UserProfile {
-        user_id: "123".to_string(),
-        first_name: Some("Alice".to_string()),
-        last_name: Some("Smith".to_string()),
-        username: Some("alice".to_string()),
+/// **Test: last_assistant_content returns last Assistant message; empty when no Assistant.**
+#[test]
+fn last_assistant_content_helper() {
+    // No Assistant -> empty string
+    let state = ReActState {
+        messages: vec![Message::system("s"), Message::user("u")],
+        tool_calls: vec![],
+        tool_results: vec![],
+        turn_count: 0,
     };
+    assert_eq!(last_assistant_content(&state), "");
 
-    let _reply = run_chat(&runner, "profile_thread", "Hi", Some(&profile)).await?;
-    let state = get_react_state_from_checkpointer(&db_path, "profile_thread").await?;
-    let has_profile = state.messages.iter().any(|m| {
-        if let Message::System(s) = m {
-            s.starts_with("User profile:")
-        } else {
-            false
-        }
-    });
-    assert!(
-        has_profile,
-        "Checkpoint should contain User profile System message"
+    // Last is Assistant -> its content
+    let state = ReActState {
+        messages: vec![
+            Message::system("s"),
+            Message::user("u1"),
+            Message::Assistant("a".to_string()),
+            Message::user("u2"),
+            Message::Assistant("b".to_string()),
+        ],
+        tool_calls: vec![],
+        tool_results: vec![],
+        turn_count: 0,
+    };
+    assert_eq!(last_assistant_content(&state), "b");
+}
+
+/// **Test: run_chat_stream invokes on_chunk and returns non-empty final reply.**
+#[tokio::test]
+async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
+    if std::env::var("OPENAI_API_KEY").is_err() {
+        eprintln!("Skipping test: OPENAI_API_KEY not set");
+        return Ok(());
+    }
+
+    let (_dir, db_path) = temp_db_path();
+    let runner = create_react_runner(&db_path).await?;
+    let mut chunks: Vec<String> = vec![];
+    let reply = run_chat_stream(
+        &runner,
+        "stream_thread",
+        "Say hello in one word",
+        |s| chunks.push(s.to_string()),
+        None,
+    )
+    .await?;
+
+    assert!(!reply.is_empty(), "stream should return non-empty reply");
+    assert!(!chunks.is_empty(), "on_chunk should be called at least once");
+    Ok(())
+}
+
+/// **Test: run_chat_stream return value equals last assistant content in checkpoint.**
+#[tokio::test]
+async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
+    if std::env::var("OPENAI_API_KEY").is_err() {
+        eprintln!("Skipping test: OPENAI_API_KEY not set");
+        return Ok(());
+    }
+
+    let (_dir, db_path) = temp_db_path();
+    let runner = create_react_runner(&db_path).await?;
+    let reply = run_chat_stream(
+        &runner,
+        "stream_final_thread",
+        "Reply with exactly: ok",
+        |_| {},
+        None,
+    )
+    .await?;
+
+    let state = get_react_state_from_checkpointer(&db_path, "stream_final_thread").await?;
+    let from_state = last_assistant_content(&state);
+    assert_eq!(
+        reply, from_state,
+        "run_chat_stream return should match last assistant content in checkpoint"
     );
     Ok(())
 }
