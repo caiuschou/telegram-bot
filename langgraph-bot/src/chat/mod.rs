@@ -33,9 +33,12 @@ pub async fn run_one_turn(
             thread_id,
             content,
             |update| {
-                if let StreamUpdate::Chunk(s) = update {
-                    print!("{}", s);
-                    let _ = io::stdout().flush();
+                match update {
+                    StreamUpdate::Chunk(s) | StreamUpdate::ThinkChunk(s) => {
+                        print!("{}", s);
+                        let _ = io::stdout().flush();
+                    }
+                    _ => {}
                 }
             },
             None,

@@ -18,7 +18,7 @@ const MSG_EMPTY_REPLY_FALLBACK: &str = "已处理。（本次无文字回复）"
 const DEFAULT_EMPTY_MENTION: &str =
     "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
 
-/// Builds the final message shown to the user: optional 【过程】 and 【工具】 blocks, then the reply.
+/// Builds the final message shown to the user: optional 【过程】, 【工具】, 【思考】, then the reply.
 fn format_reply_with_process_and_tools(steps: &[String], tools_used: &[String], reply: &str) -> String {
     let mut parts = Vec::new();
     if !steps.is_empty() {
@@ -27,10 +27,14 @@ fn format_reply_with_process_and_tools(steps: &[String], tools_used: &[String], 
     if !tools_used.is_empty() {
         parts.push(format!("【工具】{}", tools_used.join(", ")));
     }
-    if parts.is_empty() {
-        return reply.to_string();
+    if parts.is_empty() && reply.is_empty() {
+        return String::new();
     }
-    parts.push(reply.to_string());
+    if !reply.is_empty() {
+        parts.push(format!("【思考】\n\n{}", reply));
+    } else if !parts.is_empty() {
+        parts.push("【思考】".to_string());
+    }
     parts.join("\n\n")
 }
 
@@ -247,7 +251,7 @@ impl AgentHandler {
 
                 if let Some(update) = opt_update {
                     match update {
-                        StreamUpdate::Chunk(s) => {
+                        StreamUpdate::Chunk(s) | StreamUpdate::ThinkChunk(s) => {
                             buffer.push_str(&s);
                             if buffer.len() >= EDIT_CHUNK_SIZE {
                                 content.push_str(&buffer);
@@ -358,6 +362,12 @@ impl AgentHandler {
         });
 
         let profile = Self::user_profile_from_message(message);
+        info!(
+            thread_id = %thread_id,
+            question_len = question.len(),
+            question_preview = %question.chars().take(60).collect::<String>(),
+            "run_chat_stream: invoking"
+        );
         let stream_result = run_chat_stream(
             runner.as_ref(),
             &thread_id,
@@ -376,8 +386,20 @@ impl AgentHandler {
         match stream_result {
             Ok(result) => {
                 let reply_text = if result.reply.trim().is_empty() {
+                    info!(
+                        thread_id = %thread_id,
+                        steps = ?result.steps,
+                        tools_used = ?result.tools_used,
+                        reply_len = result.reply.len(),
+                        "Agent completed with empty assistant reply; showing fallback message"
+                    );
                     MSG_EMPTY_REPLY_FALLBACK.to_string()
                 } else {
+                    info!(
+                        thread_id = %thread_id,
+                        reply_len = result.reply.len(),
+                        "run_chat_stream: success"
+                    );
                     result.reply
                 };
                 let text = format_reply_with_process_and_tools(&result.steps, &result.tools_used, &reply_text);

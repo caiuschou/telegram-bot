@@ -102,8 +102,11 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
         "stream_thread",
         "Say hello in one word",
         |update| {
-            if let langgraph_bot::StreamUpdate::Chunk(s) = update {
-                chunks.push(s);
+            match update {
+                langgraph_bot::StreamUpdate::Chunk(s) | langgraph_bot::StreamUpdate::ThinkChunk(s) => {
+                    chunks.push(s);
+                }
+                _ => {}
             }
         },
         None,

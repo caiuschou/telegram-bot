@@ -17,6 +17,7 @@ use langgraph::memory::{CheckpointError, Checkpointer};
 use langgraph::react_builder::{build_react_run_context, ReactBuildConfig};
 use langgraph::stream::{StreamEvent, StreamMode};
 use tokio_stream::StreamExt;
+use tracing::{debug, info};
 
 /// User profile for long-term identity: injected as a System message before each turn when provided.
 #[derive(Debug, Clone)]
@@ -42,14 +43,16 @@ pub struct ChatStreamResult {
 
 /// Incremental update during streaming: chunk of reply text, or current steps/tools for live header.
 ///
-/// Enables streaming the full message (process + tools + reply) in telegram_handler.
+/// Enables streaming the full message (process + tools + thinking + reply) in telegram_handler.
 #[derive(Debug, Clone)]
 pub enum StreamUpdate {
-    /// One chunk of assistant reply text (LLM token stream).
+    /// One chunk of assistant reply text from a non-think node (LLM token stream).
     Chunk(String),
+    /// One chunk of thinking content from the think node; streamed and shown under 【思考】.
+    ThinkChunk(String),
     /// Current ReAct steps so far (e.g. after each TaskStart).
     Steps(Vec<String>),
-    /// Current tools used so far (e.g. after Values with tool_calls).
+    /// Current tools used so far (e.g. after Values with tool_calls); shown as soon as known.
     Tools(Vec<String>),
 }
 
@@ -114,6 +117,9 @@ async fn build_initial_state_for_turn(
             state.messages.push(Message::user(content.to_string()));
             state.tool_calls = vec![];
             state.tool_results = vec![];
+            // Reset turn_count so each user message gets up to MAX_REACT_TURNS rounds (e.g. 10).
+            // Otherwise a long-lived thread would hit the limit and never run a second Think after tools.
+            state.turn_count = 0;
             return Ok(state);
         }
     }
@@ -414,6 +420,12 @@ impl ReactRunner {
             StreamMode::Values,
             StreamMode::Tasks,
         ]);
+        info!(
+            thread_id = %thread_id,
+            content_len = content.len(),
+            content_preview = %content.chars().take(80).collect::<String>(),
+            "run_chat_stream: starting"
+        );
         let mut stream = self.compiled.stream(state, Some(config), modes);
 
         let mut final_state: Option<ReActState> = None;
@@ -423,11 +435,33 @@ impl ReactRunner {
 
         while let Some(event) = stream.next().await {
             match &event {
-                StreamEvent::Messages { chunk, .. } => {
-                    on_update(StreamUpdate::Chunk(chunk.content.clone()));
+                StreamEvent::Messages { chunk, metadata } => {
+                    if metadata.langgraph_node == "think" {
+                        on_update(StreamUpdate::ThinkChunk(chunk.content.clone()));
+                    } else {
+                        on_update(StreamUpdate::Chunk(chunk.content.clone()));
+                    }
                 }
                 StreamEvent::Values(s) => {
                     final_state = Some(s.clone());
+                    let last_content = last_assistant_content(s);
+                    let last_msg_kind = s
+                        .messages
+                        .last()
+                        .map(|m| match m {
+                            Message::System(_) => "system",
+                            Message::User(_) => "user",
+                            Message::Assistant(_) => "assistant",
+                        })
+                        .unwrap_or("none");
+                    debug!(
+                        messages_len = s.messages.len(),
+                        last_msg_kind = last_msg_kind,
+                        last_assistant_len = last_content.len(),
+                        tool_calls_len = s.tool_calls.len(),
+                        turn_count = s.turn_count,
+                        "Stream: Values received"
+                    );
                     for tc in &s.tool_calls {
                         if !tc.name.is_empty() && tools_seen.insert(tc.name.clone()) {
                             tools_used.push(tc.name.clone());
@@ -437,6 +471,12 @@ impl ReactRunner {
                 }
                 StreamEvent::TaskStart { node_id } => {
                     steps.push(step_label(node_id));
+                    info!(
+                        node_id = %node_id,
+                        step_index = steps.len(),
+                        steps = ?steps,
+                        "Stream: node started"
+                    );
                     on_update(StreamUpdate::Steps(steps.clone()));
                 }
                 _ => {}
@@ -447,6 +487,15 @@ impl ReactRunner {
             .as_ref()
             .map(last_assistant_content)
             .unwrap_or_default();
+        let messages_len = final_state.as_ref().map(|s| s.messages.len()).unwrap_or(0);
+        info!(
+            steps_count = steps.len(),
+            reply_len = reply.len(),
+            reply_empty = reply.trim().is_empty(),
+            messages_len = messages_len,
+            tools_used = ?tools_used,
+            "Stream ended: final state summary"
+        );
         Ok(ChatStreamResult {
             reply,
             steps,
