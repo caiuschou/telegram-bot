@@ -195,8 +195,73 @@ pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<ReactRunne
     })
 }
 
-/// Prints nothing (stub).
-pub async fn print_runtime_info(_db_path: impl AsRef<Path>) -> Result<()> {
+/// Prints runtime configuration: checkpointer path, model, MCP info, etc.
+///
+/// Useful for troubleshooting the environment before running the bot.
+/// Reads configuration from environment variables (OPENAI_API_KEY, OPENAI_MODEL, etc.).
+pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
+    use std::fmt::Write;
+
+    let db_path = db_path.as_ref();
+    let mut output = String::new();
+
+    writeln!(output, "=== langgraph-bot Runtime Info ===").unwrap();
+
+    writeln!(output, "Checkpointer: {}", db_path.display()).unwrap();
+
+    let api_key = std::env::var("OPENAI_API_KEY");
+    if api_key.is_ok() {
+        writeln!(
+            output,
+            "OpenAI API Key: set (length: {})",
+            api_key.unwrap().len()
+        )
+        .unwrap();
+    } else {
+        writeln!(output, "OpenAI API Key: not set").unwrap();
+    }
+
+    let model = std::env::var("OPENAI_MODEL")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "gpt-4o-mini".to_string());
+    writeln!(output, "Model: {}", model).unwrap();
+
+    if let Ok(base_url) = std::env::var("OPENAI_BASE_URL") {
+        if !base_url.is_empty() {
+            writeln!(output, "OpenAI Base URL: {}", base_url).unwrap();
+        }
+    }
+
+    if let Ok(exa_url) = std::env::var("MCP_EXA_URL") {
+        if !exa_url.is_empty() {
+            writeln!(output, "MCP Exa URL: {}", exa_url).unwrap();
+            writeln!(
+                output,
+                "MCP Remote: {} {}",
+                std::env::var("MCP_REMOTE_CMD").unwrap_or_else(|_| "npx".to_string()),
+                std::env::var("MCP_REMOTE_ARGS").unwrap_or_else(|_| "-y mcp-remote".to_string())
+            )
+            .unwrap();
+        }
+    }
+
+    if let Ok(user_id) = std::env::var("USER_ID") {
+        writeln!(output, "User ID: {}", user_id).unwrap();
+    }
+
+    if let Ok(exa_key) = std::env::var("EXA_API_KEY") {
+        writeln!(
+            output,
+            "Exa API Key: set (length: {})",
+            exa_key.len()
+        )
+        .unwrap();
+    }
+
+    writeln!(output, "==================================").unwrap();
+
+    println!("{}", output);
     Ok(())
 }
 
