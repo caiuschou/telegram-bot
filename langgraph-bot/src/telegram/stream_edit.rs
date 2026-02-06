@@ -33,11 +33,15 @@ struct EditTarget<'a> {
 
 // ---------- Formatting ----------
 
-/// Builds the final message shown to the user: optional 【过程】, 【工具】, 【思考】, then the reply.
+/// Builds the final message shown to the user: optional 【过程】, 【工具】, then reply (under 【思考】 only when it is real assistant content).
+///
+/// When `reply_is_fallback` is true, the reply is the empty-reply fallback (e.g. "已处理。（本次无文字回复）");
+/// it is shown after 【过程】/【工具】 without a "【思考】" header so we don't label the fallback as thinking.
 pub fn format_reply_with_process_and_tools(
     steps: &[String],
     tools_used: &[String],
     reply: &str,
+    reply_is_fallback: bool,
 ) -> String {
     let mut parts = Vec::new();
     if !steps.is_empty() {
@@ -50,7 +54,11 @@ pub fn format_reply_with_process_and_tools(
         return String::new();
     }
     if !reply.is_empty() {
-        parts.push(format!("【思考】\n\n{}", reply));
+        if reply_is_fallback {
+            parts.push(reply.to_string());
+        } else {
+            parts.push(format!("【思考】\n\n{}", reply));
+        }
     } else if !parts.is_empty() {
         parts.push("【思考】".to_string());
     }
@@ -114,7 +122,7 @@ async fn send_edit(
     content: &str,
     last_edit: &mut Instant,
 ) {
-    let text = format_reply_with_process_and_tools(steps, tools_used, content);
+    let text = format_reply_with_process_and_tools(steps, tools_used, content, false);
     edit_message_with_retry(target, &text).await;
     *last_edit = Instant::now();
 }

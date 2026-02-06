@@ -235,6 +235,7 @@ impl AgentHandler {
                 tools_used = ?result.tools_used,
                 reply_len = result.reply.len(),
                 fallback = %fallback,
+                empty_reply_reason = ?result.empty_reply_reason,
                 "Agent completed with empty assistant reply; showing fallback message"
             );
             fallback.to_string()
@@ -315,8 +316,14 @@ impl AgentHandler {
 
         match stream_result {
             Ok(result) => {
+                let reply_is_fallback = result.reply.trim().is_empty();
                 let reply_text = Self::pick_reply_text(&result, &thread_id);
-                let text = format_reply_with_process_and_tools(&result.steps, &result.tools_used, &reply_text);
+                let text = format_reply_with_process_and_tools(
+                    &result.steps,
+                    &result.tools_used,
+                    &reply_text,
+                    reply_is_fallback,
+                );
                 Self::apply_final_edit(bot, &message.chat, &message_id, &text).await;
                 Ok(HandlerResponse::Reply(text))
             }

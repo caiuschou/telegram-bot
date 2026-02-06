@@ -44,6 +44,8 @@ pub struct ChatStreamResult {
     pub steps: Vec<String>,
     /// Tool names invoked in this turn (deduplicated, order preserved).
     pub tools_used: Vec<String>,
+    /// When `reply` is empty, short reason for logging (e.g. no final state, or last assistant message had no text).
+    pub empty_reply_reason: Option<String>,
 }
 
 /// Incremental update during streaming: chunk of reply text, or current steps/tools for live header.
@@ -570,7 +572,7 @@ impl ReactRunner {
                 )
             })
             .unwrap_or_else(|| base_prompt.to_string());
-        system_prompt.push_str("\n\nAlways provide a brief natural language reply to the user after using any tool (e.g. 已记住, Done). Never end a turn with only tool execution and no text.");
+        system_prompt.push_str("\n\nAlways reply to the user with at least one sentence in natural language. This applies to every turn: simple greetings (e.g. 你好, hello) deserve a short greeting or acknowledgment; after using tools, add a brief summary (e.g. 已记住, Done). Never end a turn with empty text or only tool execution.");
 
         let content_opt = if user_message_already_in_checkpoint {
             None
@@ -659,18 +661,39 @@ impl ReactRunner {
             .map(last_assistant_content)
             .unwrap_or_default();
         let messages_len = final_state.as_ref().map(|s| s.messages.len()).unwrap_or(0);
+        let empty_reply_reason = if reply.trim().is_empty() {
+            let reason = match &final_state {
+                None => "stream_ended_without_final_state".to_string(),
+                Some(s) => {
+                    let has_assistant = s
+                        .messages
+                        .iter()
+                        .any(|m| matches!(m, Message::Assistant(_)));
+                    if !has_assistant {
+                        "no_assistant_message_in_final_state".to_string()
+                    } else {
+                        "last_assistant_message_empty_text".to_string()
+                    }
+                }
+            };
+            Some(reason)
+        } else {
+            None
+        };
         info!(
             steps_count = steps.len(),
             reply_len = reply.len(),
             reply_empty = reply.trim().is_empty(),
             messages_len = messages_len,
             tools_used = ?tools_used,
+            empty_reply_reason = ?empty_reply_reason,
             "Stream ended: final state summary"
         );
         Ok(ChatStreamResult {
             reply,
             steps,
             tools_used,
+            empty_reply_reason,
         })
     }
 
