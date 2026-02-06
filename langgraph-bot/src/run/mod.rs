@@ -3,7 +3,8 @@
 use anyhow::Result;
 use std::sync::Arc;
 use langgraph::ConfigSection;
-use telegram_bot::{load_config, run_bot, TelegramBot};
+use telegram_bot::{load_config, TelegramBot};
+use telegram_llm_bot::run_bot_with_custom_handler;
 use crate::{AgentHandler, create_react_runner, ReactRunner};
 
 /// Runs the Telegram bot with ReAct agent. Config from env; `token` overrides BOT_TOKEN if provided.
@@ -18,7 +19,7 @@ pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result
     let runner: Arc<ReactRunner> = Arc::new(runner);
     let placeholder_message = "正在思考…".to_string();
 
-    run_bot(config, move |_config, components| {
+    run_bot_with_custom_handler(config, move |_config, components| {
         let memory_line: String = memory_summary
             .entries()
             .into_iter()

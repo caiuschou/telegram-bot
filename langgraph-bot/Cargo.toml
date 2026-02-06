@@ -10,7 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-openai = { version = "0.32", features = ["chat-completion"] }
-langgraph = { git = "https://github.com/caiuschou/langgraph-rust" }
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust", branch = "main" }
 seed-messages = { path = "../seed-messages" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tokio-stream = "0.1"
@@ -22,11 +22,12 @@ uuid = { version = "1", features = ["v4"] }
 dotenvy = "0.15"
 rusqlite = { version = "0.31", features = ["bundled"] }
 telegram-bot = { path = "../telegram-bot" }
+telegram-llm-bot = { path = "../telegram-llm-bot" }
 dashmap = "5"
 async-trait = "0.1"
 tracing = "0.1"
 
 [dev-dependencies]
-langgraph = { git = "https://github.com/caiuschou/langgraph-rust" }
+langgraph = { git = "https://github.com/caiuschou/langgraph-rust", branch = "main" }
 tempfile = "3"
 chrono = "0.4"
