@@ -17,7 +17,7 @@ pub mod tools;
 pub mod telegram;
 mod run;
 
-pub use run::run_telegram;
+pub use run::{build_run_telegram_handler, run_telegram};
 pub use checkpoint::{
     append_user_message_into_checkpointer, format_thread_summary, get_messages_from_checkpointer,
     get_react_state_from_checkpointer, import_messages_into_checkpointer, list_thread_ids,
