@@ -19,6 +19,7 @@ use super::stream_edit::{format_reply_with_process_and_tools, is_message_not_mod
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use telegram_bot::mention;
 use telegram_bot::{Bot, Chat, Handler, HandlerResponse, Message, Result};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -71,31 +72,9 @@ impl AgentHandler {
         }
     }
 
-    fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
-        text.contains(&format!("@{}", bot_username))
-    }
-
-    fn extract_question(&self, text: &str, bot_username: &str) -> String {
-        text.replace(&format!("@{}", bot_username), "")
-            .trim()
-            .to_string()
-    }
-
-    /// Returns the user question if the message triggers the agent (reply-to-bot or @mention); otherwise `None`. Used by [`ensure_trigger_question`](Self::ensure_trigger_question) and tests.
+    /// Returns the user question if the message triggers the agent (reply-to-bot or @mention); otherwise `None`. Used by [`ensure_trigger_question`](Self::ensure_trigger_question) and tests. Delegates to [`telegram_bot::mention::get_question`].
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
-        if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
-            return Some(message.content.clone());
-        }
-        if let Some(username) = bot_username {
-            if self.is_bot_mentioned(&message.content, username) {
-                let q = self.extract_question(&message.content, username);
-                if !q.is_empty() {
-                    return Some(q);
-                }
-                return Some(DEFAULT_EMPTY_MENTION.to_string());
-            }
-        }
-        None
+        mention::get_question(message, bot_username, Some(DEFAULT_EMPTY_MENTION))
     }
 
     /// **Entry point.** Thread ID for checkpoint: one conversation per chat (private or group). v1 uses chat_id.
