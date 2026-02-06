@@ -11,7 +11,7 @@ use telegram_bot::{
     memory::MemoryStore,
 };
 
-use crate::handlers::SyncLLMHandler;
+use crate::handlers::InlineLLMHandler;
 
 /// Builds the LLM handler from config and components.
 pub(crate) fn build_llm_handler(
@@ -55,7 +55,7 @@ pub(crate) fn build_llm_handler(
     let bot_adapter: Arc<dyn telegram_bot::Bot> =
         Arc::new(TelegramBotAdapter::new(components.teloxide_bot.clone()));
 
-    let handler = Arc::new(SyncLLMHandler::new(
+    let handler = Arc::new(InlineLLMHandler::new(
         components.bot_username.clone(),
         llm_client,
         bot_adapter,

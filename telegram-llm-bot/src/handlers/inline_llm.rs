@@ -1,4 +1,4 @@
-//! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so later handlers (e.g. memory) can save the reply in `after()`.
+//! Inline LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so later handlers (e.g. memory) can save the reply in `after()`.
 
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use telegram_bot::mention;
@@ -34,11 +34,11 @@ fn log_messages_submitted_to_llm(messages: &[ChatMessage]) {
     }
 }
 
-/// Synchronous LLM handler: when the message is an LLM query (user replies to the bot's message, or @mentions the bot), builds context, calls the LLM, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so later handlers can persist it in `after()` (e.g. memory handler).
+/// Inline LLM handler: when the message is an LLM query (user replies to the bot's message, or @mentions the bot), builds context, calls the LLM, sends the reply to Telegram, and returns `HandlerResponse::Reply(response_text)` so later handlers can persist it in `after()` (e.g. memory handler).
 ///
 /// **External interactions:** Bot trait (send/edit), MessageRepository (log), MemoryStore (context build), EmbeddingService (semantic search), LlmClient (LLM).
 #[derive(Clone)]
-pub struct SyncLLMHandler {
+pub struct InlineLLMHandler {
     pub(crate) bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     pub(crate) llm_client: Arc<dyn LlmClient>,
     pub(crate) bot: Arc<dyn CoreBot>,
@@ -59,14 +59,10 @@ pub struct SyncLLMHandler {
     pub(crate) edit_interval_secs: u64,
 }
 
-impl SyncLLMHandler {
-    /// Default "question" when the user only @-mentions with no text; LLM is asked to greet and invite a question.
-    pub const DEFAULT_EMPTY_MENTION_QUESTION: &str =
-        "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
-
+impl InlineLLMHandler {
     // ---------- Construction ----------
 
-    /// Builds a SyncLLMHandler with the given dependencies and config (limits, streaming, edit interval).
+    /// Builds an InlineLLMHandler with the given dependencies and config (limits, streaming, edit interval).
     pub fn new(
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         llm_client: Arc<dyn LlmClient>,
@@ -118,10 +114,10 @@ impl SyncLLMHandler {
     }
 
     /// Resolves the user question: when replying to bot use current content; when @mention with non-empty text use extracted content;
-    /// when @mention but empty use DEFAULT_EMPTY_MENTION_QUESTION so bot still replies; otherwise None.
+    /// when @mention but empty use [`mention::DEFAULT_EMPTY_MENTION_PROMPT`] so bot still replies; otherwise None.
     /// External: uses Message (telegram_bot) and [`telegram_bot::mention::get_question`]. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
-        mention::get_question(message, bot_username, Some(Self::DEFAULT_EMPTY_MENTION_QUESTION))
+        mention::get_question(message, bot_username, Some(mention::DEFAULT_EMPTY_MENTION_PROMPT))
     }
 
     // ---------- Context & messages for AI ----------
@@ -378,13 +374,13 @@ impl SyncLLMHandler {
 }
 
 #[async_trait]
-impl Handler for SyncLLMHandler {
+impl Handler for InlineLLMHandler {
     #[instrument(skip(self, message))]
     async fn handle(&self, message: &Message) -> Result<HandlerResponse> {
         info!(
             user_id = message.user.id,
             chat_id = message.chat.id,
-            "step: SyncLLMHandler handle start"
+            "step: InlineLLMHandler handle start"
         );
 
         let bot_username = self.get_bot_username().await;
@@ -392,9 +388,9 @@ impl Handler for SyncLLMHandler {
             Some(q) => q,
             None => {
                 if bot_username.is_none() && message.content.contains('@') {
-                    info!(user_id = message.user.id, "step: SyncLLMHandler bot_username not set yet; skip");
+                    info!(user_id = message.user.id, "step: InlineLLMHandler bot_username not set yet; skip");
                 } else {
-                    info!(user_id = message.user.id, "step: SyncLLMHandler not LLM query (no reply-to-bot, no @mention), skip");
+                    info!(user_id = message.user.id, "step: InlineLLMHandler not LLM query (no reply-to-bot, no @mention), skip");
                 }
                 return Ok(HandlerResponse::Continue);
             }

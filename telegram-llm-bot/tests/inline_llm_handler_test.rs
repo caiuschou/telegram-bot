@@ -1,9 +1,9 @@
-//! Unit tests for SyncLLMHandler.
+//! Unit tests for InlineLLMHandler.
 //!
 //! Covers: is_bot_mentioned, extract_question, get_question.
 //! Uses in-memory store, MockEmbeddingService, MockBot, and OpenAILlmClient (dummy key); does not call Telegram or OpenAI.
 
-use telegram_llm_bot::SyncLLMHandler;
+use telegram_llm_bot::InlineLLMHandler;
 use llm_client::{LlmClient, OpenAILlmClient};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -49,8 +49,8 @@ impl CoreBot for MockBot {
     }
 }
 
-/// Builds a minimal SyncLLMHandler for unit testing (repo + in-memory store + mock embedding + MockBot + OpenAILlmClient; no real Telegram/OpenAI).
-async fn test_handler(bot_username: Option<&str>) -> SyncLLMHandler {
+/// Builds a minimal InlineLLMHandler for unit testing (repo + in-memory store + mock embedding + MockBot + OpenAILlmClient; no real Telegram/OpenAI).
+async fn test_handler(bot_username: Option<&str>) -> InlineLLMHandler {
     let username = Arc::new(tokio::sync::RwLock::new(
         bot_username.map(String::from),
     ));
@@ -62,7 +62,7 @@ async fn test_handler(bot_username: Option<&str>) -> SyncLLMHandler {
     let memory_store: Arc<dyn MemoryStore> = Arc::new(InMemoryVectorStore::new());
     let embedding_service: Arc<dyn EmbeddingService> = Arc::new(MockEmbeddingService);
 
-    SyncLLMHandler::new(
+    InlineLLMHandler::new(
         username,
         llm_client,
         bot,
@@ -176,13 +176,13 @@ async fn test_get_question_mention_with_non_empty_question() {
     assert_eq!(q, Some("tell me the time".to_string()));
 }
 
-/// **Test: @bot only (no text) returns DEFAULT_EMPTY_MENTION_QUESTION.**
+/// **Test: @bot only (no text) returns DEFAULT_EMPTY_MENTION_PROMPT.**
 #[tokio::test]
 async fn test_get_question_mention_only_returns_default() {
     let h = test_handler(Some("bot")).await;
     let msg = make_message("@bot", None, false);
     let q = h.get_question(&msg, Some("bot"));
-    assert_eq!(q.as_deref(), Some(SyncLLMHandler::DEFAULT_EMPTY_MENTION_QUESTION));
+    assert_eq!(q.as_deref(), Some(telegram_bot::mention::DEFAULT_EMPTY_MENTION_PROMPT));
 }
 
 #[tokio::test]

@@ -7,4 +7,4 @@ mod facade;
 pub mod handlers;
 
 pub use facade::*;
-pub use handlers::{LLMDetectionHandler, LLMQuery, SyncLLMHandler};
+pub use handlers::{InlineLLMHandler, LLMDetectionHandler, LLMQuery};

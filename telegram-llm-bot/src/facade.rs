@@ -1,6 +1,6 @@
 //! **Public API of this crate.** Only these 4 functions form the stable surface.
 //!
-//! Types such as [`SyncLLMHandler`], [`LLMDetectionHandler`], and [`LLMQuery`] are re-exported from the crate root for custom chains or queue-based usage.
+//! Types such as [`InlineLLMHandler`], [`LLMDetectionHandler`], and [`LLMQuery`] are re-exported from the crate root for custom chains or queue-based usage.
 
 use anyhow::Result;
 use telegram_bot::{run_bot_with_memory_stores, BotComponents, BotConfig};
