@@ -165,4 +165,4 @@ Telegram Message → AgentHandler → get_question()
 
 - [更新方案与计划](../docs/langgraph-bot-update-plan.md) - 完整的实施计划
 - [自测清单](self-test-checklist.md) - 验收标准与自测记录
-- [记忆系统](../docs/memory/README.md) - 短期/长期记忆方案
+- [记忆系统说明](../docs/langgraph-bot-memory.md) - 短期/长期记忆与向量库当前实现与设计差异
