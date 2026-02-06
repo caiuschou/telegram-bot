@@ -43,6 +43,7 @@ impl Handler for PersistenceHandler {
                 MessageDirection::Outgoing => "sent",
             }
             .to_string(),
+            Some(message.id.clone()),
         );
 
         self.repo.save(&record).await.map_err(|e| {

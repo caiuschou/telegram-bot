@@ -41,7 +41,8 @@ impl MessageRepository {
                 message_type TEXT NOT NULL,
                 content TEXT NOT NULL,
                 direction TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                telegram_message_id TEXT
             )
             "#,
         )
@@ -59,6 +60,16 @@ impl MessageRepository {
         )
         .execute(pool)
         .await?;
+
+        // Add telegram_message_id for existing DBs (no-op if column already exists).
+        let _ = sqlx::query("ALTER TABLE messages ADD COLUMN telegram_message_id TEXT")
+            .execute(pool)
+            .await;
+        let _ = sqlx::query(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_telegram_message_id ON messages(telegram_message_id) WHERE telegram_message_id IS NOT NULL",
+        )
+        .execute(pool)
+        .await;
 
         info!("Database tables created successfully");
         Ok(())
@@ -78,8 +89,8 @@ impl MessageRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO messages (id, user_id, chat_id, username, first_name, last_name, message_type, content, direction, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, user_id, chat_id, username, first_name, last_name, message_type, content, direction, created_at, telegram_message_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&message.id)
@@ -92,6 +103,7 @@ impl MessageRepository {
         .bind(&message.content)
         .bind(&message.direction)
         .bind(message.created_at)
+        .bind(&message.telegram_message_id)
         .execute(pool)
         .await?;
 
@@ -273,6 +285,32 @@ impl MessageRepository {
             message_id = %message_id,
             found = message.is_some(),
             "Message by id query returned"
+        );
+        Ok(message)
+    }
+
+    /// Returns the message with the given Telegram message id, if any (for dedup or lookup by transport id).
+    pub async fn get_message_by_telegram_id(
+        &self,
+        telegram_message_id: &str,
+    ) -> Result<Option<MessageRecord>, sqlx::Error> {
+        info!(
+            telegram_message_id = %telegram_message_id,
+            "Querying message by telegram_message_id"
+        );
+        let pool = self.pool_manager.pool();
+
+        let message = sqlx::query_as::<_, MessageRecord>(
+            "SELECT * FROM messages WHERE telegram_message_id = ?",
+        )
+        .bind(telegram_message_id)
+        .fetch_optional(pool)
+        .await?;
+
+        info!(
+            telegram_message_id = %telegram_message_id,
+            found = message.is_some(),
+            "Message by telegram_message_id query returned"
         );
         Ok(message)
     }

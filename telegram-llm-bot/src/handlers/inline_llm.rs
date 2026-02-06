@@ -215,6 +215,7 @@ impl InlineLLMHandler {
             "llm_response".to_string(),
             response.to_string(),
             "sent".to_string(),
+            None,
         );
         self.repo
             .save(&record)

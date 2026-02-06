@@ -29,10 +29,13 @@ pub struct MessageRecord {
     pub direction: String,
     /// When the message was stored.
     pub created_at: DateTime<Utc>,
+    /// Telegram message id (when persisted from Telegram); enables query/dedup by transport id.
+    pub telegram_message_id: Option<String>,
 }
 
 impl MessageRecord {
     /// Creates a new record with a generated UUID and current timestamp.
+    /// Set `telegram_message_id` when the record comes from a Telegram message so it can be queried or deduplicated by transport id.
     pub fn new(
         user_id: i64,
         chat_id: i64,
@@ -42,6 +45,7 @@ impl MessageRecord {
         message_type: String,
         content: String,
         direction: String,
+        telegram_message_id: Option<String>,
     ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -54,6 +58,7 @@ impl MessageRecord {
             content,
             direction,
             created_at: Utc::now(),
+            telegram_message_id,
         }
     }
 }

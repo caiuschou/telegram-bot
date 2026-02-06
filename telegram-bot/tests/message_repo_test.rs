@@ -35,6 +35,7 @@ async fn test_get_message_by_id_existing() {
         "text".to_string(),
         "Hello World".to_string(),
         "received".to_string(),
+        None,
     );
 
     repo.save(&test_message)
@@ -74,6 +75,56 @@ async fn test_get_message_by_id_not_found() {
     assert!(retrieved.is_none());
 }
 
+/// **Test: Get message by telegram_message_id when the message was saved with that id.**
+///
+/// **Setup:** Save one message with telegram_message_id set.
+/// **Action:** `get_message_by_telegram_id("tg_123")`.
+/// **Expected:** Returns `Some(message)` with matching telegram_message_id and content.
+#[tokio::test]
+async fn test_get_message_by_telegram_id_existing() {
+    let (_dir, database_url) = fresh_db_path();
+    let repo = MessageRepository::new(&database_url)
+        .await
+        .expect("Failed to create repository");
+
+    let msg = MessageRecord::new(
+        100,
+        200,
+        Some("u".to_string()),
+        None,
+        None,
+        "text".to_string(),
+        "Hello".to_string(),
+        "received".to_string(),
+        Some("tg_123".to_string()),
+    );
+    repo.save(&msg).await.expect("save");
+
+    let retrieved = repo
+        .get_message_by_telegram_id("tg_123")
+        .await
+        .expect("query");
+    assert!(retrieved.is_some());
+    let m = retrieved.unwrap();
+    assert_eq!(m.telegram_message_id.as_deref(), Some("tg_123"));
+    assert_eq!(m.content, "Hello");
+}
+
+/// **Test: Get message by telegram_message_id when no message has that id.**
+#[tokio::test]
+async fn test_get_message_by_telegram_id_not_found() {
+    let (_dir, database_url) = fresh_db_path();
+    let repo = MessageRepository::new(&database_url)
+        .await
+        .expect("Failed to create repository");
+
+    let retrieved = repo
+        .get_message_by_telegram_id("tg_nonexistent")
+        .await
+        .expect("query");
+    assert!(retrieved.is_none());
+}
+
 /// **Test: Get recent messages by chat returns correct count and order.**
 ///
 /// **Setup:** Save 15 messages in the same chat.
@@ -98,6 +149,7 @@ async fn test_get_recent_messages_by_chat() {
             "text".to_string(),
             format!("Message {}", i),
             "received".to_string(),
+            None,
         );
         repo.save(&message)
             .await
@@ -161,6 +213,7 @@ async fn test_get_recent_messages_by_chat_filtering() {
             "text".to_string(),
             format!("Chat1 Message {}", i),
             "received".to_string(),
+            None,
         );
         repo.save(&message1)
             .await
@@ -175,6 +228,7 @@ async fn test_get_recent_messages_by_chat_filtering() {
             "text".to_string(),
             format!("Chat2 Message {}", i),
             "received".to_string(),
+            None,
         );
         repo.save(&message2)
             .await
@@ -234,6 +288,7 @@ async fn test_get_stats_with_messages() {
         "text".to_string(),
         "hi".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -246,6 +301,7 @@ async fn test_get_stats_with_messages() {
         "text".to_string(),
         "bye".to_string(),
         "sent".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -258,6 +314,7 @@ async fn test_get_stats_with_messages() {
         "text".to_string(),
         "hello".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -291,6 +348,7 @@ async fn test_get_messages_with_query() {
             "text".to_string(),
             format!("msg {}", i),
             "received".to_string(),
+            None,
         ))
         .await
         .expect("save");
@@ -334,6 +392,7 @@ async fn test_search_messages() {
         "text".to_string(),
         "hello world".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -346,6 +405,7 @@ async fn test_search_messages() {
         "text".to_string(),
         "foo bar".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -358,6 +418,7 @@ async fn test_search_messages() {
         "text".to_string(),
         "hello again".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
@@ -391,6 +452,7 @@ async fn test_cleanup_old_messages() {
         "text".to_string(),
         "old".to_string(),
         "received".to_string(),
+        None,
     ))
     .await
     .expect("save");
