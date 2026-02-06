@@ -7,7 +7,7 @@ use anyhow::Result;
 use langgraph::Message;
 use langgraph::ReActState;
 use langgraph_bot::{
-    create_react_runner, get_react_state_from_checkpointer, last_assistant_content,
+    create_react_runner, last_assistant_content,
     run_chat_stream,
 };
 use std::path::PathBuf;
@@ -23,10 +23,9 @@ fn temp_db_path() -> (TempDir, PathBuf) {
 /// **Test: create_react_runner without OPENAI_API_KEY returns a clear error.**
 #[tokio::test]
 async fn create_react_runner_fails_without_api_key() -> Result<()> {
-    let (_dir, db_path) = temp_db_path();
     let key = std::env::var("OPENAI_API_KEY").ok();
     std::env::remove_var("OPENAI_API_KEY");
-    let result = create_react_runner(&db_path).await;
+    let result = create_react_runner().await;
     if let Some(k) = key {
         std::env::set_var("OPENAI_API_KEY", k);
     }
@@ -50,9 +49,7 @@ async fn create_react_runner_succeeds() -> Result<()> {
         return Ok(());
     }
 
-    let (_dir, db_path) = temp_db_path();
-    let (_runner, _, _) = create_react_runner(&db_path).await?;
-    assert!(db_path.exists());
+    let (_runner, _, _) = create_react_runner().await?;
     Ok(())
 }
 
@@ -94,8 +91,8 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
         return Ok(());
     }
 
-    let (_dir, db_path) = temp_db_path();
-    let (runner, _, _) = create_react_runner(&db_path).await?;
+    let (_dir, _db_path) = temp_db_path();
+    let (runner, _, _) = create_react_runner().await?;
     let mut chunks: Vec<String> = vec![];
     let result = run_chat_stream(
         &runner,
@@ -119,7 +116,7 @@ async fn run_chat_stream_invokes_on_chunk() -> Result<()> {
     Ok(())
 }
 
-/// **Test: run_chat_stream return value equals last assistant content in checkpoint.**
+/// **Test: run_chat_stream returns reply content (short-term memory disabled, so no checkpoint to compare).**
 #[tokio::test]
 async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
     if std::env::var("OPENAI_API_KEY").is_err() {
@@ -127,8 +124,7 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
         return Ok(());
     }
 
-    let (_dir, db_path) = temp_db_path();
-    let (runner, _, _) = create_react_runner(&db_path).await?;
+    let (runner, _, _) = create_react_runner().await?;
     let result = run_chat_stream(
         &runner,
         "stream_final_thread",
@@ -139,11 +135,10 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
     )
     .await?;
 
-    let state = get_react_state_from_checkpointer(&db_path, "stream_final_thread").await?;
-    let from_state = last_assistant_content(&state);
-    assert_eq!(
-        result.reply, from_state,
-        "run_chat_stream return should match last assistant content in checkpoint"
+    assert!(
+        result.reply.to_lowercase().contains("ok"),
+        "run_chat_stream return should contain expected reply: {:?}",
+        result.reply
     );
     Ok(())
 }
@@ -153,12 +148,10 @@ async fn run_chat_stream_returns_last_assistant_content() -> Result<()> {
 /// **Test: print_runtime_info prints configuration without errors.**
 #[tokio::test]
 async fn print_runtime_info_prints_config() -> Result<()> {
-    let (_dir, db_path) = temp_db_path();
-
     let original_model = std::env::var("OPENAI_MODEL").ok();
     std::env::set_var("OPENAI_MODEL", "test-model");
 
-    let result = langgraph_bot::print_runtime_info(&db_path).await;
+    let result = langgraph_bot::print_runtime_info().await;
 
     if let Some(m) = original_model {
         std::env::set_var("OPENAI_MODEL", m);
