@@ -3,7 +3,7 @@
 //! Types such as [`InlineLLMHandler`], [`LLMDetectionHandler`], and [`LLMQuery`] are re-exported from the crate root for custom chains or queue-based usage.
 
 use anyhow::Result;
-use telegram_bot::{run_bot_with_memory_stores, BotComponents, BotConfig};
+use telegram_bot::{run_bot_with_memory_stores, run_bot_with_memory_stores_build_only, BotComponents, BotConfig};
 
 use crate::assembly;
 
@@ -49,4 +49,27 @@ where
     telegram_bot::run_bot_with_memory_stores(config, memory_store, recent_store, make_handler)
         .await
         .map_err(|e| anyhow::anyhow!("{}", e))
+}
+
+/// Builds the same pipeline as [`run_bot_with_custom_handler`] (config, memory stores, components, make_handler) but does not start the REPL. Returns the handler chain for driving with fake messages in tests.
+///
+/// When `handler_bot_override` is `Some`, the handler will use that bot (e.g. a mock) instead of the real Telegram bot.
+pub async fn run_bot_with_custom_handler_build_only<F>(
+    config: BotConfig,
+    handler_bot_override: Option<std::sync::Arc<dyn telegram_bot::Bot>>,
+    make_handler: F,
+) -> Result<telegram_bot::HandlerChain>
+where
+    F: FnOnce(&BotConfig, BotComponents) -> std::sync::Arc<dyn telegram_bot::Handler>,
+{
+    let (memory_store, recent_store) = create_memory_stores_for_llm(&config).await?;
+    run_bot_with_memory_stores_build_only(
+        config,
+        memory_store,
+        recent_store,
+        handler_bot_override,
+        make_handler,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("{}", e))
 }
