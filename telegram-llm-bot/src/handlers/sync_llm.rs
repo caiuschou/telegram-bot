@@ -1,5 +1,6 @@
 //! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so later handlers (e.g. memory) can save the reply in `after()`.
 
+use super::mention;
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
 use async_trait::async_trait;
 use telegram_bot::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
@@ -105,17 +106,15 @@ impl SyncLLMHandler {
     // ---------- Question detection (reply-to-bot or @mention) ----------
 
     /// Returns true if the given text contains a @mention of the bot.
-    /// External: none (pure function). Public for integration tests in `tests/`.
+    /// Public for integration tests in `tests/`. Delegates to shared [`mention::is_bot_mentioned`].
     pub fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
-        text.contains(&format!("@{}", bot_username))
+        mention::is_bot_mentioned(text, bot_username)
     }
 
     /// Strips the bot @mention from text and returns the trimmed question. Used when processing @mention messages.
-    /// External: none (pure function). Public for integration tests in `tests/`.
+    /// Public for integration tests in `tests/`. Delegates to shared [`mention::extract_question`].
     pub fn extract_question(&self, text: &str, bot_username: &str) -> String {
-        text.replace(&format!("@{}", bot_username), "")
-            .trim()
-            .to_string()
+        mention::extract_question(text, bot_username)
     }
 
     /// Resolves the user question: when replying to bot use current content; when @mention with non-empty text use extracted content;
@@ -183,12 +182,6 @@ impl SyncLLMHandler {
     }
 
     /// Returns chat messages (system, user, assistant) for the LLM request.
-    ///
-    /// When context is available, returns `context.to_messages(true, question)` which already
-    /// contains system/user/assistant. When context is missing, returns a minimal user-only list.
-    /// If the message is a reply to a bot message, the replied message content is prepended as
-    /// assistant context so the AI understands what message the user is replying to.
-    /// Callers do not construct messages; they use this method's return value directly.
     async fn build_messages_for_llm(
         &self,
         user_id: &str,
@@ -201,10 +194,7 @@ impl SyncLLMHandler {
             None => vec![prompt::ChatMessage::user(question)],
         };
 
-        // If replying to bot message, insert the replied content as assistant message before user message
-        // so LLM knows which message the user is replying to
         if let Some(replied_content) = reply_to_content {
-            // Find last user message index and insert replied assistant message before it
             if let Some(last_user_idx) = messages.iter().rposition(|m| matches!(m.role, prompt::MessageRole::User)) {
                 messages.insert(last_user_idx, prompt::ChatMessage::assistant(replied_content));
                 info!(
@@ -253,7 +243,6 @@ impl SyncLLMHandler {
         Ok(())
     }
 
-    /// Sends a fallback message to the user and returns `HandlerResponse::Stop`. Used on errors.
     async fn send_fallback_and_stop(
         &self,
         message: &Message,
@@ -266,8 +255,6 @@ impl SyncLLMHandler {
     fn message_ids(message: &Message) -> (String, String) {
         (message.user.id.to_string(), message.chat.id.to_string())
     }
-
-    // ---------- Processing: normal (non-streaming) ----------
 
     async fn process_normal(&self, message: &Message, question: &str) -> Result<HandlerResponse> {
         let (user_id, conversation_id) = Self::message_ids(message);
@@ -308,8 +295,6 @@ impl SyncLLMHandler {
         Ok(HandlerResponse::Reply(response))
     }
 
-    // ---------- Processing: streaming ----------
-
     async fn process_streaming(&self, message: &Message, question: &str) -> Result<HandlerResponse> {
         let (user_id, conversation_id) = Self::message_ids(message);
         debug!(
@@ -334,7 +319,6 @@ impl SyncLLMHandler {
         );
         log_messages_submitted_to_llm(&messages);
 
-        // Send "thinking" placeholder; on failure notify user and stop.
         let message_id = match self
             .bot
             .send_message_and_return_id(&message.chat, &self.thinking_message)
@@ -354,8 +338,6 @@ impl SyncLLMHandler {
         let edit_interval_secs = self.edit_interval_secs;
         let last_edit = Arc::new(tokio::sync::Mutex::new(None::<Instant>));
 
-        // On each stream chunk: append to full_content and edit via Bot trait. Throttle edits so we do not exceed Telegram rate limits.
-        // Boxed callback for dyn LlmClient compatibility; move clones so the closure is 'static.
         let mut stream_callback: Box<StreamChunkCallback> = Box::new(move |chunk: StreamChunk| {
             let bot = bot.clone();
             let chat = chat.clone();
