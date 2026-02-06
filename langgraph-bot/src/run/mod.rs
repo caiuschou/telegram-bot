@@ -5,12 +5,17 @@ use std::sync::Arc;
 use langgraph::ConfigSection;
 use telegram_bot::{load_config, TelegramBot};
 use telegram_llm_bot::run_bot_with_custom_handler;
-use crate::{AgentHandler, create_react_runner, ReactRunner};
+use crate::telegram::{AgentHandler, EnsureLongTermMemoryHandler, EnsureThenAgentHandler};
+use crate::{create_react_runner, ReactRunner};
 
 /// Runs the Telegram bot with ReAct agent. Config from env; `token` overrides BOT_TOKEN if provided.
 /// The bot handles reply-to-bot and @mention messages, streams responses with placeholder → chunk updates → final reply.
 /// Short-term memory is disabled: each message is processed without conversation history.
 /// Tools config summary is logged inside the handler factory so it appears after tracing is initialized.
+///
+/// Logging is initialized by the telegram-bot runner: logs go to both stdout and the file given by
+/// the `LOG_FILE` env var (default `logs/telegram-bot.log`). Set `LOG_FILE=logs/langgraph-bot.log`
+/// in `.env` to use a dedicated log file for this bot.
 pub async fn run_telegram(token: Option<String>) -> Result<()> {
     let config = load_config(token)?;
 
@@ -37,12 +42,16 @@ pub async fn run_telegram(token: Option<String>) -> Result<()> {
         let bot_token = components.teloxide_bot.token().to_string();
         let bot = Arc::new(TelegramBot::new(bot_token));
         let bot_username = components.bot_username.clone();
-        let handler = Arc::new(AgentHandler::new(
+        let bot_user = components.bot_user.clone();
+        let ensure_handler = EnsureLongTermMemoryHandler::new(runner.clone(), bot_user.clone());
+        let agent_handler = AgentHandler::new(
             runner.clone(),
             bot,
             bot_username,
+            bot_user,
             placeholder_message.clone(),
-        ));
+        );
+        let handler = Arc::new(EnsureThenAgentHandler::new(ensure_handler, agent_handler));
         handler
     })
     .await

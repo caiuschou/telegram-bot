@@ -8,6 +8,7 @@ pub mod checkpoint;
 pub mod format;
 pub mod load;
 pub mod llm_request_logging;
+pub mod memory;
 pub mod noop_checkpointer;
 pub mod react;
 pub mod telegram_db;
@@ -30,6 +31,7 @@ pub use load::{
     seed_messages_to_messages, seed_messages_to_messages_with_stats,
     seed_messages_to_messages_with_user_info, seed_messages_to_messages_with_user_info_with_stats,
 };
+pub use memory::LongTermMemoryPolicy;
 pub use react::{
     create_react_runner, last_assistant_content, print_runtime_info, ChatStreamResult, ReactRunner,
     StreamUpdate, UserProfile,

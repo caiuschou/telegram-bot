@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 description = "Import messages into langgraph short-term memory (SqliteSaver checkpoint)"
 
+[features]
+default = []
+# Forward to telegram-llm-bot so MEMORY_STORE_TYPE=lance works. Run: cargo run -p langgraph-bot --features lance -- run
+lance = ["telegram-llm-bot/lance"]
+
 [[bin]]
 name = "langgraph-bot"
 path = "src/main.rs"

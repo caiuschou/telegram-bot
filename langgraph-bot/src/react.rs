@@ -7,6 +7,7 @@ use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::memory::LongTermMemoryPolicy;
 use crate::noop_checkpointer::NoOpCheckpointer;
 use langgraph::config::{MemoryConfigSummary, ToolConfigSummary};
 use langgraph::{
@@ -224,17 +225,24 @@ fn tool_error_handler_with_key_logging() -> ErrorHandlerFn {
 /// Requires `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, `OPENAI_BASE_URL`). Uses `ReactBuildConfig::from_env()` and `build_react_run_context` for checkpointer/tool_source/store; then builds the ReAct graph and compiles with checkpointer.
 /// Builds a minimal ReactBuildConfig for the builder: db_path, thread_id, and MCP-related env.
 /// OpenAI key/model are read in create_react_runner from env (git dependency may not expose them on config).
-/// Builds [`ToolConfigSummary`] from [`ReactBuildConfig`] for startup logging.
-/// Uses langgraph's public type so the format matches langgraph-cli verbose output.
-/// Memory is shown only when user_id is set and embedding is available (same as build_tool_source).
-fn tool_config_summary_from_build_config(config: &ReactBuildConfig) -> ToolConfigSummary {
+/// Single source for short-term / long-term / embedding flags derived from ReactBuildConfig.
+fn memory_flags_from_config(config: &ReactBuildConfig) -> (bool, bool, bool) {
+    let has_short_term = config.thread_id.is_some();
     let embedding_available = config
         .embedding_api_key
         .as_deref()
         .or(config.openai_api_key.as_deref())
         .map(|s| !s.is_empty())
         .unwrap_or(false);
-    let has_memory = config.user_id.is_some() && embedding_available;
+    let has_long_term = config.user_id.is_some() && embedding_available;
+    (has_short_term, has_long_term, embedding_available)
+}
+
+/// Builds [`ToolConfigSummary`] from [`ReactBuildConfig`] for startup logging.
+/// Uses langgraph's public type so the format matches langgraph-cli verbose output.
+/// Memory is shown only when user_id is set and embedding is available (same as build_tool_source).
+fn tool_config_summary_from_build_config(config: &ReactBuildConfig) -> ToolConfigSummary {
+    let (_has_short_term, has_memory, _embedding_available) = memory_flags_from_config(config);
     let has_exa = config.exa_api_key.is_some();
     let sources: Vec<String> = match (has_memory, has_exa) {
         (true, true) => vec!["memory".into(), "exa".into(), "web".into()],
@@ -253,14 +261,7 @@ fn tool_config_summary_from_build_config(config: &ReactBuildConfig) -> ToolConfi
 /// Builds [`MemoryConfigSummary`] from [`ReactBuildConfig`] for startup logging.
 /// Distinguishes short-term (checkpointer/sqlite) and long-term (store/vector) per langgraph-cli format.
 fn memory_config_summary_from_build_config(config: &ReactBuildConfig) -> MemoryConfigSummary {
-    let has_short_term = config.thread_id.is_some();
-    let embedding_available = config
-        .embedding_api_key
-        .as_deref()
-        .or(config.openai_api_key.as_deref())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    let has_long_term = config.user_id.is_some() && embedding_available;
+    let (has_short_term, has_long_term, _embedding_available) = memory_flags_from_config(config);
     let mode = match (has_short_term, has_long_term) {
         (true, true) => "both",
         (true, false) => "short_term",
@@ -291,14 +292,14 @@ fn memory_config_summary_from_build_config(config: &ReactBuildConfig) -> MemoryC
 }
 
 /// Builds ReactBuildConfig for the runner (no short-term memory: no db_path, no thread_id for checkpoint).
-/// Aligns with langgraph-cli: when USER_ID is unset, uses default "1" so memory tools are enabled when embedding is available.
-fn react_build_config_for_runner() -> ReactBuildConfig {
+/// Long-term memory is controlled by `policy`: when `policy.user_id()` is `None`, upstream will not create store or memory tools.
+fn react_build_config_for_runner(policy: &LongTermMemoryPolicy) -> ReactBuildConfig {
     let mcp_verbose = std::env::var("MCP_VERBOSE")
         .or_else(|_| std::env::var("VERBOSE"))
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(false);
-    let user_id = std::env::var("USER_ID").ok().or_else(|| Some("1".to_string()));
+    let user_id = policy.user_id().map(String::from);
     ReactBuildConfig {
         db_path: None,
         thread_id: None,
@@ -319,9 +320,10 @@ fn react_build_config_for_runner() -> ReactBuildConfig {
 }
 
 /// Returns `(ReactRunner, ToolConfigSummary, MemoryConfigSummary)`. Callers should log both summaries after tracing is initialized (e.g. in run_telegram's handler factory).
-/// Short-term memory is disabled: uses a no-op checkpointer, so each turn has no conversation history.
+/// Short-term memory is disabled: uses a no-op checkpointer. Long-term memory is enabled when [`LongTermMemoryPolicy::from_env()`] has user_id and embedding is configured.
 pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, MemoryConfigSummary)> {
-    let config = react_build_config_for_runner();
+    let policy = LongTermMemoryPolicy::from_env();
+    let config = react_build_config_for_runner(&policy);
 
     let ctx = build_react_run_context(&config)
         .await
@@ -461,9 +463,7 @@ pub async fn print_runtime_info() -> Result<()> {
         }
     }
 
-    if let Ok(user_id) = std::env::var("USER_ID") {
-        writeln!(output, "User ID: {}", user_id).unwrap();
-    }
+    writeln!(output, "Long-term memory: enabled when USER_ID and embedding are set (runner uses LongTermMemoryPolicy::from_env())").unwrap();
 
     if let Ok(exa_key) = std::env::var("EXA_API_KEY") {
         writeln!(
@@ -525,14 +525,25 @@ impl ReactRunner {
     ) -> Result<ChatStreamResult> {
         let mut config = RunnableConfig::default();
         config.thread_id = Some(thread_id.to_string());
+        // Long-term memory: run-time user_id from UserProfile for per-Telegram-user isolation.
+        if let Some(p) = user_profile {
+            config.user_id = Some(p.user_id.clone());
+        }
 
         let base_prompt = self
             .system_prompt
             .as_deref()
             .unwrap_or(REACT_SYSTEM_PROMPT);
-        let system_prompt = user_profile
-            .map(|p| format!("{}\n\n{}", base_prompt, p.to_system_content()))
+        let mut system_prompt = user_profile
+            .map(|p| {
+                let profile_block = p.to_system_content();
+                format!(
+                    "{}\n\n{}\n\nIf this user's profile is not yet in your long-term memory, remember it.",
+                    base_prompt, profile_block
+                )
+            })
             .unwrap_or_else(|| base_prompt.to_string());
+        system_prompt.push_str("\n\nAlways provide a brief natural language reply to the user after using any tool (e.g. 已记住, Done). Never end a turn with only tool execution and no text.");
 
         let content_opt = if user_message_already_in_checkpoint {
             None
@@ -634,5 +645,30 @@ impl ReactRunner {
             steps,
             tools_used,
         })
+    }
+
+    /// Runs one turn with the given `user_id` so the model can remember `content` in long-term memory (if not already).
+    /// Used by [`EnsureLongTermMemoryHandler`] to ensure bot identity and user profile are stored. Drains the stream and ignores output.
+    pub async fn ensure_remember(&self, user_id: &str, content: &str) -> Result<()> {
+        let mut config = RunnableConfig::default();
+        config.thread_id = Some(format!("ensure_{}", user_id));
+        config.user_id = Some(user_id.to_string());
+        let system_prompt = "If the following is not already in your long-term memory, remember it.";
+        let state = build_initial_state_for_turn(
+            Some(content),
+            &self.checkpointer,
+            &config,
+            system_prompt,
+        )
+        .await
+        .map_err(|e| anyhow!("ensure_remember build_initial_state_for_turn: {}", e))?;
+        let modes = HashSet::from([
+            StreamMode::Messages,
+            StreamMode::Values,
+            StreamMode::Tasks,
+        ]);
+        let mut stream = self.compiled.stream(state, Some(config), modes);
+        while stream.next().await.is_some() {}
+        Ok(())
     }
 }

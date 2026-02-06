@@ -19,7 +19,7 @@ use super::stream_edit::{format_reply_with_process_and_tools, is_message_not_mod
 use async_trait::async_trait;
 use std::sync::Arc;
 use telegram_bot::mention;
-use telegram_bot::{Bot, Chat, Handler, HandlerResponse, Message, Result};
+use telegram_bot::{Bot, Chat, Handler, HandlerResponse, Message, Result, User as TelegramUser};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument};
@@ -45,25 +45,34 @@ pub struct AgentHandler {
     runner: Arc<ReactRunner>,
     bot: Arc<dyn Bot>,
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
+    /// Full bot identity from getMe (id, username, first_name, last_name). Filled by runner after get_me(); may be `None` until first API response.
+    bot_user: Arc<tokio::sync::RwLock<Option<TelegramUser>>>,
     placeholder_message: String,
     message_queues: dashmap::DashMap<String, QueueSender>,
 }
 
 impl AgentHandler {
-    /// **Entry point.** Creates a new `AgentHandler` with the given runner, bot, and placeholder message.
+    /// **Entry point.** Creates a new `AgentHandler` with the given runner, bot, placeholder message, and optional bot identity from getMe.
     pub fn new(
         runner: Arc<ReactRunner>,
         bot: Arc<dyn Bot>,
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
+        bot_user: Arc<tokio::sync::RwLock<Option<TelegramUser>>>,
         placeholder_message: String,
     ) -> Self {
         Self {
             runner,
             bot,
             bot_username,
+            bot_user,
             placeholder_message,
             message_queues: dashmap::DashMap::new(),
         }
+    }
+
+    /// Returns the full bot identity from getMe (id, username, first_name, last_name), if already available.
+    pub async fn bot_user(&self) -> Option<TelegramUser> {
+        self.bot_user.read().await.clone()
     }
 
     /// Returns the user question if the message triggers the agent (reply-to-bot or @mention); otherwise `None`. Used by [`ensure_trigger_question`](Self::ensure_trigger_question) and tests. Delegates to [`telegram_bot::mention::get_question`].
@@ -154,17 +163,25 @@ impl AgentHandler {
         (tx, handle)
     }
 
-    /// Picks the reply text to show: agent reply or [`MSG_EMPTY_REPLY_FALLBACK`] when reply is empty. Logs accordingly.
+    /// Picks the reply text to show: agent reply, or a context-aware fallback when reply is empty. Logs accordingly.
     fn pick_reply_text(result: &ChatStreamResult, thread_id: &str) -> String {
         if result.reply.trim().is_empty() {
+            let fallback = if result.tools_used.iter().any(|t| t == "remember")
+                && result.tools_used.len() <= 1
+            {
+                "已记住。"
+            } else {
+                MSG_EMPTY_REPLY_FALLBACK
+            };
             info!(
                 thread_id = %thread_id,
                 steps = ?result.steps,
                 tools_used = ?result.tools_used,
                 reply_len = result.reply.len(),
+                fallback = %fallback,
                 "Agent completed with empty assistant reply; showing fallback message"
             );
-            MSG_EMPTY_REPLY_FALLBACK.to_string()
+            fallback.to_string()
         } else {
             info!(
                 thread_id = %thread_id,
