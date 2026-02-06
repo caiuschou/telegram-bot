@@ -142,3 +142,20 @@ pub async fn run_bot_with_llm(config: BotConfig) -> Result<()> {
     })
     .await
 }
+
+/// Runs the bot with a custom handler. Uses same memory stores as `run_bot_with_llm`
+/// (including lance when built with `--features lance`).
+///
+/// Load config with `telegram_bot::load_config` before calling.
+pub async fn run_bot_with_custom_handler<F>(
+    config: BotConfig,
+    make_handler: F,
+) -> Result<()>
+where
+    F: FnOnce(&BotConfig, BotComponents) -> Arc<dyn telegram_bot::Handler>,
+{
+    let (memory_store, recent_store) = create_memory_stores_for_llm(&config).await?;
+    telegram_bot::run_bot_with_memory_stores(config, memory_store, recent_store, make_handler)
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))
+}
