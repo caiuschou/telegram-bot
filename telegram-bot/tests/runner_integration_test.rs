@@ -230,7 +230,7 @@ async fn test_ai_reply_complete_flow() {
     let mock_store = std::sync::Arc::new(mock_store);
 
     let handler = {
-        let components = telegram_bot::build_bot_components(&config, mock_store.clone(), None)
+        let components = telegram_bot::build_bot_components(&config, mock_store.clone(), None, None)
             .await
             .expect("build_bot_components");
         telegram_llm_bot::build_llm_handler(&config, components).expect("build_llm_handler")

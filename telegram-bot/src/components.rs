@@ -1,12 +1,12 @@
 //! Component factory: builds BotComponents from config. Handler is injected from outside (LLM impl).
 
 use anyhow::Result;
+use std::sync::Arc;
 use crate::chain::HandlerChain;
-use crate::core::{Handler, User};
+use crate::core::{Bot as CoreBot, Handler, User};
 use crate::embedding::{BigModelEmbedding, OpenAIEmbedding};
 use crate::handlers::{MemoryHandler, PersistenceHandler};
 use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
-use std::sync::Arc;
 use crate::storage::MessageRepository;
 use teloxide::prelude::*;
 use tracing::{error, info, instrument};
@@ -18,6 +18,8 @@ use super::config::{AppExtensions, BotConfig};
 pub struct BotComponents {
     pub repo: Arc<MessageRepository>,
     pub teloxide_bot: Bot,
+    /// When set (e.g. in tests), make_handler should use this as the bot for the handler instead of building from `teloxide_bot`. Production leaves this `None`.
+    pub handler_bot: Option<Arc<dyn CoreBot>>,
     /// Bot username from getMe (for @mention detection). Filled in run_repl after get_me().
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     /// Full bot identity from getMe (id, username, first_name, last_name). Filled in run_repl after get_me().
@@ -85,11 +87,13 @@ pub async fn create_memory_stores(
 }
 
 /// Builds BotComponents (repo, teloxide_bot, memory_store, embedding, etc.). Handler is built externally using these.
-#[instrument(skip(config, memory_store, recent_store))]
+/// When `handler_bot_override` is `Some`, it is stored in `components.handler_bot` so that make_handler can use it (e.g. a test Mock Bot) instead of building from `teloxide_bot`.
+#[instrument(skip(config, memory_store, recent_store, handler_bot_override))]
 pub async fn build_bot_components(
     config: &BotConfig,
     memory_store: Arc<dyn MemoryStore>,
     recent_store: Option<Arc<dyn MemoryStore>>,
+    handler_bot_override: Option<Arc<dyn CoreBot>>,
 ) -> Result<BotComponents> {
     let emb_cfg = config
         .extensions()
@@ -152,6 +156,7 @@ pub async fn build_bot_components(
     Ok(BotComponents {
         repo,
         teloxide_bot,
+        handler_bot: handler_bot_override,
         bot_username,
         bot_user,
         memory_store,

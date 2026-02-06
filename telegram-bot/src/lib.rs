@@ -37,7 +37,7 @@ pub use telegram::{
 };
 
 pub use config::{AppExtensions, BotConfig};
-pub use runner::{run_bot, run_bot_with_memory_stores};
+pub use runner::{run_bot, run_bot_with_memory_stores, run_bot_with_memory_stores_build_only};
 
 pub use components::{build_bot_components, create_memory_stores, BotComponents};
 pub use handlers::{
