@@ -1,12 +1,14 @@
-//! Seed messages into langgraph short-term memory (SqliteSaver) and chat via ReAct agent.
+//! ReAct agent CLI and Telegram bot: chat, run, load/seed message preview.
 //!
-//! **Seed flow**: Load messages → `checkpoint::import_messages_into_checkpointer` (writes `ReActState { messages, tool_calls: [], tool_results: [] }`).
-//! **Chat flow**: `react::create_react_runner(db_path)` → `run_chat_stream(&runner, thread_id, content, on_chunk)` loads persistent state, runs Think→Act→Observe, streams chunks, persists, returns final reply.
+//! **Short-term memory**: Disabled; each turn uses only the current message (NoOp checkpointer).
+//! **Chat flow**: `react::create_react_runner()` → `run_chat_stream(&runner, thread_id, content, on_chunk)` builds fresh state per turn, runs Think→Act→Observe, streams chunks, returns final reply.
+//! **Optional checkpoint** (offline/test): `checkpoint::import_messages_into_checkpointer` for seeding; not used by Run/Chat.
 
 pub mod checkpoint;
 pub mod format;
 pub mod load;
 pub mod llm_request_logging;
+pub mod noop_checkpointer;
 pub mod react;
 pub mod telegram_db;
 
@@ -38,7 +40,7 @@ pub use telegram::AgentHandler;
 
 /// Runs one chat turn with streaming: `on_update` is called for each chunk and when steps/tools change; returns final result.
 ///
-/// When `user_message_already_in_checkpoint` is true, the user message is not appended again (caller has already written it to short-term memory, e.g. via `append_user_message_into_checkpointer`).
+/// When `user_message_already_in_checkpoint` is true, the user message is not appended again (caller has already put it in state). With short-term memory disabled, callers typically pass `false` and the message content so each turn gets fresh state.
 pub async fn run_chat_stream(
     runner: &ReactRunner,
     thread_id: &str,

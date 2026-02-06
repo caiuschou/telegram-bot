@@ -5,9 +5,9 @@
 
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::Arc;
 
+use crate::noop_checkpointer::NoOpCheckpointer;
 use langgraph::config::{MemoryConfigSummary, ToolConfigSummary};
 use langgraph::{
     ActNode, CompiledStateGraph, ErrorHandlerFn, HandleToolErrors, Message, ObserveNode, ReActState,
@@ -290,9 +290,9 @@ fn memory_config_summary_from_build_config(config: &ReactBuildConfig) -> MemoryC
     }
 }
 
-/// Builds ReactBuildConfig for the runner. Aligns with langgraph-cli: when USER_ID is unset,
-/// uses default "1" so memory tools are enabled when embedding is available (no longer requires USER_ID in env).
-fn react_build_config_for_runner(db_path: &Path) -> ReactBuildConfig {
+/// Builds ReactBuildConfig for the runner (no short-term memory: no db_path, no thread_id for checkpoint).
+/// Aligns with langgraph-cli: when USER_ID is unset, uses default "1" so memory tools are enabled when embedding is available.
+fn react_build_config_for_runner() -> ReactBuildConfig {
     let mcp_verbose = std::env::var("MCP_VERBOSE")
         .or_else(|_| std::env::var("VERBOSE"))
         .ok()
@@ -300,8 +300,8 @@ fn react_build_config_for_runner(db_path: &Path) -> ReactBuildConfig {
         .unwrap_or(false);
     let user_id = std::env::var("USER_ID").ok().or_else(|| Some("1".to_string()));
     ReactBuildConfig {
-        db_path: Some(db_path.display().to_string()),
-        thread_id: Some("_".to_string()),
+        db_path: None,
+        thread_id: None,
         user_id,
         system_prompt: std::env::var("REACT_SYSTEM_PROMPT").ok(),
         exa_api_key: std::env::var("EXA_API_KEY").ok(),
@@ -319,17 +319,15 @@ fn react_build_config_for_runner(db_path: &Path) -> ReactBuildConfig {
 }
 
 /// Returns `(ReactRunner, ToolConfigSummary, MemoryConfigSummary)`. Callers should log both summaries after tracing is initialized (e.g. in run_telegram's handler factory).
-pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<(ReactRunner, ToolConfigSummary, MemoryConfigSummary)> {
-    let db_path = db_path.as_ref();
-    let config = react_build_config_for_runner(db_path);
+/// Short-term memory is disabled: uses a no-op checkpointer, so each turn has no conversation history.
+pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, MemoryConfigSummary)> {
+    let config = react_build_config_for_runner();
 
     let ctx = build_react_run_context(&config)
         .await
         .map_err(|e| anyhow!("build_react_run_context: {}", e))?;
 
-    let checkpointer = ctx
-        .checkpointer
-        .ok_or_else(|| anyhow!("checkpointer required (thread_id was set)"))?;
+    let checkpointer = NoOpCheckpointer::new();
 
     let tool_summary = tool_config_summary_from_build_config(&config);
     let memory_summary = memory_config_summary_from_build_config(&config);
@@ -413,19 +411,18 @@ pub async fn create_react_runner(db_path: impl AsRef<Path>) -> Result<(ReactRunn
     ))
 }
 
-/// Prints runtime configuration: checkpointer path, model, MCP info, etc.
+/// Prints runtime configuration: model, MCP info, etc. Short-term memory is disabled (checkpointer: none).
 ///
 /// Useful for troubleshooting the environment before running the bot.
 /// Reads configuration from environment variables (OPENAI_API_KEY, OPENAI_MODEL, etc.).
-pub async fn print_runtime_info(db_path: impl AsRef<Path>) -> Result<()> {
+pub async fn print_runtime_info() -> Result<()> {
     use std::fmt::Write;
 
-    let db_path = db_path.as_ref();
     let mut output = String::new();
 
     writeln!(output, "=== langgraph-bot Runtime Info ===").unwrap();
 
-    writeln!(output, "Checkpointer: {}", db_path.display()).unwrap();
+    writeln!(output, "Checkpointer: none (short-term memory disabled)").unwrap();
 
     let api_key = std::env::var("OPENAI_API_KEY");
     if api_key.is_ok() {
