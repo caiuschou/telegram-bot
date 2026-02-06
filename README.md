@@ -139,7 +139,7 @@ cargo test --test '*_integration_test'
 ### Code Structure
 
 - **telegram-bot**: Core `Bot`, `Handler` traits, handler chain, Telegram adapter, and built-in handlers (logging, auth, memory, persistence)
-- **telegram-llm-bot**: LLM integration (SyncLLMHandler, @mention detection and processing)
+- **telegram-llm-bot**: LLM integration (InlineLLMHandler, @mention detection and processing)
 - **memory**: Memory management and context building
 - **storage**: Message persistence
 
