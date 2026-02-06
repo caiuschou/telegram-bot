@@ -123,11 +123,12 @@ where
     let handler = make_handler(&config, components.clone());
     let handler_chain = build_handler_chain(&components, handler);
     let bot_username = components.bot_username.clone();
+    let bot_user = components.bot_user.clone();
     let teloxide_bot = components.teloxide_bot.clone();
 
     info!("Bot started successfully");
 
-    run_repl(teloxide_bot, handler_chain, bot_username).await?;
+    run_repl(teloxide_bot, handler_chain, bot_username, bot_user).await?;
 
     Ok(())
 }

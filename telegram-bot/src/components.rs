@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use crate::chain::HandlerChain;
-use crate::core::Handler;
+use crate::core::{Handler, User};
 use crate::embedding::{BigModelEmbedding, OpenAIEmbedding};
 use crate::handlers::{MemoryHandler, PersistenceHandler};
 use crate::memory::{InMemoryVectorStore, MemoryStore, SQLiteVectorStore};
@@ -18,7 +18,10 @@ use super::config::{AppExtensions, BotConfig};
 pub struct BotComponents {
     pub repo: Arc<MessageRepository>,
     pub teloxide_bot: Bot,
+    /// Bot username from getMe (for @mention detection). Filled in run_repl after get_me().
     pub bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
+    /// Full bot identity from getMe (id, username, first_name, last_name). Filled in run_repl after get_me().
+    pub bot_user: Arc<tokio::sync::RwLock<Option<User>>>,
     pub memory_store: Arc<dyn MemoryStore>,
     pub recent_store: Option<Arc<dyn MemoryStore>>,
     pub embedding_service: Arc<dyn crate::embedding::EmbeddingService>,
@@ -122,6 +125,7 @@ pub async fn build_bot_components(
     };
 
     let bot_username = Arc::new(tokio::sync::RwLock::new(None));
+    let bot_user = Arc::new(tokio::sync::RwLock::new(None));
 
     let embedding_service: Arc<dyn crate::embedding::EmbeddingService> = match emb_cfg.provider() {
         "zhipuai" => {
@@ -149,6 +153,7 @@ pub async fn build_bot_components(
         repo,
         teloxide_bot,
         bot_username,
+        bot_user,
         memory_store,
         recent_store,
         embedding_service,
