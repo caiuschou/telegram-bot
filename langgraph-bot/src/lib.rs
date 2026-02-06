@@ -10,7 +10,7 @@ pub mod llm_request_logging;
 pub mod react;
 pub mod telegram_db;
 
-pub mod telegram_handler;
+pub mod telegram;
 mod run;
 
 pub use run::run_telegram;
@@ -34,7 +34,7 @@ pub use react::{
 };
 pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 
-pub use telegram_handler::AgentHandler;
+pub use telegram::AgentHandler;
 
 /// Runs one chat turn with streaming: `on_update` is called for each chunk and when steps/tools change; returns final result.
 ///
