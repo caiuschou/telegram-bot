@@ -1,23 +1,22 @@
 //! Telegram handler: when user replies to the bot or @mentions, runs ReAct agent with stream and edits the same message.
 //!
 //! Uses `run_chat_stream`, per-thread queue (messages are queued per chat and processed serially), and user-facing error messages.
-//! On receive, the user message is written to short-term memory via `append_user_message_into_checkpointer` before running the agent.
+//! Short-term memory is disabled: each turn uses only the current message (no conversation history).
 //!
-//! **Data flow:** `Handler::handle` → enqueue per chat → `process_queue_loop` consumes queue → `process_message` (send placeholder → spawn stream-edit → append to checkpointer → `run_chat_stream` → final edit).
+//! **Data flow:** `Handler::handle` → enqueue per chat → `process_queue_loop` consumes queue → `process_message` (send placeholder → spawn stream-edit → `run_chat_stream` → final edit).
 //!
 //! # Entry points (public API)
 //!
 //! - **[`AgentHandler`]** – Handler that runs the ReAct agent on reply-to-bot or @mention; implements [`Handler`](telegram_bot::Handler).
-//! - **[`AgentHandler::new`]** – Constructs an `AgentHandler` with runner, bot, config, and checkpoint DB path.
+//! - **[`AgentHandler::new`]** – Constructs an `AgentHandler` with runner, bot, and placeholder message.
 //! - **[`AgentHandler::get_question`]** – Returns the user question if the message should trigger the agent (reply-to-bot or @mention); otherwise `None`.
-//! - **[`AgentHandler::thread_id`]** – Returns the thread ID for checkpoint (one per chat).
+//! - **[`AgentHandler::thread_id`]** – Returns the thread ID (one per chat).
 //! - **`Handler::handle`** (on `AgentHandler`) – Telegram entry: decides trigger, enqueues per-chat, returns immediately with `Continue` or `Stop`.
 
-use crate::{append_user_message_into_checkpointer, run_chat_stream, ChatStreamResult, StreamUpdate, UserProfile};
+use crate::{run_chat_stream, ChatStreamResult, StreamUpdate, UserProfile};
 use crate::ReactRunner;
 use super::stream_edit::{format_reply_with_process_and_tools, is_message_not_modified_error, run_stream_edit_loop};
 use async_trait::async_trait;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use telegram_bot::mention;
 use telegram_bot::{Bot, Chat, Handler, HandlerResponse, Message, Result};
@@ -47,25 +46,22 @@ pub struct AgentHandler {
     bot: Arc<dyn Bot>,
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     placeholder_message: String,
-    db_path: PathBuf,
     message_queues: dashmap::DashMap<String, QueueSender>,
 }
 
 impl AgentHandler {
-    /// **Entry point.** Creates a new `AgentHandler` with the given runner, bot, config, and checkpoint DB path (used to write user messages to short-term memory on receive).
+    /// **Entry point.** Creates a new `AgentHandler` with the given runner, bot, and placeholder message.
     pub fn new(
         runner: Arc<ReactRunner>,
         bot: Arc<dyn Bot>,
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         placeholder_message: String,
-        db_path: PathBuf,
     ) -> Self {
         Self {
             runner,
             bot,
             bot_username,
             placeholder_message,
-            db_path,
             message_queues: dashmap::DashMap::new(),
         }
     }
@@ -100,8 +96,7 @@ impl AgentHandler {
         let runner = self.runner.clone();
         let bot = self.bot.clone();
         let placeholder_message = self.placeholder_message.clone();
-        let db_path = self.db_path.clone();
-        tokio::spawn(Self::process_queue_loop(rx, runner, bot, placeholder_message, db_path, thread_id));
+        tokio::spawn(Self::process_queue_loop(rx, runner, bot, placeholder_message, thread_id));
         tx
     }
 
@@ -111,7 +106,6 @@ impl AgentHandler {
         runner: Arc<ReactRunner>,
         bot: Arc<dyn Bot>,
         placeholder_message: String,
-        db_path: PathBuf,
         thread_id: String,
     ) {
         while let Some((message, question)) = rx.recv().await {
@@ -126,7 +120,6 @@ impl AgentHandler {
                 &message,
                 &question,
                 &placeholder_message,
-                &db_path,
             )
             .await
             {
@@ -196,14 +189,13 @@ impl AgentHandler {
         }
     }
 
-    /// 1) Send placeholder; 2) spawn stream-edit loop; 3) append user message to checkpointer; 4) run agent stream; 5) apply final edit or error message.
+    /// 1) Send placeholder; 2) spawn stream-edit loop; 3) run agent stream (no short-term memory); 4) apply final edit or error message.
     async fn process_message(
         runner: &Arc<ReactRunner>,
         bot: &Arc<dyn Bot>,
         message: &Message,
         question: &str,
         placeholder_message: &str,
-        db_path: &Path,
     ) -> Result<HandlerResponse> {
         let thread_id = Self::thread_id(message);
 
@@ -218,9 +210,6 @@ impl AgentHandler {
 
         let (tx, edit_handle) = Self::spawn_stream_edit_task(bot, &message.chat, &message_id);
 
-        if let Err(e) = append_user_message_into_checkpointer(db_path, &thread_id, question).await {
-            error!(error = %e, thread_id = %thread_id, "Failed to append user message to short-term memory");
-        }
         let profile = Self::user_profile_from_message(message);
         info!(
             thread_id = %thread_id,
@@ -237,7 +226,7 @@ impl AgentHandler {
                 let _ = tx.send(update);
             },
             Some(&profile),
-            true,
+            false,
         )
         .await;
 
