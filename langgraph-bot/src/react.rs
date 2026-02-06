@@ -9,15 +9,18 @@ use std::sync::Arc;
 
 use crate::memory::LongTermMemoryPolicy;
 use crate::noop_checkpointer::NoOpCheckpointer;
+use crate::tools::StoreGetToolSource;
 use langgraph::config::{MemoryConfigSummary, ToolConfigSummary};
+use langgraph::memory::{CheckpointError, Checkpointer};
+use langgraph::react_builder::{build_react_run_context, ReactBuildConfig};
 use langgraph::{
     ActNode, CompiledStateGraph, ErrorHandlerFn, HandleToolErrors, Message, ObserveNode, ReActState,
     RunnableConfig, StateGraph, ThinkNode, ToolSourceError, DEFAULT_EXECUTION_ERROR_TEMPLATE, END,
     REACT_SYSTEM_PROMPT, START,
 };
-use langgraph::memory::{CheckpointError, Checkpointer};
-use langgraph::react_builder::{build_react_run_context, ReactBuildConfig};
 use langgraph::stream::{StreamEvent, StreamMode};
+use telegram_bot::embedding::EmbeddingService;
+use telegram_bot::memory::{get_store, MemoryStore};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
@@ -319,21 +322,14 @@ fn react_build_config_for_runner(policy: &LongTermMemoryPolicy) -> ReactBuildCon
     }
 }
 
-/// Returns `(ReactRunner, ToolConfigSummary, MemoryConfigSummary)`. Callers should log both summaries after tracing is initialized (e.g. in run_telegram's handler factory).
-/// Short-term memory is disabled: uses a no-op checkpointer. Long-term memory is enabled when [`LongTermMemoryPolicy::from_env()`] has user_id and embedding is configured.
-pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, MemoryConfigSummary)> {
-    let policy = LongTermMemoryPolicy::from_env();
-    let config = react_build_config_for_runner(&policy);
-
-    let ctx = build_react_run_context(&config)
-        .await
-        .map_err(|e| anyhow!("build_react_run_context: {}", e))?;
-
+/// Builds a ReAct runner from config, optional langgraph store (for graph.with_store), and tool source.
+/// Used by both [`create_react_runner`] and [`create_react_runner_with_store_get`].
+async fn compile_react_runner(
+    config: &ReactBuildConfig,
+    store: Option<Arc<dyn langgraph::memory::Store>>,
+    tool_source: Box<dyn langgraph::ToolSource>,
+) -> Result<ReactRunner> {
     let checkpointer = NoOpCheckpointer::new();
-
-    let tool_summary = tool_config_summary_from_build_config(&config);
-    let memory_summary = memory_config_summary_from_build_config(&config);
-
     let api_key = std::env::var("OPENAI_API_KEY")
         .ok()
         .filter(|s: &String| !s.is_empty())
@@ -351,18 +347,16 @@ pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, Me
     let llm = langgraph::ChatOpenAI::new_with_tool_source(
         openai_config,
         model.as_str(),
-        ctx.tool_source.as_ref(),
+        tool_source.as_ref(),
     )
     .await
     .map_err(|e| anyhow!("ChatOpenAI::new_with_tool_source: {}", e))?;
     let llm: Box<dyn langgraph::LlmClient> = Box::new(llm);
-
     let think = ThinkNode::new(llm);
-    let act = ActNode::new(ctx.tool_source).with_handle_tool_errors(HandleToolErrors::Custom(
+    let act = ActNode::new(tool_source).with_handle_tool_errors(HandleToolErrors::Custom(
         tool_error_handler_with_key_logging(),
     ));
     let observe = ObserveNode::with_loop();
-
     let mut graph = StateGraph::<ReActState>::new();
     graph
         .add_node("think", Arc::new(think))
@@ -372,13 +366,9 @@ pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, Me
         .add_edge("think", "act")
         .add_edge("act", "observe")
         .add_edge("observe", END);
-
-    let graph = if let Some(store) = &ctx.store {
-        graph.with_store(store.clone())
-    } else {
-        graph
-    };
-
+    if let Some(s) = store {
+        graph = graph.with_store(s);
+    }
     let llm_log_request = std::env::var("LLM_LOG_REQUEST")
         .or_else(|_| std::env::var("VERBOSE"))
         .ok()
@@ -389,7 +379,6 @@ pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, Me
             }
         })
         .unwrap_or(false);
-
     let compiled = if llm_log_request {
         let mw = Arc::new(crate::llm_request_logging::LlmRequestLoggingMiddleware);
         graph
@@ -400,17 +389,55 @@ pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, Me
             .compile_with_checkpointer(Arc::clone(&checkpointer))
             .map_err(|e| anyhow!("compile_with_checkpointer: {}", e))?
     };
+    Ok(ReactRunner {
+        compiled,
+        checkpointer,
+        system_prompt: config.system_prompt.clone(),
+    })
+}
 
-    let system_prompt = config.system_prompt.clone();
-    Ok((
-        ReactRunner {
-            compiled,
-            checkpointer,
-            system_prompt,
-        },
-        tool_summary,
-        memory_summary,
-    ))
+/// Returns a runner whose `store_get` tool is scoped to the given `chat_id` (via [`get_store`]).
+/// Use in run_telegram when processing a message: construct (or cache) a runner per chat so that
+/// store_get only searches that chat's memories.
+pub async fn create_react_runner_with_store_get(
+    memory_store: Arc<dyn MemoryStore>,
+    embedding_service: Arc<dyn EmbeddingService>,
+    chat_id: &str,
+) -> Result<ReactRunner> {
+    let policy = LongTermMemoryPolicy::from_env();
+    let config = react_build_config_for_runner(&policy);
+    let ctx = build_react_run_context(&config)
+        .await
+        .map_err(|e| anyhow!("build_react_run_context: {}", e))?;
+    let scoped_store = get_store(memory_store, chat_id);
+    let tool_source: Box<dyn langgraph::ToolSource> = Box::new(StoreGetToolSource::new(
+        ctx.tool_source,
+        Some(scoped_store),
+        Some(embedding_service),
+    ));
+    compile_react_runner(&config, ctx.store, tool_source).await
+}
+
+/// Returns `(ReactRunner, ToolConfigSummary, MemoryConfigSummary)`. Callers should log both summaries after tracing is initialized (e.g. in run_telegram's handler factory).
+/// Short-term memory is disabled: uses a no-op checkpointer. Long-term memory is enabled when [`LongTermMemoryPolicy::from_env()`] has user_id and embedding is configured.
+pub async fn create_react_runner() -> Result<(ReactRunner, ToolConfigSummary, MemoryConfigSummary)> {
+    let policy = LongTermMemoryPolicy::from_env();
+    let config = react_build_config_for_runner(&policy);
+
+    let ctx = build_react_run_context(&config)
+        .await
+        .map_err(|e| anyhow!("build_react_run_context: {}", e))?;
+
+    let tool_summary = tool_config_summary_from_build_config(&config);
+    let memory_summary = memory_config_summary_from_build_config(&config);
+
+    let tool_source: Box<dyn langgraph::ToolSource> = Box::new(StoreGetToolSource::new(
+        ctx.tool_source,
+        None,
+        None,
+    ));
+    let runner = compile_react_runner(&config, ctx.store, tool_source).await?;
+    Ok((runner, tool_summary, memory_summary))
 }
 
 /// Prints runtime configuration: model, MCP info, etc. Short-term memory is disabled (checkpointer: none).

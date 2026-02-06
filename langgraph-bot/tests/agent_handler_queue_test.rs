@@ -94,10 +94,11 @@ async fn non_trigger_returns_continue() {
 
     let (runner, _, _) = langgraph_bot::create_react_runner().await.unwrap();
     let runner = Arc::new(runner);
+    let runner_resolver = Arc::new(langgraph_bot::RunnerResolver::new(runner, None, None));
 
     let bot_user = Arc::new(tokio::sync::RwLock::new(None::<User>));
     let handler = Arc::new(langgraph_bot::AgentHandler::new(
-        runner,
+        runner_resolver,
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         bot_user,
@@ -129,10 +130,11 @@ async fn mention_triggers_processing() {
 
     let (runner, _, _) = langgraph_bot::create_react_runner().await.unwrap();
     let runner = Arc::new(runner);
+    let runner_resolver = Arc::new(langgraph_bot::RunnerResolver::new(runner, None, None));
 
     let bot_user = Arc::new(tokio::sync::RwLock::new(None::<User>));
     let handler = Arc::new(langgraph_bot::AgentHandler::new(
-        runner,
+        runner_resolver,
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         bot_user,
@@ -173,10 +175,11 @@ async fn multiple_mentions_same_chat_queued() {
 
     let (runner, _, _) = langgraph_bot::create_react_runner().await.unwrap();
     let runner = Arc::new(runner);
+    let runner_resolver = Arc::new(langgraph_bot::RunnerResolver::new(runner, None, None));
 
     let bot_user = Arc::new(tokio::sync::RwLock::new(None::<User>));
     let handler = Arc::new(langgraph_bot::AgentHandler::new(
-        runner,
+        runner_resolver,
         mock_bot.clone() as Arc<dyn Bot>,
         bot_username,
         bot_user,

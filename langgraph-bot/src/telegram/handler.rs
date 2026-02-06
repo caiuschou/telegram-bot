@@ -13,11 +13,14 @@
 //! - **[`AgentHandler::thread_id`]** – Returns the thread ID (one per chat).
 //! - **`Handler::handle`** (on `AgentHandler`) – Telegram entry: decides trigger, enqueues per-chat, returns immediately with `Continue` or `Stop`.
 
+use crate::react::create_react_runner_with_store_get;
 use crate::{run_chat_stream, ChatStreamResult, StreamUpdate, UserProfile};
 use crate::ReactRunner;
 use super::stream_edit::{format_reply_with_process_and_tools, is_message_not_modified_error, run_stream_edit_loop};
 use async_trait::async_trait;
 use std::sync::Arc;
+use telegram_bot::embedding::EmbeddingService;
+use telegram_bot::memory::MemoryStore;
 use telegram_bot::mention;
 use telegram_bot::{Bot, Chat, Handler, HandlerResponse, Message, Result, User as TelegramUser};
 use tokio::sync::mpsc;
@@ -37,12 +40,58 @@ type QueuedItem = (Message, String);
 /// Sender to the per-chat processing queue.
 type QueueSender = mpsc::UnboundedSender<QueuedItem>;
 
+// ---------- Runner resolver (per-chat construction when store_get is used) ----------
+
+/// Resolves the runner to use for a chat: when store and embedding are set, builds (and caches) a runner
+/// per chat with [`create_react_runner_with_store_get`] so that `store_get` is scoped to that chat.
+pub struct RunnerResolver {
+    default_runner: Arc<ReactRunner>,
+    memory_store: Option<Arc<dyn MemoryStore>>,
+    embedding_service: Option<Arc<dyn EmbeddingService>>,
+    cache: dashmap::DashMap<String, Arc<ReactRunner>>,
+}
+
+impl RunnerResolver {
+    pub fn new(
+        default_runner: Arc<ReactRunner>,
+        memory_store: Option<Arc<dyn MemoryStore>>,
+        embedding_service: Option<Arc<dyn EmbeddingService>>,
+    ) -> Self {
+        Self {
+            default_runner,
+            memory_store,
+            embedding_service,
+            cache: dashmap::DashMap::new(),
+        }
+    }
+
+    /// Returns the runner for this chat. When store and embedding are configured, returns a runner
+    /// whose `store_get` tool is scoped to `chat_id` (cached per chat).
+    pub async fn get_runner(&self, chat_id: &str) -> anyhow::Result<Arc<ReactRunner>> {
+        let (Some(store), Some(embedding)) = (self.memory_store.as_ref(), self.embedding_service.as_ref()) else {
+            return Ok(self.default_runner.clone());
+        };
+        if let Some(r) = self.cache.get(chat_id) {
+            return Ok(r.clone());
+        }
+        let runner = create_react_runner_with_store_get(
+            store.clone(),
+            embedding.clone(),
+            chat_id,
+        )
+        .await?;
+        let runner = Arc::new(runner);
+        self.cache.insert(chat_id.to_string(), runner.clone());
+        Ok(runner)
+    }
+}
+
 // ---------- Handler (entry: AgentHandler, Handler::handle) ----------
 
 /// **Entry point.** Handler that runs the ReAct agent on Telegram messages (reply-to-bot or @mention), streams the reply, and edits the same message.
 /// Use with the Telegram bot framework; implements [`Handler`](telegram_bot::Handler). Incoming messages are queued per chat and processed serially.
 pub struct AgentHandler {
-    runner: Arc<ReactRunner>,
+    runner_resolver: Arc<RunnerResolver>,
     bot: Arc<dyn Bot>,
     bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
     /// Full bot identity from getMe (id, username, first_name, last_name). Filled by runner after get_me(); may be `None` until first API response.
@@ -52,16 +101,17 @@ pub struct AgentHandler {
 }
 
 impl AgentHandler {
-    /// **Entry point.** Creates a new `AgentHandler` with the given runner, bot, placeholder message, and optional bot identity from getMe.
+    /// **Entry point.** Creates a new `AgentHandler` with the given runner resolver, bot, placeholder message, and optional bot identity from getMe.
+    /// When `runner_resolver` is built with `memory_store` and `embedding_service`, the agent will have a per-chat `store_get` tool scoped to each chat.
     pub fn new(
-        runner: Arc<ReactRunner>,
+        runner_resolver: Arc<RunnerResolver>,
         bot: Arc<dyn Bot>,
         bot_username: Arc<tokio::sync::RwLock<Option<String>>>,
         bot_user: Arc<tokio::sync::RwLock<Option<TelegramUser>>>,
         placeholder_message: String,
     ) -> Self {
         Self {
-            runner,
+            runner_resolver,
             bot,
             bot_username,
             bot_user,
@@ -102,17 +152,23 @@ impl AgentHandler {
 
     fn get_or_create_queue(&self, thread_id: String) -> QueueSender {
         let (tx, rx) = mpsc::unbounded_channel::<QueuedItem>();
-        let runner = self.runner.clone();
+        let runner_resolver = Arc::clone(&self.runner_resolver);
         let bot = self.bot.clone();
         let placeholder_message = self.placeholder_message.clone();
-        tokio::spawn(Self::process_queue_loop(rx, runner, bot, placeholder_message, thread_id));
+        tokio::spawn(Self::process_queue_loop(
+            rx,
+            runner_resolver,
+            bot,
+            placeholder_message,
+            thread_id,
+        ));
         tx
     }
 
     /// Consumes items from the per-chat queue and processes each with [`Self::process_message`].
     async fn process_queue_loop(
         mut rx: mpsc::UnboundedReceiver<QueuedItem>,
-        runner: Arc<ReactRunner>,
+        runner_resolver: Arc<RunnerResolver>,
         bot: Arc<dyn Bot>,
         placeholder_message: String,
         thread_id: String,
@@ -124,7 +180,7 @@ impl AgentHandler {
                 "Processing queued message"
             );
             if let Err(e) = Self::process_message(
-                &runner,
+                &runner_resolver,
                 &bot,
                 &message,
                 &question,
@@ -208,13 +264,20 @@ impl AgentHandler {
 
     /// 1) Send placeholder; 2) spawn stream-edit loop; 3) run agent stream (no short-term memory); 4) apply final edit or error message.
     async fn process_message(
-        runner: &Arc<ReactRunner>,
+        runner_resolver: &Arc<RunnerResolver>,
         bot: &Arc<dyn Bot>,
         message: &Message,
         question: &str,
         placeholder_message: &str,
     ) -> Result<HandlerResponse> {
         let thread_id = Self::thread_id(message);
+        let runner = runner_resolver
+            .get_runner(&thread_id)
+            .await
+            .map_err(|e| {
+                error!(error = %e, thread_id = %thread_id, "get_runner failed");
+                telegram_bot::DbotError::Handler(telegram_bot::HandlerError::State(e.to_string()))
+            })?;
 
         let message_id = match Self::send_placeholder_message(bot, &message.chat, placeholder_message).await {
             Ok(id) => id,

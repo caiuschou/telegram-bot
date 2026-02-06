@@ -5,7 +5,7 @@ use std::sync::Arc;
 use langgraph::ConfigSection;
 use telegram_bot::{load_config, TelegramBot};
 use telegram_llm_bot::run_bot_with_custom_handler;
-use crate::telegram::{AgentHandler, EnsureLongTermMemoryHandler, EnsureThenAgentHandler};
+use crate::telegram::{AgentHandler, EnsureLongTermMemoryHandler, EnsureThenAgentHandler, RunnerResolver};
 use crate::{create_react_runner, ReactRunner};
 
 /// Runs the Telegram bot with ReAct agent. Config from env; `token` overrides BOT_TOKEN if provided.
@@ -43,9 +43,14 @@ pub async fn run_telegram(token: Option<String>) -> Result<()> {
         let bot = Arc::new(TelegramBot::new(bot_token));
         let bot_username = components.bot_username.clone();
         let bot_user = components.bot_user.clone();
+        let runner_resolver = Arc::new(RunnerResolver::new(
+            runner.clone(),
+            Some(components.memory_store.clone()),
+            Some(components.embedding_service.clone()),
+        ));
         let ensure_handler = EnsureLongTermMemoryHandler::new(runner.clone(), bot_user.clone());
         let agent_handler = AgentHandler::new(
-            runner.clone(),
+            runner_resolver,
             bot,
             bot_username,
             bot_user,

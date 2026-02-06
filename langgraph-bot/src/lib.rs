@@ -12,6 +12,7 @@ pub mod memory;
 pub mod noop_checkpointer;
 pub mod react;
 pub mod telegram_db;
+pub mod tools;
 
 pub mod telegram;
 mod run;
@@ -38,7 +39,7 @@ pub use react::{
 };
 pub use telegram_db::{load_all_messages_from_telegram_db, load_messages_from_telegram_db};
 
-pub use telegram::AgentHandler;
+pub use telegram::{AgentHandler, RunnerResolver};
 
 /// Runs one chat turn with streaming: `on_update` is called for each chunk and when steps/tools change; returns final result.
 ///
