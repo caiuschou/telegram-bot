@@ -96,5 +96,3 @@ impl HandlerChain {
         Ok(final_response)
     }
 }
-
-// Unit/integration tests live in tests/handler_chain_test.rs

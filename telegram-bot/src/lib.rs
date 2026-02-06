@@ -10,6 +10,7 @@ pub mod config;
 pub mod core;
 pub mod embedding;
 pub mod handlers;
+pub mod mention;
 pub mod memory;
 pub mod memory_core;
 pub mod memory_strategies;
@@ -42,3 +43,4 @@ pub use components::{build_bot_components, create_memory_stores, BotComponents};
 pub use handlers::{
     AuthHandler, LoggingHandler, MemoryConfig, MemoryHandler, NoOpHandler, PersistenceHandler,
 };
+pub use mention::{extract_question, get_question, is_bot_mentioned};

@@ -1,4 +1,10 @@
 //! REPL runner: converts teloxide messages to core::Message and passes them to HandlerChain. Calls teloxide REPL and optional get_me to populate bot_username.
+//!
+//! ## Error handling
+//!
+//! Message handling runs inside a spawned task per message. If the handler chain fails,
+//! the error is only logged (via `tracing::error`); no message is sent to the user.
+//! This keeps the REPL responsive and avoids exposing internal errors to end users.
 
 use crate::chain::HandlerChain;
 use crate::core::ToCoreMessage;
@@ -10,7 +16,12 @@ use tracing::{error, info, instrument};
 use super::adapters::TelegramMessageWrapper;
 
 /// Starts the REPL with the given teloxide Bot, HandlerChain, and bot_username cache.
-/// Calls get_me() before starting and writes username into bot_username; each message is converted to core::Message and passed to chain.handle (spawned per message).
+///
+/// Calls `get_me()` before starting and writes the bot username into `bot_username`.
+/// Each incoming message is converted to [`crate::core::Message`] and processed by
+/// `chain.handle()` inside a spawned task (so the REPL returns immediately).
+///
+/// On handler chain failure, the error is only logged; the user is not notified.
 #[instrument(skip(bot, handler_chain, bot_username))]
 pub async fn run_repl(
     bot: teloxide::Bot,
