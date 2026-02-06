@@ -8,9 +8,7 @@ use clap::{Parser, Subcommand};
 /// Root CLI: holds a single subcommand. Parsed by `main.rs` and matched to load/checkpoint calls.
 #[derive(Parser)]
 #[command(name = "langgraph-bot")]
-#[command(
-    about = "Load or seed messages into langgraph short-term memory (SqliteSaver checkpoint)"
-)]
+#[command(about = "ReAct agent CLI: chat, run Telegram bot, load/seed message preview. Short-term memory disabled.")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -20,23 +18,11 @@ pub struct Cli {
 /// Subcommands; `Load`, `Seed`, `Chat`, `Info`, `Memory`, and (with feature) `Run` are handled in `main.rs`.
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Print short-term memory (checkpoint) summary: threads and message counts. Optionally limit to one thread.
-    Memory {
-        /// Path to Sqlite checkpoint database (same as load/seed/chat).
-        #[arg(short, long, default_value = "checkpoint.db")]
-        db: std::path::PathBuf,
-
-        /// If set, print summary only for this thread; otherwise list all threads with summaries.
-        #[arg(short, long)]
-        thread_id: Option<String>,
-    },
+    /// Print memory status (short-term memory is disabled).
+    Memory,
 
     /// Print loaded tools, LLM interface, embeddings, and memory info.
-    Info {
-        /// Path to Sqlite checkpoint database (same as seed/chat).
-        #[arg(short, long, default_value = "checkpoint.db")]
-        db: std::path::PathBuf,
-    },
+    Info,
 
     /// Load messages into the checkpoint for a thread. Without -m: use TELEGRAM_MESSAGES_DB (Telegram SQLite) if set (then -t is chat_id), else LANGGRAPH_MESSAGES_PATH (JSON).
     Load {
@@ -64,15 +50,11 @@ pub enum Commands {
         thread_id: Option<String>,
     },
 
-    /// Chat with persistent memory. Optional first message; then waits for input line by line. Exit with Ctrl+C.
+    /// Chat with ReAct agent (no conversation history; each line is a fresh turn). Optional first message; then stdin line by line. Exit with Ctrl+C or /exit.
     Chat {
         /// Optional first message. If omitted, only the interactive loop runs.
         #[arg(value_name = "MESSAGE")]
         message: Option<String>,
-
-        /// Path to Sqlite checkpoint database (same as seed).
-        #[arg(short, long, default_value = "checkpoint.db")]
-        db: std::path::PathBuf,
 
         /// Stream LLM output token-by-token.
         #[arg(long, default_value = "true")]
@@ -88,9 +70,5 @@ pub enum Commands {
         /// Bot token. If omitted, BOT_TOKEN from env is used.
         #[arg(short, long)]
         token: Option<String>,
-
-        /// Path to Sqlite checkpoint database (same as chat).
-        #[arg(short, long, default_value = "checkpoint.db")]
-        db: std::path::PathBuf,
     },
 }

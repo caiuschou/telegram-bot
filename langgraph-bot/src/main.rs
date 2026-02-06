@@ -18,17 +18,14 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Info { db } => print_runtime_info(&db).await?,
-        Commands::Memory { db, thread_id } => {
-            commands::print_memory_summary(&db, thread_id.as_deref()).await?
-        }
+        Commands::Info => print_runtime_info().await?,
+        Commands::Memory => commands::print_memory_summary()?,
         Commands::Chat {
             message,
-            db,
             stream,
             verbose,
-        } => chat::run_chat_loop(&db, message, stream, verbose).await?,
-        Commands::Run { token, db } => langgraph_bot::run_telegram(&db, token).await?,
+        } => chat::run_chat_loop(message, stream, verbose).await?,
+        Commands::Run { token } => langgraph_bot::run_telegram(token).await?,
         Commands::Load {
             messages,
             db,

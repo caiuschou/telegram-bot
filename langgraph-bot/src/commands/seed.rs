@@ -4,7 +4,7 @@ use anyhow::Result;
 use langgraph_bot::seed_messages_to_messages_with_user_info_with_stats;
 use seed_messages::generate_messages;
 
-use super::memory::print_messages_preview;
+use super::memory::{print_messages_preview, MEMORY_PREVIEW_LEN};
 
 /// Seed subcommand: generate messages, print preview. Does not import into checkpointer.
 pub fn cmd_seed(_db: &std::path::Path, _thread_id: Option<String>) -> Result<()> {
@@ -17,6 +17,6 @@ pub fn cmd_seed(_db: &std::path::Path, _thread_id: Option<String>) -> Result<()>
         );
     }
     println!("Generated {} messages (not imported into checkpoint)", messages.len());
-    print_messages_preview(&messages, 3);
+    print_messages_preview(&messages, MEMORY_PREVIEW_LEN.min(10));
     Ok(())
 }

@@ -77,9 +77,8 @@ pub async fn run_one_turn(
 }
 
 /// Interactive chat loop: optional first message, then read lines from stdin until EOF or /exit.
-/// Supports commands: /help, /exit, /quit. Ctrl+C also exits (SIGINT).
+/// Supports commands: /help, /exit, /quit. Ctrl+C also exits (SIGINT). No short-term memory; each line is a fresh turn.
 pub async fn run_chat_loop(
-    db: &std::path::Path,
     first_message: Option<String>,
     stream: bool,
     verbose: bool,
@@ -87,7 +86,7 @@ pub async fn run_chat_loop(
     if verbose {
         std::env::set_var("RUST_LOG", "debug");
     }
-    let (runner, _tool_summary, _memory_summary) = create_react_runner(db).await?;
+    let (runner, _tool_summary, _memory_summary) = create_react_runner().await?;
 
     println!("ReAct Chat (type /help for commands, /exit to quit)");
     println!();

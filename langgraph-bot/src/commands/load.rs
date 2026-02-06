@@ -9,7 +9,7 @@ use langgraph_bot::{
 };
 use std::path::PathBuf;
 
-use super::memory::print_messages_preview;
+use super::memory::{print_messages_preview, MEMORY_PREVIEW_LEN};
 
 const ENV_MESSAGES_PATH: &str = "LANGGRAPH_MESSAGES_PATH";
 const ENV_TELEGRAM_MESSAGES_DB: &str = "TELEGRAM_MESSAGES_DB";
@@ -84,6 +84,6 @@ pub fn cmd_load(
         .or(thread_id)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     println!("Loaded {} messages (not imported into checkpoint)", messages.len());
-    print_messages_preview(&messages, 3);
+    print_messages_preview(&messages, MEMORY_PREVIEW_LEN.min(10));
     Ok(())
 }

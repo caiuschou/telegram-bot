@@ -9,13 +9,12 @@ use crate::{AgentHandler, create_react_runner, ReactRunner};
 
 /// Runs the Telegram bot with ReAct agent. Config from env; `token` overrides BOT_TOKEN if provided.
 /// The bot handles reply-to-bot and @mention messages, streams responses with placeholder → chunk updates → final reply.
-/// Uses `db` for checkpoint persistence (thread-level multi-turn memory).
+/// Short-term memory is disabled: each message is processed without conversation history.
 /// Tools config summary is logged inside the handler factory so it appears after tracing is initialized.
-pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result<()> {
+pub async fn run_telegram(token: Option<String>) -> Result<()> {
     let config = load_config(token)?;
-    let db_path = db.to_path_buf();
 
-    let (runner, tool_summary, memory_summary) = create_react_runner(&db_path).await?;
+    let (runner, tool_summary, memory_summary) = create_react_runner().await?;
     let runner: Arc<ReactRunner> = Arc::new(runner);
     let placeholder_message = "正在思考…".to_string();
 
@@ -43,7 +42,6 @@ pub async fn run_telegram(db: &std::path::Path, token: Option<String>) -> Result
             bot,
             bot_username,
             placeholder_message.clone(),
-            db_path.clone(),
         ));
         handler
     })
