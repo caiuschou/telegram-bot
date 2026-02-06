@@ -30,8 +30,6 @@ const MSG_SEND_FAILED: &str = "发送失败，请稍后再试。";
 const MSG_PROCESSING_FAILED: &str = "处理时出错，请稍后再试。";
 /// Shown when the agent completed (e.g. tool use) but returned no assistant text (e.g. only remember tool call).
 const MSG_EMPTY_REPLY_FALLBACK: &str = "已处理。（本次无文字回复）";
-const DEFAULT_EMPTY_MENTION: &str =
-    "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
 
 // ---------- Type aliases (all user-visible strings are in the constants above) ----------
 
@@ -74,7 +72,7 @@ impl AgentHandler {
 
     /// Returns the user question if the message triggers the agent (reply-to-bot or @mention); otherwise `None`. Used by [`ensure_trigger_question`](Self::ensure_trigger_question) and tests. Delegates to [`telegram_bot::mention::get_question`].
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
-        mention::get_question(message, bot_username, Some(DEFAULT_EMPTY_MENTION))
+        mention::get_question(message, bot_username, Some(mention::DEFAULT_EMPTY_MENTION_PROMPT))
     }
 
     /// **Entry point.** Thread ID for checkpoint: one conversation per chat (private or group). v1 uses chat_id.
