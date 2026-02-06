@@ -82,7 +82,7 @@ impl TelegramBot {
 }
 
 /// Main entry: init logging, validate config, build components, create handler via factory, then run REPL.
-/// The factory receives (config, BotComponents) and returns the handler (e.g. SyncLLMHandler built from llm-handlers).
+/// The factory receives (config, BotComponents) and returns the handler (e.g. InlineLLMHandler built from llm-handlers).
 #[instrument(skip(config, make_handler))]
 pub async fn run_bot<F>(config: BotConfig, make_handler: F) -> Result<()>
 where

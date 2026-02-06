@@ -1,6 +1,6 @@
 //! Shared pure functions for @-mention detection and question extraction.
 //!
-//! Used by `telegram-llm-bot` (e.g. `SyncLLMHandler` and `LLMDetectionHandler`)
+//! Used by `telegram-llm-bot` (e.g. `InlineLLMHandler` and `LLMDetectionHandler`)
 //! and `langgraph-bot` (e.g. `AgentHandler`) to decide when a message triggers a bot reply and to
 //! extract the user question from @mention text.
 
@@ -26,6 +26,10 @@ pub fn extract_question(text: &str, bot_username: &str) -> String {
 /// - **@mention with non-empty text**: returns `Some(extract_question(content, username))`.
 /// - **@mention with empty text**: if `empty_mention_default` is `Some(s)` returns `Some(s.to_string())`, else `None`.
 /// - Otherwise returns `None`.
+/// Default prompt when user only @mentions with no text; use as `empty_mention_default` for [`get_question`].
+pub const DEFAULT_EMPTY_MENTION_PROMPT: &str =
+    "The user only @mentioned you with no specific question. Please greet them briefly and invite them to ask.";
+
 pub fn get_question(
     message: &Message,
     bot_username: Option<&str>,
