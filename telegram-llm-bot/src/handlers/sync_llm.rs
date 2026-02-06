@@ -1,7 +1,7 @@
 //! Synchronous LLM handler: runs in the handler chain, calls LLM and returns `HandlerResponse::Reply(text)` so later handlers (e.g. memory) can save the reply in `after()`.
 
-use super::mention;
 use llm_client::{LlmClient, StreamChunk, StreamChunkCallback};
+use telegram_bot::mention;
 use async_trait::async_trait;
 use telegram_bot::{Bot as CoreBot, Handler, HandlerResponse, Message, Result};
 use telegram_bot::embedding::EmbeddingService;
@@ -106,35 +106,22 @@ impl SyncLLMHandler {
     // ---------- Question detection (reply-to-bot or @mention) ----------
 
     /// Returns true if the given text contains a @mention of the bot.
-    /// Public for integration tests in `tests/`. Delegates to shared [`mention::is_bot_mentioned`].
+    /// Public for integration tests in `tests/`. Delegates to [`telegram_bot::mention::is_bot_mentioned`].
     pub fn is_bot_mentioned(&self, text: &str, bot_username: &str) -> bool {
         mention::is_bot_mentioned(text, bot_username)
     }
 
     /// Strips the bot @mention from text and returns the trimmed question. Used when processing @mention messages.
-    /// Public for integration tests in `tests/`. Delegates to shared [`mention::extract_question`].
+    /// Public for integration tests in `tests/`. Delegates to [`telegram_bot::mention::extract_question`].
     pub fn extract_question(&self, text: &str, bot_username: &str) -> String {
         mention::extract_question(text, bot_username)
     }
 
     /// Resolves the user question: when replying to bot use current content; when @mention with non-empty text use extracted content;
     /// when @mention but empty use DEFAULT_EMPTY_MENTION_QUESTION so bot still replies; otherwise None.
-    /// External: uses Message (telegram_bot) fields only. Public for integration tests in `tests/`.
+    /// External: uses Message (telegram_bot) and [`telegram_bot::mention::get_question`]. Public for integration tests in `tests/`.
     pub fn get_question(&self, message: &Message, bot_username: Option<&str>) -> Option<String> {
-        if message.reply_to_message_id.is_some() && message.reply_to_message_from_bot {
-            return Some(message.content.clone());
-        }
-        if let Some(username) = bot_username {
-            if self.is_bot_mentioned(&message.content, username) {
-                let q = self.extract_question(&message.content, username);
-                if !q.is_empty() {
-                    return Some(q);
-                }
-                // @mention only with no content still triggers reply; use default prompt for AI to greet and invite question
-                return Some(Self::DEFAULT_EMPTY_MENTION_QUESTION.to_string());
-            }
-        }
-        None
+        mention::get_question(message, bot_username, Some(Self::DEFAULT_EMPTY_MENTION_QUESTION))
     }
 
     // ---------- Context & messages for AI ----------
